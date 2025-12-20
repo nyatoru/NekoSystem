@@ -1,0 +1,5 @@
+main: com.nyarutoru.nekoplugin.NekoPlugin
+version: 1.0.0-SNAPSHOT
+name: NekoPlugin
+author: NyaruToru
+api-version: 1.21
