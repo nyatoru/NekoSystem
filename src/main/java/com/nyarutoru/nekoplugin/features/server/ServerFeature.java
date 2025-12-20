@@ -5,7 +5,7 @@ import com.nyarutoru.nekoplugin.core.Feature;
 
 /**
  * Server Feature - server-side optimizations and management.
- * Includes: Pillager cluster management
+ * Includes: Pillager cluster management, Concrete powder conversion
  */
 public class ServerFeature implements Feature {
 
@@ -14,6 +14,7 @@ public class ServerFeature implements Feature {
 
     private boolean enabled = false;
     private PillagerManager pillagerManager;
+    private ConcreteConverter concreteConverter;
 
     @Override
     public String getId() {
@@ -31,14 +32,21 @@ public class ServerFeature implements Feature {
         pillagerManager = new PillagerManager(plugin);
         pillagerManager.start();
 
+        // Concrete conversion
+        concreteConverter = new ConcreteConverter(plugin);
+        concreteConverter.start();
+
         this.enabled = true;
-        plugin.getLogger().info("Server feature enabled (Pillager Management).");
+        plugin.getLogger().info("Server feature enabled (Pillager Management, Concrete Converter).");
     }
 
     @Override
     public void onDisable() {
         if (pillagerManager != null) {
             pillagerManager.stop();
+        }
+        if (concreteConverter != null) {
+            concreteConverter.stop();
         }
         this.enabled = false;
     }
