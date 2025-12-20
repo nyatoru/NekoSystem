@@ -1,6 +1,8 @@
 package com.nyarutoru.nekoplugin.features.hammer;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
+import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -41,8 +43,9 @@ public class HammerRecipes {
     public void registerAll() {
         for (Map.Entry<String, HammerTier> entry : TIERS.entrySet()) {
             registerHammerRecipe(entry.getKey(), entry.getValue());
+            registerCustomRecipe(entry.getKey(), entry.getValue());
         }
-        plugin.getLogger().info("Registered hammer crafting recipes.");
+        plugin.getLogger().info("Registered hammer crafting recipes (Bukkit + RecipeAPI).");
     }
 
     private void registerHammerRecipe(String tierName, HammerTier tier) {
@@ -59,6 +62,22 @@ public class HammerRecipes {
         recipe.setIngredient('S', Material.STICK);
 
         plugin.getServer().addRecipe(recipe);
+    }
+
+    private void registerCustomRecipe(String tierName, HammerTier tier) {
+        ItemStack hammer = createHammer(tierName, tier);
+
+        CustomRecipe recipe = CustomRecipe.builder("hammer_" + tierName)
+                .category("hammer")
+                .result(hammer)
+                .shaped()
+                .pattern("MMM", "MSM", " S ",
+                        Map.of(
+                                'M', CustomRecipe.Ingredient.of(tier.material()),
+                                'S', CustomRecipe.Ingredient.of(Material.STICK)))
+                .build();
+
+        RecipeAPI.getInstance().registerRecipe(recipe);
     }
 
     public static ItemStack createHammer(String tierName, HammerTier tier) {

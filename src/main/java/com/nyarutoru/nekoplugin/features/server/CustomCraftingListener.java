@@ -1,0 +1,343 @@
+package com.nyarutoru.nekoplugin.features.server;
+
+import com.nyarutoru.nekoplugin.NekoPlugin;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+
+import java.util.*;
+
+/**
+ * Custom Crafting Table with Double Chest GUI.
+ * Replaces vanilla crafting table GUI to support custom recipes.
+ */
+public class CustomCraftingListener implements Listener {
+
+    private final NekoPlugin plugin;
+    private final Set<UUID> openCraftingGUIs = new HashSet<>();
+
+    // GUI Layout (54 slots - double chest)
+    // Slots 0-8: Top decoration row
+    // Slots 9-17: Empty row
+    // Slots 18-20: 3x3 crafting grid (row 1)
+    // Slots 27-29: 3x3 crafting grid (row 2)
+    // Slots 36-38: 3x3 crafting grid (row 3)
+    // Slot 24: Result slot
+    // Slots 45-53: Bottom decoration row
+
+    private static final int[] CRAFTING_SLOTS = { 10, 11, 12, 19, 20, 21, 28, 29, 30 };
+    private static final int RESULT_SLOT = 24;
+    private static final int CRAFT_BUTTON_SLOT = 23;
+    private static final int CLOSE_SLOT = 49;
+
+    private static final Component TITLE = Component.text("✦ Crafting Table ✦")
+            .color(NamedTextColor.GOLD)
+            .decoration(TextDecoration.BOLD, true);
+
+    public CustomCraftingListener(NekoPlugin plugin) {
+        this.plugin = plugin;
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onCraftingTableInteract(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK)
+            return;
+        if (event.getHand() != EquipmentSlot.HAND)
+            return;
+        if (event.getClickedBlock() == null)
+            return;
+        if (event.getClickedBlock().getType() != Material.CRAFTING_TABLE)
+            return;
+
+        // Cancel vanilla crafting table opening
+        event.setCancelled(true);
+
+        // Open custom GUI
+        openCraftingGUI(event.getPlayer());
+    }
+
+    private void openCraftingGUI(Player player) {
+        Inventory gui = Bukkit.createInventory(null, 54, TITLE);
+
+        // Fill decoration
+        ItemStack glass = createGlassPane();
+        ItemStack darkGlass = createDarkGlassPane();
+
+        // Top and bottom rows
+        for (int i = 0; i < 9; i++) {
+            gui.setItem(i, glass);
+            gui.setItem(45 + i, glass);
+        }
+
+        // Side decorations
+        gui.setItem(9, darkGlass);
+        gui.setItem(17, darkGlass);
+        gui.setItem(18, darkGlass);
+        gui.setItem(26, darkGlass);
+        gui.setItem(27, darkGlass);
+        gui.setItem(35, darkGlass);
+        gui.setItem(36, darkGlass);
+        gui.setItem(44, darkGlass);
+
+        // Arrow indicator
+        gui.setItem(CRAFT_BUTTON_SLOT, createArrowItem());
+
+        // Close button
+        gui.setItem(CLOSE_SLOT, createCloseButton());
+
+        // Result placeholder (barrier when empty)
+        gui.setItem(RESULT_SLOT, createResultPlaceholder());
+
+        player.openInventory(gui);
+        openCraftingGUIs.add(player.getUniqueId());
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player))
+            return;
+        if (!openCraftingGUIs.contains(player.getUniqueId()))
+            return;
+
+        Inventory inv = event.getInventory();
+        int slot = event.getRawSlot();
+
+        // Allow clicks in player inventory, but update result after
+        if (slot >= 54) {
+            // If shift-clicking from player inventory, update result after
+            if (event.isShiftClick()) {
+                Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+            }
+            return;
+        }
+
+        // Check if it's a crafting slot
+        boolean isCraftingSlot = false;
+        for (int craftSlot : CRAFTING_SLOTS) {
+            if (slot == craftSlot) {
+                isCraftingSlot = true;
+                break;
+            }
+        }
+
+        // Allow crafting slot interaction
+        if (isCraftingSlot) {
+            // Update result after a tick (handles all click types)
+            Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+            return;
+        }
+
+        // Result slot - take crafted item
+        if (slot == RESULT_SLOT) {
+            ItemStack result = inv.getItem(RESULT_SLOT);
+            if (result != null && result.getType() != Material.AIR) {
+                if (event.isShiftClick()) {
+                    // Shift-click: craft as many as possible
+                    craftAll(player, inv, result);
+                } else {
+                    // Normal click: craft one
+                    player.setItemOnCursor(result.clone());
+                    consumeCraftingMaterials(inv);
+                    Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+                }
+            }
+            event.setCancelled(true);
+            return;
+        }
+
+        // Close button
+        if (slot == CLOSE_SLOT) {
+            player.closeInventory();
+            event.setCancelled(true);
+            return;
+        }
+
+        // Cancel other slot interactions (decoration)
+        event.setCancelled(true);
+    }
+
+    /**
+     * Craft as many items as possible with shift-click.
+     */
+    private void craftAll(Player player, Inventory inv, ItemStack result) {
+        int maxCrafts = getMaxCraftCount(inv);
+        int crafted = 0;
+
+        for (int i = 0; i < maxCrafts; i++) {
+            // Check if player can hold more
+            if (!canAddToInventory(player, result))
+                break;
+
+            player.getInventory().addItem(result.clone());
+            consumeCraftingMaterials(inv);
+            crafted++;
+
+            // Check if recipe still valid
+            ItemStack newResult = findMatchingRecipe(inv);
+            if (newResult == null || newResult.getType() == Material.AIR)
+                break;
+        }
+
+        updateCraftingResult(inv);
+    }
+
+    private int getMaxCraftCount(Inventory inv) {
+        int min = Integer.MAX_VALUE;
+        for (int slot : CRAFTING_SLOTS) {
+            ItemStack item = inv.getItem(slot);
+            if (item != null && item.getType() != Material.AIR) {
+                min = Math.min(min, item.getAmount());
+            }
+        }
+        return min == Integer.MAX_VALUE ? 0 : min;
+    }
+
+    private boolean canAddToInventory(Player player, ItemStack item) {
+        return player.getInventory().firstEmpty() != -1 ||
+                player.getInventory().contains(item.getType());
+    }
+
+    private ItemStack findMatchingRecipe(Inventory inv) {
+        ItemStack[] matrix = new ItemStack[9];
+        for (int i = 0; i < CRAFTING_SLOTS.length; i++) {
+            ItemStack item = inv.getItem(CRAFTING_SLOTS[i]);
+            matrix[i] = item != null ? item.clone() : null;
+        }
+
+        ItemStack result = com.nyarutoru.nekoplugin.api.recipe.RecipeAPI.getInstance().findMatchingRecipe(matrix);
+        if (result == null) {
+            result = Bukkit.craftItem(matrix, Bukkit.getWorlds().get(0));
+        }
+        return result;
+    }
+
+    @EventHandler
+    public void onInventoryClose(InventoryCloseEvent event) {
+        if (!(event.getPlayer() instanceof Player player))
+            return;
+        if (!openCraftingGUIs.remove(player.getUniqueId()))
+            return;
+
+        Inventory inv = event.getInventory();
+
+        // Return crafting materials to player
+        for (int slot : CRAFTING_SLOTS) {
+            ItemStack item = inv.getItem(slot);
+            if (item != null && item.getType() != Material.AIR) {
+                HashMap<Integer, ItemStack> remaining = player.getInventory().addItem(item);
+                // Drop items that don't fit
+                for (ItemStack leftover : remaining.values()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+                }
+            }
+        }
+    }
+
+    private void updateCraftingResult(Inventory inv) {
+        // Get crafting grid items
+        ItemStack[] matrix = new ItemStack[9];
+        for (int i = 0; i < CRAFTING_SLOTS.length; i++) {
+            ItemStack item = inv.getItem(CRAFTING_SLOTS[i]);
+            matrix[i] = item != null ? item.clone() : null;
+        }
+
+        // First, try custom RecipeAPI
+        ItemStack result = com.nyarutoru.nekoplugin.api.recipe.RecipeAPI.getInstance().findMatchingRecipe(matrix);
+
+        // Fall back to Bukkit's recipe system
+        if (result == null) {
+            result = Bukkit.craftItem(matrix, Bukkit.getWorlds().get(0));
+        }
+
+        if (result != null && result.getType() != Material.AIR) {
+            inv.setItem(RESULT_SLOT, result);
+        } else {
+            inv.setItem(RESULT_SLOT, createResultPlaceholder());
+        }
+    }
+
+    private ItemStack createResultPlaceholder() {
+        ItemStack barrier = new ItemStack(Material.BARRIER);
+        ItemMeta meta = barrier.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("No Result")
+                    .color(NamedTextColor.DARK_GRAY)
+                    .decoration(TextDecoration.ITALIC, false));
+            barrier.setItemMeta(meta);
+        }
+        return barrier;
+    }
+
+    private void consumeCraftingMaterials(Inventory inv) {
+        for (int slot : CRAFTING_SLOTS) {
+            ItemStack item = inv.getItem(slot);
+            if (item != null && item.getType() != Material.AIR) {
+                if (item.getAmount() > 1) {
+                    item.setAmount(item.getAmount() - 1);
+                } else {
+                    inv.setItem(slot, null);
+                }
+            }
+        }
+    }
+
+    private ItemStack createGlassPane() {
+        ItemStack pane = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
+        ItemMeta meta = pane.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text(" "));
+            pane.setItemMeta(meta);
+        }
+        return pane;
+    }
+
+    private ItemStack createDarkGlassPane() {
+        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
+        ItemMeta meta = pane.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text(" "));
+            pane.setItemMeta(meta);
+        }
+        return pane;
+    }
+
+    private ItemStack createArrowItem() {
+        ItemStack arrow = new ItemStack(Material.ARROW);
+        ItemMeta meta = arrow.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("→ Craft →")
+                    .color(NamedTextColor.GREEN)
+                    .decoration(TextDecoration.ITALIC, false));
+            arrow.setItemMeta(meta);
+        }
+        return arrow;
+    }
+
+    private ItemStack createCloseButton() {
+        ItemStack barrier = new ItemStack(Material.BARRIER);
+        ItemMeta meta = barrier.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("✖ Close")
+                    .color(NamedTextColor.RED)
+                    .decoration(TextDecoration.ITALIC, false)
+                    .decoration(TextDecoration.BOLD, true));
+            barrier.setItemMeta(meta);
+        }
+        return barrier;
+    }
+}

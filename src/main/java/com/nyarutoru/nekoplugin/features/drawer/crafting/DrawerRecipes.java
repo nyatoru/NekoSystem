@@ -1,6 +1,8 @@
 package com.nyarutoru.nekoplugin.features.drawer.crafting;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
+import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -14,6 +16,7 @@ import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Handles creation and registration of drawer crafting recipes.
@@ -28,14 +31,16 @@ public class DrawerRecipes {
 
     public void registerAll() {
         registerBaseDrawerRecipe();
+        registerBaseCustomRecipe();
 
         for (DrawerTier tier : DrawerTier.values()) {
             if (tier == DrawerTier.TIER_1)
                 continue;
             registerUpgradeRecipe(tier);
+            registerUpgradeCustomRecipe(tier);
         }
 
-        plugin.getLogger().info("Registered drawer crafting recipes.");
+        plugin.getLogger().info("Registered drawer crafting recipes (Bukkit + RecipeAPI).");
     }
 
     public static ItemStack createDrawerItem(DrawerTier tier) {
@@ -192,6 +197,61 @@ public class DrawerRecipes {
         recipe.setIngredient('D', Material.BARREL);
 
         plugin.getServer().addRecipe(recipe);
+    }
+
+    // ========== RecipeAPI Custom Recipes ==========
+
+    private void registerBaseCustomRecipe() {
+        ItemStack result = createDrawerItem(DrawerTier.TIER_1);
+
+        CustomRecipe recipe = CustomRecipe.builder("drawer_tier_1")
+                .category("drawer")
+                .result(result)
+                .shaped()
+                .pattern("CCC", "CBC", "CCC",
+                        Map.of(
+                                'C', CustomRecipe.Ingredient.of(Material.CHEST),
+                                'B', CustomRecipe.Ingredient.of(Material.BARREL)))
+                .build();
+
+        RecipeAPI.getInstance().registerRecipe(recipe);
+    }
+
+    private void registerUpgradeCustomRecipe(DrawerTier tier) {
+        Material upgradeMaterial = tier.getUpgradeMaterial();
+        if (upgradeMaterial == null)
+            return;
+
+        // Get previous tier name for matching
+        DrawerTier previousTier = null;
+        for (DrawerTier t : DrawerTier.values()) {
+            if (t.getLevel() == tier.getLevel() - 1) {
+                previousTier = t;
+                break;
+            }
+        }
+        if (previousTier == null)
+            return;
+
+        ItemStack result = createDrawerItem(tier);
+
+        // Create ingredient that matches previous tier drawer specifically
+        CustomRecipe.Ingredient drawerIngredient = CustomRecipe.Ingredient.ofCustomItem(
+                Material.BARREL,
+                getDrawerTierKey(),
+                previousTier.name());
+
+        CustomRecipe recipe = CustomRecipe.builder("drawer_tier_" + tier.getLevel())
+                .category("drawer")
+                .result(result)
+                .shaped()
+                .pattern("MMM", "MDM", "MMM",
+                        Map.of(
+                                'M', CustomRecipe.Ingredient.of(upgradeMaterial),
+                                'D', drawerIngredient))
+                .build();
+
+        RecipeAPI.getInstance().registerRecipe(recipe);
     }
 
     public static NamespacedKey getDrawerTierKey() {

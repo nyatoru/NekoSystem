@@ -2,10 +2,11 @@ package com.nyarutoru.nekoplugin.features.server;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.core.Feature;
+import org.bukkit.event.HandlerList;
 
 /**
  * Server Feature - server-side optimizations and management.
- * Includes: Pillager cluster management, Concrete powder conversion
+ * Includes: Pillager management, Concrete converter, Custom Crafting Table
  */
 public class ServerFeature implements Feature {
 
@@ -15,6 +16,7 @@ public class ServerFeature implements Feature {
     private boolean enabled = false;
     private PillagerManager pillagerManager;
     private ConcreteConverter concreteConverter;
+    private CustomCraftingListener customCraftingListener;
 
     @Override
     public String getId() {
@@ -36,8 +38,12 @@ public class ServerFeature implements Feature {
         concreteConverter = new ConcreteConverter(plugin);
         concreteConverter.start();
 
+        // Custom Crafting Table
+        customCraftingListener = new CustomCraftingListener(plugin);
+        plugin.getServer().getPluginManager().registerEvents(customCraftingListener, plugin);
+
         this.enabled = true;
-        plugin.getLogger().info("Server feature enabled (Pillager Management, Concrete Converter).");
+        plugin.getLogger().info("Server feature enabled (Pillager, Concrete, Custom Crafting).");
     }
 
     @Override
@@ -47,6 +53,9 @@ public class ServerFeature implements Feature {
         }
         if (concreteConverter != null) {
             concreteConverter.stop();
+        }
+        if (customCraftingListener != null) {
+            HandlerList.unregisterAll(customCraftingListener);
         }
         this.enabled = false;
     }
