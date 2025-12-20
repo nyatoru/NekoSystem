@@ -186,7 +186,9 @@ public class CustomCraftingListener implements Listener {
      */
     private void craftAll(Player player, Inventory inv, ItemStack result) {
         int maxCrafts = getMaxCraftCount(inv);
-        int crafted = 0;
+
+        // Clear result slot first to prevent duplication
+        inv.setItem(RESULT_SLOT, createResultPlaceholder());
 
         for (int i = 0; i < maxCrafts; i++) {
             // Check if player can hold more
@@ -195,7 +197,6 @@ public class CustomCraftingListener implements Listener {
 
             player.getInventory().addItem(result.clone());
             consumeCraftingMaterials(inv);
-            crafted++;
 
             // Check if recipe still valid
             ItemStack newResult = findMatchingRecipe(inv);
@@ -343,18 +344,38 @@ public class CustomCraftingListener implements Listener {
         if (!openCraftingGUIs.contains(player.getUniqueId()))
             return;
 
-        // Check if any dragged slots are crafting slots
-        boolean affectsCrafting = event.getRawSlots().stream()
-                .anyMatch(slot -> {
-                    for (int craftSlot : CRAFTING_SLOTS) {
-                        if (slot == craftSlot)
-                            return true;
-                    }
-                    return false;
-                });
+        boolean affectsCrafting = false;
+        boolean affectsDecoration = false;
 
+        for (int slot : event.getRawSlots()) {
+            // Skip player inventory slots
+            if (slot >= 54)
+                continue;
+
+            // Check if crafting slot
+            boolean isCraftingSlot = false;
+            for (int craftSlot : CRAFTING_SLOTS) {
+                if (slot == craftSlot) {
+                    isCraftingSlot = true;
+                    affectsCrafting = true;
+                    break;
+                }
+            }
+
+            // If not crafting slot, it's a decoration slot
+            if (!isCraftingSlot) {
+                affectsDecoration = true;
+            }
+        }
+
+        // Cancel if dragging to decoration slots
+        if (affectsDecoration) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // Update result if dragging to crafting slots
         if (affectsCrafting) {
-            // Update result after drag completes
             Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(event.getInventory()));
         }
     }
