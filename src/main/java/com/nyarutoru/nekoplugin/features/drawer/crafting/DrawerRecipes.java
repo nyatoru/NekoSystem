@@ -153,12 +153,13 @@ public class DrawerRecipes {
     }
 
     private void registerBaseDrawerRecipe() {
+        // Level 1: 8 Chests + 1 Barrel
         ItemStack result = createDrawerItem(DrawerTier.TIER_1);
         NamespacedKey key = new NamespacedKey(plugin, "drawer_tier_1");
 
         ShapedRecipe recipe = new ShapedRecipe(key, result);
-        recipe.shape("PPP", "PBP", "PPP");
-        recipe.setIngredient('P', Material.OAK_PLANKS);
+        recipe.shape("CCC", "CBC", "CCC");
+        recipe.setIngredient('C', Material.CHEST);
         recipe.setIngredient('B', Material.BARREL);
 
         plugin.getServer().addRecipe(recipe);
@@ -169,12 +170,25 @@ public class DrawerRecipes {
         if (upgradeMaterial == null)
             return;
 
+        // Get previous tier for the center ingredient
+        DrawerTier previousTier = null;
+        for (DrawerTier t : DrawerTier.values()) {
+            if (t.getLevel() == tier.getLevel() - 1) {
+                previousTier = t;
+                break;
+            }
+        }
+
         ItemStack result = createDrawerItem(tier);
         NamespacedKey key = new NamespacedKey(plugin, "drawer_tier_" + tier.getLevel());
 
         ShapedRecipe recipe = new ShapedRecipe(key, result);
+        // 8 upgrade material + previous tier drawer
         recipe.shape("MMM", "MDM", "MMM");
         recipe.setIngredient('M', upgradeMaterial);
+
+        // Use BARREL as placeholder (will be matched by custom recipe matcher)
+        // The actual drawer item check happens in event listener
         recipe.setIngredient('D', Material.BARREL);
 
         plugin.getServer().addRecipe(recipe);
