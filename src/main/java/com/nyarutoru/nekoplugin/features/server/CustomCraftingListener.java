@@ -78,10 +78,18 @@ public class CustomCraftingListener implements Listener {
         ItemStack glass = createGlassPane();
         ItemStack darkGlass = createDarkGlassPane();
 
-        // Top and bottom rows
+        // Top row - orange glass
         for (int i = 0; i < 9; i++) {
             gui.setItem(i, glass);
-            gui.setItem(45 + i, glass);
+        }
+
+        // Bottom row - dynamic slots (45-48, 50-53) start red, close button at 49
+        ItemStack redGlass = createRedGlassPane();
+        for (int i = 45; i <= 48; i++) {
+            gui.setItem(i, redGlass);
+        }
+        for (int i = 50; i <= 53; i++) {
+            gui.setItem(i, redGlass);
         }
 
         // Side decorations
@@ -96,6 +104,12 @@ public class CustomCraftingListener implements Listener {
         ItemStack blackGlass = createBlackGlassPane();
         for (int i = 36; i <= 44; i++) {
             gui.setItem(i, blackGlass);
+        }
+
+        // Additional unused slots - black glass pane
+        int[] unusedSlots = { 13, 14, 15, 16, 22, 25, 31, 32, 33, 34 };
+        for (int slot : unusedSlots) {
+            gui.setItem(slot, blackGlass);
         }
 
         // Arrow indicator
@@ -275,10 +289,21 @@ public class CustomCraftingListener implements Listener {
             result = Bukkit.craftItem(matrix, Bukkit.getWorlds().get(0));
         }
 
-        if (result != null && result.getType() != Material.AIR) {
+        boolean hasResult = result != null && result.getType() != Material.AIR;
+
+        if (hasResult) {
             inv.setItem(RESULT_SLOT, result);
         } else {
             inv.setItem(RESULT_SLOT, createResultPlaceholder());
+        }
+
+        // Update dynamic indicator slots (45-48, 50-53)
+        ItemStack indicator = hasResult ? createLimeGlassPane() : createRedGlassPane();
+        for (int i = 45; i <= 48; i++) {
+            inv.setItem(i, indicator);
+        }
+        for (int i = 50; i <= 53; i++) {
+            inv.setItem(i, indicator);
         }
     }
 
@@ -329,6 +354,26 @@ public class CustomCraftingListener implements Listener {
 
     private ItemStack createBlackGlassPane() {
         ItemStack pane = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
+        ItemMeta meta = pane.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text(" "));
+            pane.setItemMeta(meta);
+        }
+        return pane;
+    }
+
+    private ItemStack createRedGlassPane() {
+        ItemStack pane = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+        ItemMeta meta = pane.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text(" "));
+            pane.setItemMeta(meta);
+        }
+        return pane;
+    }
+
+    private ItemStack createLimeGlassPane() {
+        ItemStack pane = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
         ItemMeta meta = pane.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text(" "));
