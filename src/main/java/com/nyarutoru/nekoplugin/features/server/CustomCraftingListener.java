@@ -13,7 +13,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.EquipmentSlot;
@@ -91,8 +91,12 @@ public class CustomCraftingListener implements Listener {
         gui.setItem(26, darkGlass);
         gui.setItem(27, darkGlass);
         gui.setItem(35, darkGlass);
-        gui.setItem(36, darkGlass);
-        gui.setItem(44, darkGlass);
+
+        // Row 36-44: black glass pane (unused row)
+        ItemStack blackGlass = createBlackGlassPane();
+        for (int i = 36; i <= 44; i++) {
+            gui.setItem(i, blackGlass);
+        }
 
         // Arrow indicator
         gui.setItem(CRAFT_BUTTON_SLOT, createArrowItem());
@@ -314,6 +318,39 @@ public class CustomCraftingListener implements Listener {
             pane.setItemMeta(meta);
         }
         return pane;
+    }
+
+    private ItemStack createBlackGlassPane() {
+        ItemStack pane = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
+        ItemMeta meta = pane.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text(" "));
+            pane.setItemMeta(meta);
+        }
+        return pane;
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player))
+            return;
+        if (!openCraftingGUIs.contains(player.getUniqueId()))
+            return;
+
+        // Check if any dragged slots are crafting slots
+        boolean affectsCrafting = event.getRawSlots().stream()
+                .anyMatch(slot -> {
+                    for (int craftSlot : CRAFTING_SLOTS) {
+                        if (slot == craftSlot)
+                            return true;
+                    }
+                    return false;
+                });
+
+        if (affectsCrafting) {
+            // Update result after drag completes
+            Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(event.getInventory()));
+        }
     }
 
     private ItemStack createArrowItem() {
