@@ -74,13 +74,12 @@ public class CustomCraftingListener implements Listener {
     private void openCraftingGUI(Player player) {
         Inventory gui = Bukkit.createInventory(null, 54, TITLE);
 
-        // Fill decoration
-        ItemStack glass = createGlassPane();
-        ItemStack darkGlass = createDarkGlassPane();
+        // Fill decoration - all black glass
+        ItemStack blackGlass = createBlackGlassPane();
 
-        // Top row - orange glass
+        // Top row - black glass
         for (int i = 0; i < 9; i++) {
-            gui.setItem(i, glass);
+            gui.setItem(i, blackGlass);
         }
 
         // Bottom row - dynamic slots (45-48, 50-53) start red, close button at 49
@@ -92,16 +91,15 @@ public class CustomCraftingListener implements Listener {
             gui.setItem(i, redGlass);
         }
 
-        // Side decorations
-        gui.setItem(9, darkGlass);
-        gui.setItem(17, darkGlass);
-        gui.setItem(18, darkGlass);
-        gui.setItem(26, darkGlass);
-        gui.setItem(27, darkGlass);
-        gui.setItem(35, darkGlass);
+        // Side decorations - black glass
+        gui.setItem(9, blackGlass);
+        gui.setItem(17, blackGlass);
+        gui.setItem(18, blackGlass);
+        gui.setItem(26, blackGlass);
+        gui.setItem(27, blackGlass);
+        gui.setItem(35, blackGlass);
 
         // Row 36-44: black glass pane (unused row)
-        ItemStack blackGlass = createBlackGlassPane();
         for (int i = 36; i <= 44; i++) {
             gui.setItem(i, blackGlass);
         }
