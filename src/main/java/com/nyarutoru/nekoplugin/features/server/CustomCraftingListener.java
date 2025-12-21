@@ -54,10 +54,17 @@ public class CustomCraftingListener implements Listener {
     public CustomCraftingListener(NekoPlugin plugin) {
         this.plugin = plugin;
         this.recipeBookGUI = new RecipeBookGUI(plugin);
+        // Create and wire up RecipePreviewGUI
+        RecipePreviewGUI recipePreviewGUI = new RecipePreviewGUI(plugin, recipeBookGUI);
+        this.recipeBookGUI.setRecipePreviewGUI(recipePreviewGUI);
     }
 
     public RecipeBookGUI getRecipeBookGUI() {
         return recipeBookGUI;
+    }
+
+    public RecipePreviewGUI getRecipePreviewGUI() {
+        return recipeBookGUI.getRecipePreviewGUI();
     }
 
     @EventHandler(priority = EventPriority.HIGH)

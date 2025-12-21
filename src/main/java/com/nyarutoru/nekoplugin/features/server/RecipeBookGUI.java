@@ -26,6 +26,7 @@ import java.util.*;
 public class RecipeBookGUI implements Listener {
 
     private final NekoPlugin plugin;
+    private RecipePreviewGUI recipePreviewGUI;
 
     // Track which GUI players have open
     private final Map<UUID, GUIState> playerStates = new HashMap<>();
@@ -39,21 +40,20 @@ public class RecipeBookGUI implements Listener {
             37, 38, 39, 40, 41, 42, 43
     };
 
-    // Preview GUI layout
-    private static final int[] PREVIEW_CRAFTING_SLOTS = { 10, 11, 12, 19, 20, 21, 28, 29, 30 };
-    private static final int PREVIEW_RESULT_SLOT = 24;
-    private static final int BACK_BUTTON_SLOT = 49;
-
     private static final Component BOOK_TITLE = Component.text("✦ Recipe Book ✦")
             .color(NamedTextColor.LIGHT_PURPLE)
             .decoration(TextDecoration.BOLD, true);
 
-    private static final Component PREVIEW_TITLE = Component.text("✦ Recipe Preview ✦")
-            .color(NamedTextColor.GREEN)
-            .decoration(TextDecoration.BOLD, true);
-
     public RecipeBookGUI(NekoPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public void setRecipePreviewGUI(RecipePreviewGUI recipePreviewGUI) {
+        this.recipePreviewGUI = recipePreviewGUI;
+    }
+
+    public RecipePreviewGUI getRecipePreviewGUI() {
+        return recipePreviewGUI;
     }
 
     /**
@@ -143,42 +143,12 @@ public class RecipeBookGUI implements Listener {
      * Open recipe preview for a specific recipe.
      */
     private void openRecipePreview(Player player, CustomRecipe recipe) {
-        GUIState state = playerStates.get(player.getUniqueId());
-        if (state == null)
-            return;
-
-        state.type = GUIType.RECIPE_PREVIEW;
-        state.viewingRecipe = recipe;
-
-        Inventory gui = Bukkit.createInventory(null, 54, PREVIEW_TITLE);
-
-        ItemStack blackGlass = createGlassPane(Material.BLACK_STAINED_GLASS_PANE);
-
-        // Fill all with black glass first
-        for (int i = 0; i < 54; i++) {
-            gui.setItem(i, blackGlass);
+        // Remove player from our tracking
+        playerStates.remove(player.getUniqueId());
+        // Delegate to RecipePreviewGUI
+        if (recipePreviewGUI != null) {
+            recipePreviewGUI.openPreview(player, recipe);
         }
-
-        // Show crafting grid
-        CustomRecipe.Ingredient[] ingredients = recipe.getIngredients();
-        for (int i = 0; i < PREVIEW_CRAFTING_SLOTS.length; i++) {
-            ItemStack ingredient = ingredientToItemStack(ingredients[i]);
-            gui.setItem(PREVIEW_CRAFTING_SLOTS[i], ingredient);
-        }
-
-        // Arrow
-        gui.setItem(23, createArrowItem());
-
-        // Result
-        gui.setItem(PREVIEW_RESULT_SLOT, recipe.getResult().clone());
-
-        // Back button
-        gui.setItem(BACK_BUTTON_SLOT, createBackButton());
-
-        // Recipe info
-        gui.setItem(4, createRecipeInfoItem(recipe));
-
-        player.openInventory(gui);
     }
 
     @EventHandler
@@ -196,11 +166,7 @@ public class RecipeBookGUI implements Listener {
         if (slot < 0 || slot >= 54)
             return;
 
-        if (state.type == GUIType.RECIPE_LIST) {
-            handleRecipeListClick(player, state, slot);
-        } else if (state.type == GUIType.RECIPE_PREVIEW) {
-            handlePreviewClick(player, state, slot);
-        }
+        handleRecipeListClick(player, state, slot);
     }
 
     private void handleRecipeListClick(Player player, GUIState state, int slot) {
@@ -237,34 +203,11 @@ public class RecipeBookGUI implements Listener {
         }
     }
 
-    private void handlePreviewClick(Player player, GUIState state, int slot) {
-        // Back button
-        if (slot == BACK_BUTTON_SLOT) {
-            state.type = GUIType.RECIPE_LIST;
-            state.viewingRecipe = null;
-            openRecipeListPage(player, state);
-        }
-        // All other clicks are blocked by event.setCancelled(true) in main handler
-    }
-
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
             playerStates.remove(player.getUniqueId());
         }
-    }
-
-    // ========== Helper Methods ==========
-
-    private ItemStack ingredientToItemStack(CustomRecipe.Ingredient ingredient) {
-        if (ingredient == null || ingredient.isEmpty()) {
-            return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
-        }
-        Material material = ingredient.getMaterial();
-        if (material == null) {
-            return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
-        }
-        return new ItemStack(material);
     }
 
     private ItemStack createRecipeDisplayItem(CustomRecipe recipe) {
