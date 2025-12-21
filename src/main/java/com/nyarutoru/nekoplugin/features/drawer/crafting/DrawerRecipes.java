@@ -183,6 +183,8 @@ public class DrawerRecipes {
                 break;
             }
         }
+        if (previousTier == null)
+            return;
 
         ItemStack result = createDrawerItem(tier);
         NamespacedKey key = new NamespacedKey(plugin, "drawer_tier_" + tier.getLevel());
@@ -192,9 +194,9 @@ public class DrawerRecipes {
         recipe.shape("MMM", "MDM", "MMM");
         recipe.setIngredient('M', upgradeMaterial);
 
-        // Use BARREL as placeholder (will be matched by custom recipe matcher)
-        // The actual drawer item check happens in event listener
-        recipe.setIngredient('D', Material.BARREL);
+        // Use the previous tier drawer item for proper recipe display
+        ItemStack previousDrawerItem = createDrawerItem(previousTier);
+        recipe.setIngredient('D', new org.bukkit.inventory.RecipeChoice.ExactChoice(previousDrawerItem));
 
         plugin.getServer().addRecipe(recipe);
     }

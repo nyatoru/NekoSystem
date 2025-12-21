@@ -92,6 +92,10 @@ public class GUIManager implements Listener {
         if (event.getClickedInventory() == gui.getInventory()) {
             event.setCancelled(true);
             gui.onClick(event);
+        } else if (event.isShiftClick() && event.getClickedInventory() == player.getInventory()) {
+            // Forward shift-clicks from player inventory to GUI for handling (e.g., Drawer
+            // deposit)
+            gui.onClick(event);
         }
     }
 
