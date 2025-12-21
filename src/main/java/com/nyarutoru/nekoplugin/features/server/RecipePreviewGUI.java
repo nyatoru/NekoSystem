@@ -27,8 +27,8 @@ public class RecipePreviewGUI implements Listener {
     private final NekoPlugin plugin;
     private final RecipeBookGUI recipeBookGUI;
 
-    // Track players viewing preview
-    private final Map<UUID, CustomRecipe> playerPreviews = new HashMap<>();
+    // Track players viewing preview - store the inventory for reliable comparison
+    private final Map<UUID, Inventory> playerInventories = new HashMap<>();
 
     // Preview GUI layout (same as crafting table)
     private static final int[] CRAFTING_SLOTS = { 10, 11, 12, 19, 20, 21, 28, 29, 30 };
@@ -50,8 +50,6 @@ public class RecipePreviewGUI implements Listener {
      * Open recipe preview for a specific recipe.
      */
     public void openPreview(Player player, CustomRecipe recipe) {
-        playerPreviews.put(player.getUniqueId(), recipe);
-
         Inventory gui = Bukkit.createInventory(null, 54, PREVIEW_TITLE);
 
         ItemStack blackGlass = createGlassPane(Material.BLACK_STAINED_GLASS_PANE);
@@ -80,6 +78,9 @@ public class RecipePreviewGUI implements Listener {
         // Recipe info
         gui.setItem(INFO_SLOT, createRecipeInfoItem(recipe));
 
+        // Store the inventory BEFORE opening so listener can detect it
+        playerInventories.put(player.getUniqueId(), gui);
+
         player.openInventory(gui);
     }
 
@@ -88,8 +89,12 @@ public class RecipePreviewGUI implements Listener {
         if (!(event.getWhoClicked() instanceof Player player))
             return;
 
-        CustomRecipe recipe = playerPreviews.get(player.getUniqueId());
-        if (recipe == null)
+        Inventory trackedInventory = playerInventories.get(player.getUniqueId());
+        if (trackedInventory == null)
+            return;
+
+        // Check if this is our inventory by reference
+        if (event.getInventory() != trackedInventory)
             return;
 
         event.setCancelled(true);
@@ -100,7 +105,7 @@ public class RecipePreviewGUI implements Listener {
 
         // Back button - return to recipe book
         if (slot == BACK_BUTTON_SLOT) {
-            playerPreviews.remove(player.getUniqueId());
+            playerInventories.remove(player.getUniqueId());
             recipeBookGUI.openRecipeBook(player);
         }
     }
@@ -108,7 +113,7 @@ public class RecipePreviewGUI implements Listener {
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
-            playerPreviews.remove(player.getUniqueId());
+            playerInventories.remove(player.getUniqueId());
         }
     }
 
