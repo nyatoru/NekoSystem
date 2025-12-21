@@ -6,6 +6,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -139,6 +140,7 @@ public class HammerListener implements Listener {
     private void mine3x3(Player player, Block center, BlockFace face, ItemStack hammer) {
         int[][] offsets = get3x3Offsets(face);
         Location centerLoc = center.getLocation();
+        boolean hasSilkTouch = hammer.containsEnchantment(Enchantment.SILK_TOUCH);
 
         // Check durability once at the start - hammer uses 1 durability per 3x3 swing
         if (!ItemUtils.isUnbreakable(hammer) && ItemUtils.wouldBreakFromDamage(hammer, 1)) {
@@ -162,9 +164,20 @@ public class HammerListener implements Listener {
             if (breakingBlocks.contains(target.getLocation()))
                 continue;
 
-            // Break block with drops
+            // Break block with appropriate drops
             breakingBlocks.add(target.getLocation());
-            target.breakNaturally(hammer);
+
+            if (hasSilkTouch) {
+                // Silk touch: drop the block itself
+                Material blockType = target.getType();
+                target.setType(Material.AIR);
+                target.getWorld().dropItemNaturally(target.getLocation().add(0.5, 0.5, 0.5),
+                        new ItemStack(blockType));
+            } else {
+                // Normal: use breakNaturally for proper drops (respects Fortune)
+                target.breakNaturally(hammer);
+            }
+
             breakingBlocks.remove(target.getLocation());
             brokeAnyBlock = true;
         }
