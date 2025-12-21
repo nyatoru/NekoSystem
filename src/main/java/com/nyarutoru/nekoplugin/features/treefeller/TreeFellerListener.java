@@ -254,19 +254,41 @@ public class TreeFellerListener implements Listener {
 
             logsToBreak.add(block);
 
-            // Check in all directions including downward for connected logs
-            // Extended range (2 blocks) for large trees like Jungle and Spruce
+            // Check in all directions for connected logs
+            // Comprehensive offsets for branching trees like Cherry, Acacia, etc.
             int[][] offsets = {
-                    { 0, 1, 0 }, { 0, 2, 0 }, // Up (extended)
-                    { 0, -1, 0 }, // Down
-                    { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, // Horizontal
-                    { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 }, // Horizontal extended
-                    { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 }, // Diagonal up
-                    { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 }, // Full diagonal up
-                    { 2, 1, 0 }, { -2, 1, 0 }, { 0, 1, 2 }, { 0, 1, -2 }, // Extended diagonal up
-                    { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }, // Diagonal down
-                    { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 }, // Jump up
-                    { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 } // Jump up diagonal
+                    // Vertical
+                    { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 }, // Up extended
+                    { 0, -1, 0 }, { 0, -2, 0 }, // Down
+
+                    // Horizontal cardinal (1, 2, 3 blocks for branches)
+                    { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+                    { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 },
+                    { 3, 0, 0 }, { -3, 0, 0 }, { 0, 0, 3 }, { 0, 0, -3 },
+
+                    // Horizontal diagonal (Cherry branches)
+                    { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+                    { 2, 0, 1 }, { 2, 0, -1 }, { -2, 0, 1 }, { -2, 0, -1 },
+                    { 1, 0, 2 }, { 1, 0, -2 }, { -1, 0, 2 }, { -1, 0, -2 },
+                    { 2, 0, 2 }, { 2, 0, -2 }, { -2, 0, 2 }, { -2, 0, -2 },
+
+                    // Diagonal up (+1 Y)
+                    { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+                    { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
+                    { 2, 1, 0 }, { -2, 1, 0 }, { 0, 1, 2 }, { 0, 1, -2 },
+                    { 2, 1, 1 }, { -2, 1, 1 }, { 2, 1, -1 }, { -2, 1, -1 },
+                    { 1, 1, 2 }, { -1, 1, 2 }, { 1, 1, -2 }, { -1, 1, -2 },
+                    { 2, 1, 2 }, { -2, 1, 2 }, { 2, 1, -2 }, { -2, 1, -2 },
+
+                    // Diagonal up (+2 Y)
+                    { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 },
+                    { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 },
+                    { 2, 2, 0 }, { -2, 2, 0 }, { 0, 2, 2 }, { 0, 2, -2 },
+
+                    // Diagonal down
+                    { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+                    { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 },
+                    { 2, -1, 0 }, { -2, -1, 0 }, { 0, -1, 2 }, { 0, -1, -2 },
             };
 
             for (int[] offset : offsets) {
