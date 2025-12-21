@@ -112,14 +112,6 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        // For trees larger than 1x1, require entire horizontal cross-section to be
-        // mined
-        // (silently skip felling if adjacent logs exist)
-        int adjacentLogs = countAdjacentLogs(block, logType);
-        if (adjacentLogs > 0) {
-            return;
-        }
-
         // Verify this is an actual tree (has leaves connected)
         if (!isActualTree(block, logType)) {
             return;
@@ -154,29 +146,6 @@ public class TreeFellerListener implements Listener {
 
     private void removePlayerPlacedMark(Block block) {
         block.getChunk().getPersistentDataContainer().remove(getBlockKey(block.getLocation()));
-    }
-
-    /**
-     * Counts adjacent logs at the same Y level (for multi-trunk trees).
-     * Returns 0 for single-trunk trees, >0 for 2x2 or larger.
-     */
-    private int countAdjacentLogs(Block block, Material logType) {
-        Location loc = block.getLocation();
-        int count = 0;
-
-        // Check all 8 surrounding blocks at same Y level
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                if (dx == 0 && dz == 0)
-                    continue;
-
-                Block neighbor = loc.clone().add(dx, 0, dz).getBlock();
-                if (neighbor.getType() == logType && !isPlayerPlaced(neighbor)) {
-                    count++;
-                }
-            }
-        }
-        return count;
     }
 
     /**
