@@ -158,7 +158,19 @@ public abstract class BaseGUI implements InventoryHolder {
      * Creates a close button.
      */
     protected ItemStack createCloseButton() {
-        return createItem(Material.BARRIER, "§c§lClose", List.of("§7Click to close"));
+        ItemStack item = new ItemStack(Material.BARRIER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Close")
+                    .color(net.kyori.adventure.text.format.NamedTextColor.RED)
+                    .decoration(TextDecoration.BOLD, true)
+                    .decoration(TextDecoration.ITALIC, false));
+            meta.lore(List.of(Component.text("Click to close")
+                    .color(net.kyori.adventure.text.format.NamedTextColor.GRAY)
+                    .decoration(TextDecoration.ITALIC, false)));
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     /**

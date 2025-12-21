@@ -44,7 +44,20 @@ public class PreviewGUI extends BaseGUI {
     public void setBackButton(int slot, Consumer<InventoryClickEvent> handler) {
         this.backButtonSlot = slot;
         this.backButtonHandler = handler;
-        setItem(slot, createItem(Material.ARROW, "§e§l← Back", List.of("§7Click to go back")));
+
+        ItemStack item = new ItemStack(Material.ARROW);
+        org.bukkit.inventory.meta.ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("← Back")
+                    .color(net.kyori.adventure.text.format.NamedTextColor.YELLOW)
+                    .decoration(net.kyori.adventure.text.format.TextDecoration.BOLD, true)
+                    .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
+            meta.lore(List.of(Component.text("Click to go back")
+                    .color(net.kyori.adventure.text.format.NamedTextColor.GRAY)
+                    .decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false)));
+            item.setItemMeta(meta);
+        }
+        setItem(slot, item);
     }
 
     /**

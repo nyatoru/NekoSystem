@@ -1,8 +1,8 @@
 package com.nyarutoru.nekoplugin.api.tool;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.utils.ComponentUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
-import net.kyori.adventure.text.Component;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -92,12 +92,7 @@ public class ActiveToolAPI {
 
     private void showActivationProgress(Player player, int count) {
         int progress = Math.min(count, SHIFTS_REQUIRED);
-        StringBuilder bar = new StringBuilder("§6§l⚡ §e[");
-        for (int i = 0; i < SHIFTS_REQUIRED; i++) {
-            bar.append(i < progress ? "§a█" : "§8░");
-        }
-        bar.append("§e] §f").append(progress).append("§7/§f").append(SHIFTS_REQUIRED);
-        player.sendActionBar(Component.text(bar.toString()));
+        player.sendActionBar(ComponentUtils.progressBar(progress, SHIFTS_REQUIRED, '█', '░'));
     }
 
     private void startShiftTimeout(Player player, String key) {
@@ -107,7 +102,7 @@ public class ActiveToolAPI {
             if (shiftCount.containsKey(key)) {
                 resetShiftCount(key);
                 if (player.isOnline()) {
-                    player.sendActionBar(Component.text("§c§l✖ §7Activation cancelled §8(timeout)"));
+                    player.sendActionBar(ComponentUtils.timeoutMessage());
                 }
             }
         }, SchedulerUtils.secondsToTicks(3));
@@ -132,11 +127,11 @@ public class ActiveToolAPI {
 
         state.actionBarTask = SchedulerUtils.runSyncTimer(() -> {
             if (player.isOnline() && isActive(player, toolName)) {
-                player.sendActionBar(Component.text("§a§l✔ §f" + toolName + " §a§lACTIVE"));
+                player.sendActionBar(ComponentUtils.activeStatus(toolName));
             }
         }, 0, ACTION_BAR_REFRESH_TICKS);
 
-        player.sendActionBar(Component.text("§a§l✔ §f" + toolName + " §a§lACTIVE"));
+        player.sendActionBar(ComponentUtils.activeStatus(toolName));
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 2.0f);
 
         NekoPlugin.getInstance().getLogger().info(player.getName() + " activated " + toolName);
@@ -155,7 +150,7 @@ public class ActiveToolAPI {
 
         if (state != null) {
             SchedulerUtils.cancelTask(state.actionBarTask);
-            player.sendActionBar(Component.text("§c§l✖ §f" + state.toolName + " §7disabled §8(" + reason + ")"));
+            player.sendActionBar(ComponentUtils.disabledStatus(state.toolName, reason));
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
 
             // Reset shift count for this specific tool

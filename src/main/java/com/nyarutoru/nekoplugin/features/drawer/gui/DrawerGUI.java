@@ -5,6 +5,8 @@ import com.nyarutoru.nekoplugin.features.drawer.data.Drawer;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerManager;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -12,9 +14,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.text.NumberFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Custom GUI for drawer interaction.
@@ -40,7 +48,7 @@ public class DrawerGUI extends BaseGUI {
     private final NumberFormat numberFormat = NumberFormat.getInstance();
 
     public DrawerGUI(Drawer drawer) {
-        super(SIZE, Component.text("Drawer - ").append(Component.text(drawer.getTier().getDisplayName())));
+        super(SIZE, Component.text("Drawer - ").append(drawer.getTier().getDisplayNameComponent()));
         this.drawer = drawer;
         this.drawerKey = locationKey(drawer.getLocation());
         refresh();
@@ -284,41 +292,101 @@ public class DrawerGUI extends BaseGUI {
     }
 
     private ItemStack createInfoItem() {
-        List<String> lore = new ArrayList<>();
-        lore.add("§7");
-        lore.add("§7Item: §f" + (drawer.getItemType() != null ? formatMaterial(drawer.getItemType()) : "Empty"));
-        lore.add("§7Count: §f" + numberFormat.format(drawer.getItemCount()));
+        ItemStack item = new ItemStack(Material.BOOK);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("Drawer Info")
+                    .color(NamedTextColor.AQUA)
+                    .decoration(TextDecoration.BOLD, true)
+                    .decoration(TextDecoration.ITALIC, false));
 
-        String capacityText = drawer.getTier().getStackCapacity() < 0 ? "Unlimited"
-                : numberFormat.format(drawer.getMaxCapacity());
-        lore.add("§7Capacity: §f" + capacityText);
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.empty());
 
-        if (drawer.getTier().getStackCapacity() >= 0 && drawer.getMaxCapacity() > 0) {
-            lore.add("§7Fill: §f" + String.format("%.1f%%", drawer.getFillPercentage() * 100));
+            // Item info
+            String itemName = drawer.getItemType() != null ? formatMaterial(drawer.getItemType()) : "Empty";
+            lore.add(Component.text("Item: ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
+                    .append(Component.text(itemName).color(NamedTextColor.WHITE)));
+
+            lore.add(Component.text("Count: ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
+                    .append(Component.text(numberFormat.format(drawer.getItemCount())).color(NamedTextColor.WHITE)));
+
+            // Capacity
+            String capacityText = drawer.getTier().getStackCapacity() < 0 ? "Unlimited"
+                    : numberFormat.format(drawer.getMaxCapacity());
+            lore.add(Component.text("Capacity: ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
+                    .append(Component.text(capacityText).color(NamedTextColor.WHITE)));
+
+            // Fill percentage
+            if (drawer.getTier().getStackCapacity() >= 0 && drawer.getMaxCapacity() > 0) {
+                lore.add(Component.text("Fill: ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
+                        .append(Component.text(String.format("%.1f%%", drawer.getFillPercentage() * 100))
+                                .color(NamedTextColor.WHITE)));
+            }
+
+            lore.add(Component.empty());
+
+            // Tier info
+            lore.add(Component.text("Tier: ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
+                    .append(drawer.getTier().getDisplayNameComponent()));
+
+            // Next tier upgrade
+            DrawerTier nextTier = drawer.getTier().getNextTier();
+            if (nextTier != null) {
+                lore.add(Component.text("Upgrade: ").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)
+                        .append(Component.text(formatMaterial(nextTier.getUpgradeMaterial()))
+                                .color(NamedTextColor.YELLOW)));
+            }
+
+            lore.add(Component.empty());
+
+            // Instructions
+            lore.add(Component.text("Left-click slot: ").color(NamedTextColor.YELLOW)
+                    .decoration(TextDecoration.ITALIC, false)
+                    .append(Component.text("withdraw stack").color(NamedTextColor.GRAY)));
+            lore.add(Component.text("Right-click slot: ").color(NamedTextColor.YELLOW)
+                    .decoration(TextDecoration.ITALIC, false)
+                    .append(Component.text("withdraw 1").color(NamedTextColor.GRAY)));
+
+            meta.lore(lore);
+            item.setItemMeta(meta);
         }
-
-        lore.add("§7");
-        lore.add("§7Tier: §f" + drawer.getTier().getDisplayName());
-
-        DrawerTier nextTier = drawer.getTier().getNextTier();
-        if (nextTier != null) {
-            lore.add("§7Upgrade: §e" + formatMaterial(nextTier.getUpgradeMaterial()));
-        }
-
-        lore.add("§7");
-        lore.add("§eLeft-click slot: §7withdraw stack");
-        lore.add("§eRight-click slot: §7withdraw 1");
-
-        return createItem(Material.BOOK, "§b§lDrawer Info", lore);
+        return item;
     }
 
     private ItemStack createDepositButton(int amount) {
-        return createItem(Material.LIME_STAINED_GLASS_PANE, "§a§l+" + amount,
-                List.of("§7Deposit " + amount + " items", "§7from main hand"));
+        ItemStack item = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("+" + amount)
+                    .color(NamedTextColor.GREEN)
+                    .decoration(TextDecoration.BOLD, true)
+                    .decoration(TextDecoration.ITALIC, false));
+            meta.lore(List.of(
+                    Component.text("Deposit " + amount + " items").color(NamedTextColor.GRAY)
+                            .decoration(TextDecoration.ITALIC, false),
+                    Component.text("from main hand").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC,
+                            false)));
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private ItemStack createWithdrawButton(int amount) {
-        return createItem(Material.RED_STAINED_GLASS_PANE, "§c§l-" + amount,
-                List.of("§7Withdraw " + amount + " items", "§7to your inventory"));
+        ItemStack item = new ItemStack(Material.RED_STAINED_GLASS_PANE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("-" + amount)
+                    .color(NamedTextColor.RED)
+                    .decoration(TextDecoration.BOLD, true)
+                    .decoration(TextDecoration.ITALIC, false));
+            meta.lore(List.of(
+                    Component.text("Withdraw " + amount + " items").color(NamedTextColor.GRAY)
+                            .decoration(TextDecoration.ITALIC, false),
+                    Component.text("to your inventory").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC,
+                            false)));
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 }
