@@ -33,6 +33,7 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(new HammerFeature());
         FeatureManager.getInstance().registerFeature(new PlayerFeature());
         FeatureManager.getInstance().registerFeature(new ServerFeature());
+        FeatureManager.getInstance().registerFeature(new com.nyarutoru.nekoplugin.features.petcarry.PetCarryFeature());
 
         // Enable all features
         FeatureManager.getInstance().enableAll();
