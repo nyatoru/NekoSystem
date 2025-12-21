@@ -84,15 +84,7 @@ public class RecipePreviewGUI {
         // Use the display item if available (shows custom name, lore, etc.)
         ItemStack displayItem = ingredient.getDisplayItem();
         if (displayItem != null) {
-            // DEBUG
-            if (displayItem.getType() == Material.BARREL
-                    && (!displayItem.hasItemMeta() || !displayItem.getItemMeta().hasDisplayName())) {
-                plugin.getLogger().info("DEBUG PREVIEW: Found generic BARREL display item!");
-            } else if (displayItem.getType() == Material.BARREL) {
-                plugin.getLogger().info("DEBUG PREVIEW: Found custom BARREL display item: " +
-                        net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()
-                                .serialize(displayItem.getItemMeta().displayName()));
-            }
+
             return displayItem;
         }
 

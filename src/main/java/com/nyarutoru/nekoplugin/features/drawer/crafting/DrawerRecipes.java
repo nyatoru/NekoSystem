@@ -193,15 +193,6 @@ public class DrawerRecipes {
 
         // Create drawer display item for recipe preview
         ItemStack previousDrawerDisplayItem = createDrawerItem(previousTier);
-        if (previousDrawerDisplayItem.getItemMeta() != null) {
-            com.nyarutoru.nekoplugin.NekoPlugin.getPlugin(com.nyarutoru.nekoplugin.NekoPlugin.class)
-                    .getLogger().info("DEBUG: created previousDrawerDisplayItem for " + previousTier.name()
-                            + " name: " + net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-                                    .plainText().serialize(previousDrawerDisplayItem.getItemMeta().displayName()));
-        } else {
-            com.nyarutoru.nekoplugin.NekoPlugin.getPlugin(com.nyarutoru.nekoplugin.NekoPlugin.class)
-                    .getLogger().info("DEBUG: previousDrawerDisplayItem meta is null!");
-        }
 
         // Create ingredient that matches previous tier drawer specifically
         CustomRecipe.Ingredient drawerIngredient = CustomRecipe.Ingredient.ofCustomItem(
