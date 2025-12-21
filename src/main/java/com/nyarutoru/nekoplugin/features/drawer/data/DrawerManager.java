@@ -22,8 +22,8 @@ import java.util.logging.Level;
  */
 public class DrawerManager {
 
-    private static DrawerManager instance;
-    private final Map<String, Drawer> drawers = new HashMap<>();
+    private static volatile DrawerManager instance;
+    private final Map<String, Drawer> drawers = new java.util.concurrent.ConcurrentHashMap<>();
     private File dataFile;
     private NekoPlugin plugin;
     private BukkitTask autoSaveTask;
@@ -37,7 +37,11 @@ public class DrawerManager {
 
     public static DrawerManager getInstance() {
         if (instance == null) {
-            instance = new DrawerManager();
+            synchronized (DrawerManager.class) {
+                if (instance == null) {
+                    instance = new DrawerManager();
+                }
+            }
         }
         return instance;
     }

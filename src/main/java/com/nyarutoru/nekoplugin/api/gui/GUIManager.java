@@ -9,7 +9,6 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -17,15 +16,19 @@ import java.util.Map;
  */
 public class GUIManager implements Listener {
 
-    private static GUIManager instance;
-    private final Map<Player, BaseGUI> openGUIs = new HashMap<>();
+    private static volatile GUIManager instance;
+    private final Map<Player, BaseGUI> openGUIs = new java.util.concurrent.ConcurrentHashMap<>();
 
     private GUIManager() {
     }
 
     public static GUIManager getInstance() {
         if (instance == null) {
-            instance = new GUIManager();
+            synchronized (GUIManager.class) {
+                if (instance == null) {
+                    instance = new GUIManager();
+                }
+            }
         }
         return instance;
     }

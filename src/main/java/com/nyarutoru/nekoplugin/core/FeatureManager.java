@@ -12,8 +12,8 @@ import java.util.logging.Level;
  */
 public class FeatureManager {
 
-    private static FeatureManager instance;
-    private final Map<String, Feature> features = new HashMap<>();
+    private static volatile FeatureManager instance;
+    private final Map<String, Feature> features = new java.util.concurrent.ConcurrentHashMap<>();
     private NekoPlugin plugin;
 
     private FeatureManager() {
@@ -21,7 +21,11 @@ public class FeatureManager {
 
     public static FeatureManager getInstance() {
         if (instance == null) {
-            instance = new FeatureManager();
+            synchronized (FeatureManager.class) {
+                if (instance == null) {
+                    instance = new FeatureManager();
+                }
+            }
         }
         return instance;
     }

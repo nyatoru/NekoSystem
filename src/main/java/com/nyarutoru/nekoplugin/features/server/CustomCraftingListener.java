@@ -366,53 +366,23 @@ public class CustomCraftingListener implements Listener {
     }
 
     private ItemStack createGlassPane() {
-        ItemStack pane = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
-        ItemMeta meta = pane.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text(" "));
-            pane.setItemMeta(meta);
-        }
-        return pane;
+        return com.nyarutoru.nekoplugin.api.gui.GUIUtils.createGlassPane(Material.ORANGE_STAINED_GLASS_PANE);
     }
 
     private ItemStack createDarkGlassPane() {
-        ItemStack pane = new ItemStack(Material.GRAY_STAINED_GLASS_PANE);
-        ItemMeta meta = pane.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text(" "));
-            pane.setItemMeta(meta);
-        }
-        return pane;
+        return com.nyarutoru.nekoplugin.api.gui.GUIUtils.createGrayGlass();
     }
 
     private ItemStack createBlackGlassPane() {
-        ItemStack pane = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-        ItemMeta meta = pane.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text(" "));
-            pane.setItemMeta(meta);
-        }
-        return pane;
+        return com.nyarutoru.nekoplugin.api.gui.GUIUtils.createBlackGlass();
     }
 
     private ItemStack createRedGlassPane() {
-        ItemStack pane = new ItemStack(Material.RED_STAINED_GLASS_PANE);
-        ItemMeta meta = pane.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text(" "));
-            pane.setItemMeta(meta);
-        }
-        return pane;
+        return com.nyarutoru.nekoplugin.api.gui.GUIUtils.createRedGlass();
     }
 
     private ItemStack createLimeGlassPane() {
-        ItemStack pane = new ItemStack(Material.LIME_STAINED_GLASS_PANE);
-        ItemMeta meta = pane.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text(" "));
-            pane.setItemMeta(meta);
-        }
-        return pane;
+        return com.nyarutoru.nekoplugin.api.gui.GUIUtils.createLimeGlass();
     }
 
     private ItemStack createRecipeBookButton() {

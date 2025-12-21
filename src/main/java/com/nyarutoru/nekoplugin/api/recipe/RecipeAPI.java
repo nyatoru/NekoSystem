@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Recipe API for custom crafting recipes.
@@ -11,15 +12,20 @@ import java.util.*;
  */
 public class RecipeAPI {
 
-    private static RecipeAPI instance;
-    private final List<CustomRecipe> recipes = new ArrayList<>();
+    private static volatile RecipeAPI instance;
+    // Thread-safe list for recipes
+    private final List<CustomRecipe> recipes = new CopyOnWriteArrayList<>();
 
     private RecipeAPI() {
     }
 
     public static RecipeAPI getInstance() {
         if (instance == null) {
-            instance = new RecipeAPI();
+            synchronized (RecipeAPI.class) {
+                if (instance == null) {
+                    instance = new RecipeAPI();
+                }
+            }
         }
         return instance;
     }
