@@ -19,12 +19,12 @@ import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.Set;
 
 /**
@@ -181,62 +181,85 @@ public class TreeFellerListener implements Listener {
 
     /**
      * Checks if this log is part of an actual tree.
-     * A real tree must have leaves connected above the log column.
-     * This prevents felling random logs or log structures.
+     * Uses BFS to find all connected logs and leaves from any position.
+     * Requires minimum logs and leaves to be considered a real tree.
      */
     private boolean isActualTree(Block startLog, Material logType) {
-        Location loc = startLog.getLocation().clone();
+        final int MIN_LOGS = 6;
+        final int MIN_LEAVES = 20;
 
-        // Search upward to find the top of the log column
-        int maxHeight = 64;
-        int logCount = 0;
-        Block topLog = startLog;
+        Set<Location> visitedLogs = new HashSet<>();
+        Set<Location> visitedLeaves = new HashSet<>();
+        Deque<Location> toCheck = new ArrayDeque<>();
 
-        for (int y = 0; y < maxHeight; y++) {
-            Block above = loc.clone().add(0, y, 0).getBlock();
-            if (above.getType() == logType && !isPlayerPlaced(above)) {
-                topLog = above;
-                logCount++;
-            } else if (isLeaf(above.getType())) {
-                // Found leaves directly above - it's a tree
-                return true;
-            } else if (above.getType() != logType) {
-                // Hit something else, stop searching upward
-                break;
-            }
-        }
+        toCheck.add(startLog.getLocation());
+        visitedLogs.add(startLog.getLocation());
 
-        // Minimum log height to be considered a tree (at least 3 logs)
-        if (logCount < 3) {
-            return false;
-        }
+        // BFS to find all connected logs and count nearby leaves
+        while (!toCheck.isEmpty()) {
+            Location current = toCheck.poll();
+            Block block = current.getBlock();
 
-        // Check for leaves around the top portion of the tree
-        Location topLoc = topLog.getLocation();
-        int searchRadius = 3;
-        int searchHeight = 5;
+            // Search for connected logs in all directions
+            int[][] logOffsets = {
+                    // Vertical
+                    { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
+                    { 0, -1, 0 }, { 0, -2, 0 },
+                    // Horizontal
+                    { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+                    { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+                    // Diagonal
+                    { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+                    { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+            };
 
-        for (int dx = -searchRadius; dx <= searchRadius; dx++) {
-            for (int dy = 0; dy <= searchHeight; dy++) {
-                for (int dz = -searchRadius; dz <= searchRadius; dz++) {
-                    Block check = topLoc.clone().add(dx, dy, dz).getBlock();
-                    if (isLeaf(check.getType())) {
-                        return true;
+            for (int[] offset : logOffsets) {
+                Location adjacent = current.clone().add(offset[0], offset[1], offset[2]);
+                if (!visitedLogs.contains(adjacent)) {
+                    Block adjBlock = adjacent.getBlock();
+                    if (adjBlock.getType() == logType && !isPlayerPlaced(adjBlock)) {
+                        visitedLogs.add(adjacent);
+                        toCheck.add(adjacent);
                     }
                 }
             }
+
+            // Count leaves around this log
+            for (int dx = -2; dx <= 2; dx++) {
+                for (int dy = -1; dy <= 3; dy++) {
+                    for (int dz = -2; dz <= 2; dz++) {
+                        Location leafLoc = current.clone().add(dx, dy, dz);
+                        if (!visitedLeaves.contains(leafLoc)) {
+                            Block leafBlock = leafLoc.getBlock();
+                            if (isLeaf(leafBlock.getType())) {
+                                visitedLeaves.add(leafLoc);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Early exit if we've found enough
+            if (visitedLogs.size() >= MIN_LOGS && visitedLeaves.size() >= MIN_LEAVES) {
+                return true;
+            }
         }
 
-        return false;
+        // Check if minimum requirements are met
+        return visitedLogs.size() >= MIN_LOGS && visitedLeaves.size() >= MIN_LEAVES;
     }
 
     private void fellTree(Player player, Location origin, Material logType) {
         ItemStack axe = player.getInventory().getItemInMainHand();
 
         Set<Location> visited = new HashSet<>();
-        Queue<Location> toCheck = new LinkedList<>();
+        Deque<Location> toCheck = new ArrayDeque<>();
         List<Block> logsToBreak = new ArrayList<>();
         Set<Block> leavesToDecay = new HashSet<>();
+
+        // Measure tree height first to determine search distance
+        int treeHeight = measureTreeHeight(origin, logType);
+        boolean isTallTree = treeHeight > 10; // Jungle, Spruce, tall oaks
 
         toCheck.add(origin);
         visited.add(origin);
@@ -254,42 +277,8 @@ public class TreeFellerListener implements Listener {
 
             logsToBreak.add(block);
 
-            // Check in all directions for connected logs
-            // Comprehensive offsets for branching trees like Cherry, Acacia, etc.
-            int[][] offsets = {
-                    // Vertical
-                    { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 }, // Up extended
-                    { 0, -1, 0 }, { 0, -2, 0 }, // Down
-
-                    // Horizontal cardinal (1, 2, 3 blocks for branches)
-                    { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
-                    { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 },
-                    { 3, 0, 0 }, { -3, 0, 0 }, { 0, 0, 3 }, { 0, 0, -3 },
-
-                    // Horizontal diagonal (Cherry branches)
-                    { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
-                    { 2, 0, 1 }, { 2, 0, -1 }, { -2, 0, 1 }, { -2, 0, -1 },
-                    { 1, 0, 2 }, { 1, 0, -2 }, { -1, 0, 2 }, { -1, 0, -2 },
-                    { 2, 0, 2 }, { 2, 0, -2 }, { -2, 0, 2 }, { -2, 0, -2 },
-
-                    // Diagonal up (+1 Y)
-                    { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
-                    { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
-                    { 2, 1, 0 }, { -2, 1, 0 }, { 0, 1, 2 }, { 0, 1, -2 },
-                    { 2, 1, 1 }, { -2, 1, 1 }, { 2, 1, -1 }, { -2, 1, -1 },
-                    { 1, 1, 2 }, { -1, 1, 2 }, { 1, 1, -2 }, { -1, 1, -2 },
-                    { 2, 1, 2 }, { -2, 1, 2 }, { 2, 1, -2 }, { -2, 1, -2 },
-
-                    // Diagonal up (+2 Y)
-                    { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 },
-                    { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 },
-                    { 2, 2, 0 }, { -2, 2, 0 }, { 0, 2, 2 }, { 0, 2, -2 },
-
-                    // Diagonal down
-                    { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
-                    { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 },
-                    { 2, -1, 0 }, { -2, -1, 0 }, { 0, -1, 2 }, { 0, -1, -2 },
-            };
+            // Use extended offsets for tall trees only
+            int[][] offsets = isTallTree ? getTallTreeOffsets() : getCompactOffsets();
 
             for (int[] offset : offsets) {
                 Location adjacent = current.clone().add(offset[0], offset[1], offset[2]);
@@ -350,6 +339,84 @@ public class TreeFellerListener implements Listener {
         if (!leavesToDecay.isEmpty()) {
             triggerFastLeafDecay(leavesToDecay);
         }
+    }
+
+    /**
+     * Measures the height of a tree by counting logs upward.
+     */
+    private int measureTreeHeight(Location origin, Material logType) {
+        int height = 0;
+        Location check = origin.clone();
+
+        for (int y = 0; y < 64; y++) {
+            Block block = check.clone().add(0, y, 0).getBlock();
+            if (block.getType() == logType && !isPlayerPlaced(block)) {
+                height++;
+            } else if (isLeaf(block.getType())) {
+                // Reached leaves, stop counting
+                break;
+            } else if (block.getType() != logType) {
+                break;
+            }
+        }
+
+        return height;
+    }
+
+    /**
+     * Compact offsets for short trees (Oak, Birch, Cherry, Acacia).
+     * Max 1 block horizontal to prevent spreading.
+     */
+    private int[][] getCompactOffsets() {
+        return new int[][] {
+                // Vertical
+                { 0, 1, 0 }, { 0, 2, 0 },
+                { 0, -1, 0 },
+
+                // Horizontal (1 block only)
+                { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+                { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+
+                // Diagonal up (+1 Y)
+                { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+                { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
+
+                // Diagonal down
+                { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+        };
+    }
+
+    /**
+     * Extended offsets for tall trees (Jungle, Spruce, Dark Oak).
+     * Max 2 blocks horizontal for wider canopies.
+     */
+    private int[][] getTallTreeOffsets() {
+        return new int[][] {
+                // Vertical
+                { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
+                { 0, -1, 0 }, { 0, -2, 0 },
+
+                // Horizontal cardinal (1-2 blocks)
+                { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+                { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 },
+
+                // Horizontal diagonal
+                { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+
+                // Diagonal up (+1 Y)
+                { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+                { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
+                { 2, 1, 0 }, { -2, 1, 0 }, { 0, 1, 2 }, { 0, 1, -2 },
+
+                // Diagonal up (+2 Y)
+                { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 },
+                { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 },
+                { 2, 2, 0 }, { -2, 2, 0 }, { 0, 2, 2 }, { 0, 2, -2 },
+
+                // Diagonal down
+                { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+                { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 },
+        };
     }
 
     /**
