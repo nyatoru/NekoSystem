@@ -5,7 +5,7 @@ import com.nyarutoru.nekoplugin.features.drawer.data.Drawer;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerManager;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -181,15 +181,10 @@ public class DrawerGUI extends BaseGUI {
 
     private void depositItem(Player player, ItemStack item) {
         if (!Drawer.isAllowedItem(item)) {
-            player.sendMessage(Component.text("This item cannot be stored in a drawer!").color(NamedTextColor.RED));
             return;
         }
 
         if (!drawer.canAcceptItem(item)) {
-            if (!drawer.isEmpty()) {
-                player.sendMessage(Component.text("Drawer only accepts: ").color(NamedTextColor.RED)
-                        .append(Component.text(formatMaterial(drawer.getItemType())).color(NamedTextColor.YELLOW)));
-            }
             return;
         }
 
@@ -200,8 +195,6 @@ public class DrawerGUI extends BaseGUI {
             item.setAmount(overflow);
             DrawerManager.getInstance().markDirty();
             refreshAllViewers(drawer);
-        } else {
-            player.sendMessage(Component.text("Drawer is full!").color(NamedTextColor.RED));
         }
     }
 
@@ -212,15 +205,10 @@ public class DrawerGUI extends BaseGUI {
     private void depositItemFromInventory(Player player, ItemStack item, org.bukkit.inventory.Inventory sourceInventory,
             int slot) {
         if (!Drawer.isAllowedItem(item)) {
-            player.sendMessage(Component.text("This item cannot be stored in a drawer!").color(NamedTextColor.RED));
             return;
         }
 
         if (!drawer.canAcceptItem(item)) {
-            if (!drawer.isEmpty()) {
-                player.sendMessage(Component.text("Drawer only accepts: ").color(NamedTextColor.RED)
-                        .append(Component.text(formatMaterial(drawer.getItemType())).color(NamedTextColor.YELLOW)));
-            }
             return;
         }
 
@@ -237,8 +225,6 @@ public class DrawerGUI extends BaseGUI {
             }
             DrawerManager.getInstance().markDirty();
             refreshAllViewers(drawer);
-        } else {
-            player.sendMessage(Component.text("Drawer is full!").color(NamedTextColor.RED));
         }
     }
 
@@ -246,20 +232,14 @@ public class DrawerGUI extends BaseGUI {
         ItemStack mainHand = player.getInventory().getItemInMainHand();
 
         if (mainHand.getType() == Material.AIR) {
-            player.sendMessage(Component.text("Hold an item in your main hand to deposit!").color(NamedTextColor.RED));
             return;
         }
 
         if (!Drawer.isAllowedItem(mainHand)) {
-            player.sendMessage(Component.text("This item cannot be stored in a drawer!").color(NamedTextColor.RED));
             return;
         }
 
         if (!drawer.canAcceptItem(mainHand)) {
-            if (!drawer.isEmpty()) {
-                player.sendMessage(Component.text("Drawer only accepts: ").color(NamedTextColor.RED)
-                        .append(Component.text(formatMaterial(drawer.getItemType())).color(NamedTextColor.YELLOW)));
-            }
             return;
         }
 
@@ -269,17 +249,13 @@ public class DrawerGUI extends BaseGUI {
 
         if (deposited > 0) {
             mainHand.setAmount(mainHand.getAmount() - deposited);
-            player.sendMessage(Component.text("Deposited " + deposited + " items.").color(NamedTextColor.GREEN));
             DrawerManager.getInstance().markDirty();
             refreshAllViewers(drawer);
-        } else {
-            player.sendMessage(Component.text("Drawer is full!").color(NamedTextColor.RED));
         }
     }
 
     private void withdraw(Player player, int amount) {
         if (drawer.isEmpty()) {
-            player.sendMessage(Component.text("Drawer is empty!").color(NamedTextColor.RED));
             return;
         }
 
@@ -302,11 +278,8 @@ public class DrawerGUI extends BaseGUI {
 
         if (withdrawn > 0) {
             drawer.removeItems(withdrawn);
-            player.sendMessage(Component.text("Withdrew " + withdrawn + " items.").color(NamedTextColor.GREEN));
             DrawerManager.getInstance().markDirty();
             refreshAllViewers(drawer);
-        } else {
-            player.sendMessage(Component.text("Your inventory is full!").color(NamedTextColor.RED));
         }
     }
 

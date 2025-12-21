@@ -5,8 +5,7 @@ import com.nyarutoru.nekoplugin.features.drawer.data.Drawer;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerManager;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
 import com.nyarutoru.nekoplugin.features.drawer.gui.DrawerGUI;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -48,14 +47,6 @@ public class DrawerListener implements Listener {
             if (storedType != null && storedCount > 0) {
                 drawer.addItems(storedType, storedCount);
                 DrawerManager.getInstance().markDirty();
-                event.getPlayer().sendMessage(Component.text("✓ Drawer placed with ")
-                        .color(NamedTextColor.GREEN)
-                        .append(Component.text(String.format("%,d × %s", storedCount, storedType.name()))
-                                .color(NamedTextColor.AQUA)));
-            } else {
-                event.getPlayer().sendMessage(Component.text("✓ Drawer placed! ")
-                        .color(NamedTextColor.GREEN)
-                        .append(Component.text(tier.getDisplayName())));
             }
         }
     }
@@ -103,14 +94,8 @@ public class DrawerListener implements Listener {
                     drawer.getTier(),
                     drawer.getItemType(),
                     drawer.getItemCount());
-            event.getPlayer().sendMessage(Component.text("Drawer collected with ")
-                    .color(NamedTextColor.YELLOW)
-                    .append(Component.text(String.format("%,d items", drawer.getItemCount()))
-                            .color(NamedTextColor.AQUA)));
         } else {
             drawerItem = DrawerRecipes.createDrawerItem(drawer.getTier());
-            event.getPlayer().sendMessage(Component.text("Drawer collected!")
-                    .color(NamedTextColor.YELLOW));
         }
 
         location.getWorld().dropItemNaturally(location, drawerItem);

@@ -282,12 +282,8 @@ public class CustomRecipe {
          */
         public ItemStack getDisplayItem() {
             if (displayItem != null) {
-                org.bukkit.Bukkit.getLogger()
-                        .info("[DEBUG] Ingredient.getDisplayItem: returning cloned displayItem for " + material);
                 return displayItem.clone();
             }
-            org.bukkit.Bukkit.getLogger()
-                    .info("[DEBUG] Ingredient.getDisplayItem: displayItem is NULL, returning basic " + material);
             if (material != null) {
                 return new ItemStack(material);
             }

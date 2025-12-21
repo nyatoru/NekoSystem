@@ -4,8 +4,7 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -102,10 +101,8 @@ public class TreeFellerListener implements Listener {
         if (!isLog(logType))
             return;
 
-        // Check if player-placed
+        // Check if player-placed (skip tree felling for player-placed logs)
         if (isPlayerPlaced(block)) {
-            player.sendMessage(Component.text("This log was player-placed!")
-                    .color(NamedTextColor.RED));
             return;
         }
 
@@ -187,7 +184,8 @@ public class TreeFellerListener implements Listener {
             Location current = toCheck.poll();
             Block block = current.getBlock();
 
-            if (!isLog(block.getType()))
+            // Only include logs of the same type as the original
+            if (block.getType() != logType)
                 continue;
             if (isPlayerPlaced(block))
                 continue;
@@ -214,7 +212,8 @@ public class TreeFellerListener implements Listener {
                 if (!visited.contains(adjacent)) {
                     visited.add(adjacent);
                     Block adjBlock = adjacent.getBlock();
-                    if (isLog(adjBlock.getType()) && !isPlayerPlaced(adjBlock)) {
+                    // Only include logs of the same type
+                    if (adjBlock.getType() == logType && !isPlayerPlaced(adjBlock)) {
                         toCheck.add(adjacent);
                     }
                 }
