@@ -44,7 +44,7 @@ public class ServerFeature implements Feature {
         customCraftingListener = new CustomCraftingListener(plugin);
         plugin.getServer().getPluginManager().registerEvents(customCraftingListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(customCraftingListener.getRecipeBookGUI(), plugin);
-        plugin.getServer().getPluginManager().registerEvents(customCraftingListener.getRecipePreviewGUI(), plugin);
+        // RecipePreviewGUI now uses GuiAPI so no separate listener registration needed
 
         // Server Listener (instant break, ladder, anvil repair)
         serverListener = new ServerListener(plugin);

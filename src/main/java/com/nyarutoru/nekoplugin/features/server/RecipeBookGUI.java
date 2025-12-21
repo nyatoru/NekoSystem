@@ -81,7 +81,7 @@ public class RecipeBookGUI implements Listener {
         }
 
         List<CustomRecipe> recipes = new ArrayList<>(uniqueRecipes.values());
-        GUIState state = new GUIState(GUIType.RECIPE_LIST, 0, recipes);
+        GUIState state = new GUIState(0, recipes);
         playerStates.put(player.getUniqueId(), state);
 
         openRecipeListPage(player, state);
@@ -263,30 +263,6 @@ public class RecipeBookGUI implements Listener {
         return item;
     }
 
-    private ItemStack createBackButton() {
-        ItemStack item = new ItemStack(Material.ARROW);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text("← Back to Recipes")
-                    .color(NamedTextColor.YELLOW)
-                    .decoration(TextDecoration.ITALIC, false));
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-    private ItemStack createArrowItem() {
-        ItemStack item = new ItemStack(Material.ARROW);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text("→ Crafts →")
-                    .color(NamedTextColor.GREEN)
-                    .decoration(TextDecoration.ITALIC, false));
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
     private ItemStack createPageIndicator(int currentPage, int totalPages) {
         ItemStack item = new ItemStack(Material.PAPER);
         ItemMeta meta = item.getItemMeta();
@@ -299,42 +275,13 @@ public class RecipeBookGUI implements Listener {
         return item;
     }
 
-    private ItemStack createRecipeInfoItem(CustomRecipe recipe) {
-        ItemStack item = new ItemStack(Material.CRAFTING_TABLE);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text("Recipe: " + recipe.getId())
-                    .color(NamedTextColor.GOLD)
-                    .decoration(TextDecoration.ITALIC, false));
-            List<Component> lore = List.of(
-                    Component.empty(),
-                    Component.text("Category: " + recipe.getCategory())
-                            .color(NamedTextColor.GRAY)
-                            .decoration(TextDecoration.ITALIC, false),
-                    Component.text("Type: " + recipe.getShape().name())
-                            .color(NamedTextColor.GRAY)
-                            .decoration(TextDecoration.ITALIC, false));
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
     // ========== State Classes ==========
 
-    private enum GUIType {
-        RECIPE_LIST,
-        RECIPE_PREVIEW
-    }
-
     private static class GUIState {
-        GUIType type;
         int page;
         List<CustomRecipe> recipes;
-        CustomRecipe viewingRecipe;
 
-        GUIState(GUIType type, int page, List<CustomRecipe> recipes) {
-            this.type = type;
+        GUIState(int page, List<CustomRecipe> recipes) {
             this.page = page;
             this.recipes = recipes;
         }

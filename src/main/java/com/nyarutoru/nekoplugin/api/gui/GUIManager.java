@@ -3,9 +3,11 @@ package com.nyarutoru.nekoplugin.api.gui;
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -56,18 +58,75 @@ public class GUIManager implements Listener {
         openGUIs.remove(player);
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player))
             return;
 
-        BaseGUI gui = openGUIs.get(player);
-        if (gui == null)
-            return;
+        // First, try to get GUI from the inventory holder (most reliable)
+        BaseGUI gui = null;
+        if (event.getInventory().getHolder() instanceof BaseGUI) {
+            gui = (BaseGUI) event.getInventory().getHolder();
+        }
 
+        // Fallback to player map if holder check fails
+        if (gui == null) {
+            gui = openGUIs.get(player);
+        }
+
+        if (gui == null) {
+            return;
+        }
+
+        // For PreviewGUI, cancel ALL clicks (including player inventory)
+        if (gui instanceof PreviewGUI) {
+            event.setCancelled(true);
+            // Only call onClick for clicks within the GUI (not player inventory)
+            if (event.getRawSlot() >= 0 && event.getRawSlot() < gui.getInventory().getSize()) {
+                gui.onClick(event);
+            }
+            return;
+        }
+
+        // For other GUIs, only cancel if clicked in the GUI inventory
         if (event.getClickedInventory() == gui.getInventory()) {
             event.setCancelled(true);
             gui.onClick(event);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player))
+            return;
+
+        // First, try to get GUI from the inventory holder (most reliable)
+        BaseGUI gui = null;
+        if (event.getInventory().getHolder() instanceof BaseGUI) {
+            gui = (BaseGUI) event.getInventory().getHolder();
+        }
+
+        // Fallback to player map if holder check fails
+        if (gui == null) {
+            gui = openGUIs.get(player);
+        }
+
+        if (gui == null) {
+            return;
+        }
+
+        // For PreviewGUI, cancel ALL drags
+        if (gui instanceof PreviewGUI) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // For other GUIs, cancel if any slot is in the GUI inventory
+        for (int slot : event.getRawSlots()) {
+            if (slot < gui.getInventory().getSize()) {
+                event.setCancelled(true);
+                return;
+            }
         }
     }
 
