@@ -104,12 +104,37 @@ public class ServerListener implements Listener {
             return;
         }
 
-        // Deepslate: needs Efficiency 5 + Haste (vanilla handles instant break)
-        if (DEEPSLATE_BLOCKS.contains(blockType)) {
-            int effLevel = tool.getEnchantmentLevel(Enchantment.EFFICIENCY);
-            boolean hasHaste = player.hasPotionEffect(PotionEffectType.HASTE);
-            // Behavior is handled by vanilla when conditions are met
-        }
+        // Deepslate: needs Efficiency 5 + Haste 2
+        // This event fires after the block is broken, so no action needed here
+        // The instant break effect is handled in BlockDamageEvent
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBlockDamage(org.bukkit.event.block.BlockDamageEvent event) {
+        Player player = event.getPlayer();
+        ItemStack tool = player.getInventory().getItemInMainHand();
+        Material blockType = event.getBlock().getType();
+
+        // Check for Netherite Pickaxe
+        if (tool.getType() != Material.NETHERITE_PICKAXE)
+            return;
+
+        // Only deepslate blocks
+        if (!DEEPSLATE_BLOCKS.contains(blockType))
+            return;
+
+        // Check Efficiency 5
+        int effLevel = tool.getEnchantmentLevel(Enchantment.EFFICIENCY);
+        if (effLevel < 5)
+            return;
+
+        // Check Haste 2
+        var hasteEffect = player.getPotionEffect(PotionEffectType.HASTE);
+        if (hasteEffect == null || hasteEffect.getAmplifier() < 1)
+            return; // Amplifier 1 = Haste 2
+
+        // Instant break - set to insta-break mode
+        event.setInstaBreak(true);
     }
 
     // ========== Ladder Auto-Placement ==========
