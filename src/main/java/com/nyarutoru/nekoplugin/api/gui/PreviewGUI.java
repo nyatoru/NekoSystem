@@ -3,7 +3,9 @@ package com.nyarutoru.nekoplugin.api.gui;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.inventory.ItemStack;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -42,7 +44,7 @@ public class PreviewGUI extends BaseGUI {
     public void setBackButton(int slot, Consumer<InventoryClickEvent> handler) {
         this.backButtonSlot = slot;
         this.backButtonHandler = handler;
-        setItem(slot, createItem(Material.ARROW, "§e§l← Back", java.util.List.of("§7Click to go back")));
+        setItem(slot, createItem(Material.ARROW, "§e§l← Back", List.of("§7Click to go back")));
     }
 
     /**
@@ -63,7 +65,7 @@ public class PreviewGUI extends BaseGUI {
      * @param item    The item to display
      * @param handler The handler to execute when clicked
      */
-    public void addClickableSlot(int slot, org.bukkit.inventory.ItemStack item, Consumer<InventoryClickEvent> handler) {
+    public void addClickableSlot(int slot, ItemStack item, Consumer<InventoryClickEvent> handler) {
         setItem(slot, item, handler);
     }
 
@@ -116,7 +118,7 @@ public class PreviewGUI extends BaseGUI {
     /**
      * Sets a display item (non-interactive) at the specified slot.
      */
-    public void setDisplayItem(int slot, org.bukkit.inventory.ItemStack item) {
+    public void setDisplayItem(int slot, ItemStack item) {
         inventory.setItem(slot, item);
         // No click handler - display only
     }

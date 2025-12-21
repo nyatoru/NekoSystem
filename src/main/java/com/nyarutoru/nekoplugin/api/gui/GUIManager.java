@@ -10,6 +10,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages all open GUIs and handles their events.
@@ -17,7 +18,7 @@ import java.util.Map;
 public class GUIManager implements Listener {
 
     private static volatile GUIManager instance;
-    private final Map<Player, BaseGUI> openGUIs = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<Player, BaseGUI> openGUIs = new ConcurrentHashMap<>();
 
     private GUIManager() {
     }
