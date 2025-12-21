@@ -120,6 +120,11 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
+        // Verify this is an actual tree (has leaves connected)
+        if (!isActualTree(block, logType)) {
+            return;
+        }
+
         // Fell the tree
         fellTree(player, block.getLocation(), logType);
     }
@@ -172,6 +177,57 @@ public class TreeFellerListener implements Listener {
             }
         }
         return count;
+    }
+
+    /**
+     * Checks if this log is part of an actual tree.
+     * A real tree must have leaves connected above the log column.
+     * This prevents felling random logs or log structures.
+     */
+    private boolean isActualTree(Block startLog, Material logType) {
+        Location loc = startLog.getLocation().clone();
+
+        // Search upward to find the top of the log column
+        int maxHeight = 64;
+        int logCount = 0;
+        Block topLog = startLog;
+
+        for (int y = 0; y < maxHeight; y++) {
+            Block above = loc.clone().add(0, y, 0).getBlock();
+            if (above.getType() == logType && !isPlayerPlaced(above)) {
+                topLog = above;
+                logCount++;
+            } else if (isLeaf(above.getType())) {
+                // Found leaves directly above - it's a tree
+                return true;
+            } else if (above.getType() != logType) {
+                // Hit something else, stop searching upward
+                break;
+            }
+        }
+
+        // Minimum log height to be considered a tree (at least 3 logs)
+        if (logCount < 3) {
+            return false;
+        }
+
+        // Check for leaves around the top portion of the tree
+        Location topLoc = topLog.getLocation();
+        int searchRadius = 3;
+        int searchHeight = 5;
+
+        for (int dx = -searchRadius; dx <= searchRadius; dx++) {
+            for (int dy = 0; dy <= searchHeight; dy++) {
+                for (int dz = -searchRadius; dz <= searchRadius; dz++) {
+                    Block check = topLoc.clone().add(dx, dy, dz).getBlock();
+                    if (isLeaf(check.getType())) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     private void fellTree(Player player, Location origin, Material logType) {
