@@ -90,7 +90,8 @@ public class DrawerGUI extends BaseGUI {
         if (event.isShiftClick() && event.getClickedInventory() != inventory) {
             ItemStack clickedItem = event.getCurrentItem();
             if (clickedItem != null && clickedItem.getType() != Material.AIR) {
-                depositItem(player, clickedItem);
+                int slotIndex = event.getSlot();
+                depositItemFromInventory(player, clickedItem, event.getClickedInventory(), slotIndex);
                 event.setCancelled(true);
                 return;
             }
@@ -197,6 +198,43 @@ public class DrawerGUI extends BaseGUI {
 
         if (deposited > 0) {
             item.setAmount(overflow);
+            DrawerManager.getInstance().markDirty();
+            refreshAllViewers(drawer);
+        } else {
+            player.sendMessage(Component.text("Drawer is full!").color(NamedTextColor.RED));
+        }
+    }
+
+    /**
+     * Deposit item from player inventory via shift-click.
+     * Properly updates the item stack in the player's inventory.
+     */
+    private void depositItemFromInventory(Player player, ItemStack item, org.bukkit.inventory.Inventory sourceInventory,
+            int slot) {
+        if (!Drawer.isAllowedItem(item)) {
+            player.sendMessage(Component.text("This item cannot be stored in a drawer!").color(NamedTextColor.RED));
+            return;
+        }
+
+        if (!drawer.canAcceptItem(item)) {
+            if (!drawer.isEmpty()) {
+                player.sendMessage(Component.text("Drawer only accepts: ").color(NamedTextColor.RED)
+                        .append(Component.text(formatMaterial(drawer.getItemType())).color(NamedTextColor.YELLOW)));
+            }
+            return;
+        }
+
+        int overflow = drawer.addItems(item.getType(), item.getAmount());
+        int deposited = item.getAmount() - overflow;
+
+        if (deposited > 0) {
+            // Update the item stack in source inventory
+            if (overflow == 0) {
+                sourceInventory.setItem(slot, null);
+            } else {
+                item.setAmount(overflow);
+                sourceInventory.setItem(slot, item);
+            }
             DrawerManager.getInstance().markDirty();
             refreshAllViewers(drawer);
         } else {

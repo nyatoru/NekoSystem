@@ -30,6 +30,7 @@ public class CustomCraftingListener implements Listener {
 
     private final NekoPlugin plugin;
     private final Set<UUID> openCraftingGUIs = new HashSet<>();
+    private RecipeBookGUI recipeBookGUI;
 
     // GUI Layout (54 slots - double chest)
     // Slots 0-8: Top decoration row
@@ -44,6 +45,7 @@ public class CustomCraftingListener implements Listener {
     private static final int RESULT_SLOT = 24;
     private static final int CRAFT_BUTTON_SLOT = 23;
     private static final int CLOSE_SLOT = 49;
+    private static final int RECIPE_BOOK_SLOT = 18;
 
     private static final Component TITLE = Component.text("✦ Crafting Table ✦")
             .color(NamedTextColor.GOLD)
@@ -51,6 +53,11 @@ public class CustomCraftingListener implements Listener {
 
     public CustomCraftingListener(NekoPlugin plugin) {
         this.plugin = plugin;
+        this.recipeBookGUI = new RecipeBookGUI(plugin);
+    }
+
+    public RecipeBookGUI getRecipeBookGUI() {
+        return recipeBookGUI;
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -94,10 +101,12 @@ public class CustomCraftingListener implements Listener {
         // Side decorations - black glass
         gui.setItem(9, blackGlass);
         gui.setItem(17, blackGlass);
-        gui.setItem(18, blackGlass);
         gui.setItem(26, blackGlass);
         gui.setItem(27, blackGlass);
         gui.setItem(35, blackGlass);
+
+        // Recipe Book button at slot 18
+        gui.setItem(RECIPE_BOOK_SLOT, createRecipeBookButton());
 
         // Row 36-44: black glass pane (unused row)
         for (int i = 36; i <= 44; i++) {
@@ -185,6 +194,14 @@ public class CustomCraftingListener implements Listener {
         // Close button
         if (slot == CLOSE_SLOT) {
             player.closeInventory();
+            event.setCancelled(true);
+            return;
+        }
+
+        // Recipe Book button
+        if (slot == RECIPE_BOOK_SLOT) {
+            player.closeInventory();
+            recipeBookGUI.openRecipeBook(player);
             event.setCancelled(true);
             return;
         }
@@ -378,6 +395,24 @@ public class CustomCraftingListener implements Listener {
             pane.setItemMeta(meta);
         }
         return pane;
+    }
+
+    private ItemStack createRecipeBookButton() {
+        ItemStack book = new ItemStack(Material.KNOWLEDGE_BOOK);
+        ItemMeta meta = book.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("📖 Recipe Book")
+                    .color(NamedTextColor.LIGHT_PURPLE)
+                    .decoration(TextDecoration.ITALIC, false)
+                    .decoration(TextDecoration.BOLD, true));
+            meta.lore(java.util.List.of(
+                    Component.empty(),
+                    Component.text("Click to browse custom recipes")
+                            .color(NamedTextColor.GRAY)
+                            .decoration(TextDecoration.ITALIC, false)));
+            book.setItemMeta(meta);
+        }
+        return book;
     }
 
     @EventHandler

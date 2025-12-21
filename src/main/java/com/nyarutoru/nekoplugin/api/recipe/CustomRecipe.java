@@ -44,6 +44,10 @@ public class CustomRecipe {
         return shape;
     }
 
+    public Ingredient[] getIngredients() {
+        return ingredients.clone();
+    }
+
     /**
      * Check if the given grid matches this recipe.
      */
@@ -209,6 +213,10 @@ public class CustomRecipe {
 
         public boolean isEmpty() {
             return material == null;
+        }
+
+        public Material getMaterial() {
+            return material;
         }
 
         public boolean matches(ItemStack item) {
