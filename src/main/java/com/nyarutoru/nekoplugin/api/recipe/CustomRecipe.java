@@ -7,8 +7,6 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.NamespacedKey;
 
-import java.util.function.Predicate;
-
 /**
  * Represents a custom crafting recipe.
  */
@@ -19,13 +17,16 @@ public class CustomRecipe {
     private final ItemStack result;
     private final RecipeShape shape;
     private final Ingredient[] ingredients;
+    private final ResultTransformer transformer;
 
-    private CustomRecipe(String id, String category, ItemStack result, RecipeShape shape, Ingredient[] ingredients) {
+    private CustomRecipe(String id, String category, ItemStack result, RecipeShape shape,
+            Ingredient[] ingredients, ResultTransformer transformer) {
         this.id = id;
         this.category = category;
         this.result = result;
         this.shape = shape;
         this.ingredients = ingredients;
+        this.transformer = transformer;
     }
 
     public String getId() {
@@ -40,12 +41,27 @@ public class CustomRecipe {
         return result;
     }
 
+    /**
+     * Get the result, optionally transformed based on the crafting grid.
+     */
+    public ItemStack getResult(ItemStack[] grid) {
+        ItemStack resultItem = result.clone();
+        if (transformer != null && grid != null) {
+            resultItem = transformer.transform(resultItem, grid);
+        }
+        return resultItem;
+    }
+
     public RecipeShape getShape() {
         return shape;
     }
 
     public Ingredient[] getIngredients() {
         return ingredients.clone();
+    }
+
+    public ResultTransformer getTransformer() {
+        return transformer;
     }
 
     /**
@@ -116,6 +132,7 @@ public class CustomRecipe {
         private ItemStack result;
         private RecipeShape shape = RecipeShape.SHAPED;
         private final Ingredient[] ingredients = new Ingredient[9];
+        private ResultTransformer transformer;
 
         public Builder(String id) {
             this.id = id;
@@ -141,6 +158,15 @@ public class CustomRecipe {
 
         public Builder shapeless() {
             this.shape = RecipeShape.SHAPELESS;
+            return this;
+        }
+
+        /**
+         * Set a result transformer that modifies the result based on crafting
+         * ingredients.
+         */
+        public Builder transformer(ResultTransformer transformer) {
+            this.transformer = transformer;
             return this;
         }
 
@@ -179,13 +205,31 @@ public class CustomRecipe {
             if (result == null) {
                 throw new IllegalStateException("Recipe result cannot be null");
             }
-            return new CustomRecipe(id, category, result, shape, ingredients.clone());
+            return new CustomRecipe(id, category, result, shape, ingredients.clone(), transformer);
         }
     }
 
     public enum RecipeShape {
         SHAPED,
         SHAPELESS
+    }
+
+    // ========== ResultTransformer ==========
+
+    /**
+     * Functional interface for transforming recipe results based on crafting
+     * ingredients.
+     */
+    @FunctionalInterface
+    public interface ResultTransformer {
+        /**
+         * Transform the result based on the crafting grid.
+         * 
+         * @param result The base result item
+         * @param grid   The 9-slot crafting grid
+         * @return The transformed result
+         */
+        ItemStack transform(ItemStack result, ItemStack[] grid);
     }
 
     // ========== Ingredient ==========

@@ -188,6 +188,7 @@ public class DrawerRecipes {
         if (previousTier == null)
             return;
 
+        final DrawerTier targetTier = tier;
         ItemStack result = createDrawerItem(tier);
 
         // Create drawer display item for recipe preview
@@ -208,6 +209,23 @@ public class DrawerRecipes {
                         Map.of(
                                 'M', CustomRecipe.Ingredient.of(upgradeMaterial),
                                 'D', drawerIngredient))
+                .transformer((craftResult, grid) -> {
+                    // Center slot (index 4) contains the drawer being upgraded
+                    ItemStack oldDrawer = grid[4];
+                    if (oldDrawer == null)
+                        return craftResult;
+
+                    // Read stored item data from old drawer
+                    Material storedItem = getStoredItemType(oldDrawer);
+                    int storedCount = getStoredItemCount(oldDrawer);
+
+                    // If old drawer had items, create result with those items preserved
+                    if (storedItem != null && storedCount > 0) {
+                        return createDrawerItemWithContents(targetTier, storedItem, storedCount);
+                    }
+
+                    return craftResult;
+                })
                 .build();
 
         RecipeAPI.getInstance().registerRecipe(recipe);

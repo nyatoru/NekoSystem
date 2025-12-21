@@ -47,7 +47,8 @@ public class RecipeAPI {
     public ItemStack findMatchingRecipe(ItemStack[] grid) {
         for (CustomRecipe recipe : recipes) {
             if (recipe.matches(grid)) {
-                return recipe.getResult().clone();
+                // Use getResult(grid) to apply any result transformers
+                return recipe.getResult(grid);
             }
         }
         return null;
