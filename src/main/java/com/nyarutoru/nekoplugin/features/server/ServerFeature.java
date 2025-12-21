@@ -19,6 +19,7 @@ public class ServerFeature implements Feature {
     private ConcreteConverter concreteConverter;
     private CustomCraftingListener customCraftingListener;
     private ServerListener serverListener;
+    private TPSBossBarTask tpsTask;
 
     @Override
     public String getId() {
@@ -46,9 +47,13 @@ public class ServerFeature implements Feature {
         plugin.getServer().getPluginManager().registerEvents(customCraftingListener.getRecipeBookGUI(), plugin);
         // RecipePreviewGUI now uses GuiAPI so no separate listener registration needed
 
-        // Server Listener (instant break, ladder, anvil repair)
+        // Server Listener (instant break, ladder, anvil repair, lag notification)
         serverListener = new ServerListener(plugin);
         plugin.getServer().getPluginManager().registerEvents(serverListener, plugin);
+
+        // TPS BossBar
+        tpsTask = new TPSBossBarTask();
+        tpsTask.runTaskTimer(plugin, 20L, 20L);
 
         this.enabled = true;
         plugin.getLogger().info("Server feature enabled.");
@@ -68,6 +73,9 @@ public class ServerFeature implements Feature {
         }
         if (serverListener != null) {
             HandlerList.unregisterAll(serverListener);
+        }
+        if (tpsTask != null) {
+            tpsTask.cleanup();
         }
         this.enabled = false;
     }

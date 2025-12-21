@@ -237,4 +237,40 @@ public class ServerListener implements Listener {
         player.sendMessage(Component.text("✓ Anvil repaired!")
                 .color(NamedTextColor.GREEN));
     }
+
+    // ========== Lag Notification ==========
+
+    @EventHandler
+    public void onChunkLoad(org.bukkit.event.world.ChunkLoadEvent event) {
+        // Only care about new chunk generation
+        if (!event.isNewChunk())
+            return;
+
+        // Condition: More than 2 players online
+        if (org.bukkit.Bukkit.getOnlinePlayers().size() <= 2)
+            return;
+
+        // Condition: TPS < 18
+        double tps = org.bukkit.Bukkit.getTPS()[0]; // 1m average
+        if (tps >= 18.0)
+            return;
+
+        org.bukkit.Chunk chunk = event.getChunk();
+
+        // Find the player responsible (nearest player)
+        Player nearestPlayer = chunk.getWorld().getPlayers().stream()
+                .filter(p -> p.getLocation().distanceSquared(chunk.getBlock(8, 64, 8).getLocation()) < 128 * 128) // Within
+                                                                                                                  // render
+                                                                                                                  // distance-ish
+                .min(java.util.Comparator
+                        .comparingDouble(p -> p.getLocation().distanceSquared(chunk.getBlock(8, 64, 8).getLocation())))
+                .orElse(null);
+
+        if (nearestPlayer != null) {
+            nearestPlayer.sendMessage(Component
+                    .text("⚠ Server lagging (TPS: " + String.format("%.1f", tps)
+                            + "). Please stop exploring new chunks!")
+                    .color(NamedTextColor.RED));
+        }
+    }
 }
