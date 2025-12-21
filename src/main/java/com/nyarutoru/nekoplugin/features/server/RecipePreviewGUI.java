@@ -80,11 +80,14 @@ public class RecipePreviewGUI {
         if (ingredient == null || ingredient.isEmpty()) {
             return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
         }
-        Material material = ingredient.getMaterial();
-        if (material == null) {
-            return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+
+        // Use the display item if available (shows custom name, lore, etc.)
+        ItemStack displayItem = ingredient.getDisplayItem();
+        if (displayItem != null) {
+            return displayItem;
         }
-        return new ItemStack(material);
+
+        return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
     }
 
     private ItemStack createGlassPane(Material material) {

@@ -10,7 +10,6 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -30,17 +29,15 @@ public class DrawerRecipes {
     }
 
     public void registerAll() {
-        registerBaseDrawerRecipe();
         registerBaseCustomRecipe();
 
         for (DrawerTier tier : DrawerTier.values()) {
             if (tier == DrawerTier.TIER_1)
                 continue;
-            registerUpgradeRecipe(tier);
             registerUpgradeCustomRecipe(tier);
         }
 
-        plugin.getLogger().info("Registered drawer crafting recipes (Bukkit + RecipeAPI).");
+        plugin.getLogger().info("Registered drawer crafting recipes.");
     }
 
     public static ItemStack createDrawerItem(DrawerTier tier) {
@@ -157,50 +154,6 @@ public class DrawerRecipes {
         return getTierFromItem(item) != null;
     }
 
-    private void registerBaseDrawerRecipe() {
-        // Level 1: 8 Chests + 1 Barrel
-        ItemStack result = createDrawerItem(DrawerTier.TIER_1);
-        NamespacedKey key = new NamespacedKey(plugin, "drawer_tier_1");
-
-        ShapedRecipe recipe = new ShapedRecipe(key, result);
-        recipe.shape("CCC", "CBC", "CCC");
-        recipe.setIngredient('C', Material.CHEST);
-        recipe.setIngredient('B', Material.BARREL);
-
-        plugin.getServer().addRecipe(recipe);
-    }
-
-    private void registerUpgradeRecipe(DrawerTier tier) {
-        Material upgradeMaterial = tier.getUpgradeMaterial();
-        if (upgradeMaterial == null)
-            return;
-
-        // Get previous tier for the center ingredient
-        DrawerTier previousTier = null;
-        for (DrawerTier t : DrawerTier.values()) {
-            if (t.getLevel() == tier.getLevel() - 1) {
-                previousTier = t;
-                break;
-            }
-        }
-        if (previousTier == null)
-            return;
-
-        ItemStack result = createDrawerItem(tier);
-        NamespacedKey key = new NamespacedKey(plugin, "drawer_tier_" + tier.getLevel());
-
-        ShapedRecipe recipe = new ShapedRecipe(key, result);
-        // 8 upgrade material + previous tier drawer
-        recipe.shape("MMM", "MDM", "MMM");
-        recipe.setIngredient('M', upgradeMaterial);
-
-        // Use the previous tier drawer item for proper recipe display
-        ItemStack previousDrawerItem = createDrawerItem(previousTier);
-        recipe.setIngredient('D', new org.bukkit.inventory.RecipeChoice.ExactChoice(previousDrawerItem));
-
-        plugin.getServer().addRecipe(recipe);
-    }
-
     // ========== RecipeAPI Custom Recipes ==========
 
     private void registerBaseCustomRecipe() {
@@ -237,11 +190,15 @@ public class DrawerRecipes {
 
         ItemStack result = createDrawerItem(tier);
 
+        // Create drawer display item for recipe preview
+        ItemStack previousDrawerDisplayItem = createDrawerItem(previousTier);
+
         // Create ingredient that matches previous tier drawer specifically
         CustomRecipe.Ingredient drawerIngredient = CustomRecipe.Ingredient.ofCustomItem(
                 Material.BARREL,
                 getDrawerTierKey(),
-                previousTier.name());
+                previousTier.name(),
+                previousDrawerDisplayItem);
 
         CustomRecipe recipe = CustomRecipe.builder("drawer_tier_" + tier.getLevel())
                 .category("drawer")

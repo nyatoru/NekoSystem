@@ -184,13 +184,24 @@ public class CustomCraftingListener implements Listener {
                     // Shift-click: craft as many as possible
                     craftAll(player, inv, result);
                 } else {
-                    // Normal click: craft one - check if cursor is empty
+                    // Normal click: craft one
                     ItemStack cursor = player.getItemOnCursor();
                     if (cursor == null || cursor.getType() == Material.AIR) {
+                        // Empty cursor - place result on cursor
                         player.setItemOnCursor(result.clone());
-                        inv.setItem(RESULT_SLOT, createResultPlaceholder()); // Clear result slot
+                        inv.setItem(RESULT_SLOT, createResultPlaceholder());
                         consumeCraftingMaterials(inv);
                         Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+                    } else if (cursor.isSimilar(result)) {
+                        // Same item on cursor - stack if possible (vanilla behavior)
+                        int newAmount = cursor.getAmount() + result.getAmount();
+                        if (newAmount <= cursor.getMaxStackSize()) {
+                            cursor.setAmount(newAmount);
+                            player.setItemOnCursor(cursor);
+                            inv.setItem(RESULT_SLOT, createResultPlaceholder());
+                            consumeCraftingMaterials(inv);
+                            Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+                        }
                     }
                 }
             }

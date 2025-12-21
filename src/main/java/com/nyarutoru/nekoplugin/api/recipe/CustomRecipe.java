@@ -191,24 +191,37 @@ public class CustomRecipe {
     // ========== Ingredient ==========
 
     public static class Ingredient {
-        public static final Ingredient EMPTY = new Ingredient(null, null, null);
+        public static final Ingredient EMPTY = new Ingredient(null, null, null, null);
 
         private final Material material;
         private final NamespacedKey customKey;
         private final String customValue;
+        private final ItemStack displayItem;
 
-        private Ingredient(Material material, NamespacedKey customKey, String customValue) {
+        private Ingredient(Material material, NamespacedKey customKey, String customValue, ItemStack displayItem) {
             this.material = material;
             this.customKey = customKey;
             this.customValue = customValue;
+            this.displayItem = displayItem;
         }
 
         public static Ingredient of(Material material) {
-            return new Ingredient(material, null, null);
+            return new Ingredient(material, null, null, null);
         }
 
+        /**
+         * Create an ingredient with a custom item display (for recipe preview).
+         */
         public static Ingredient ofCustomItem(Material material, NamespacedKey key, String value) {
-            return new Ingredient(material, key, value);
+            return new Ingredient(material, key, value, null);
+        }
+
+        /**
+         * Create an ingredient with a custom item and display item for recipe preview.
+         */
+        public static Ingredient ofCustomItem(Material material, NamespacedKey key, String value,
+                ItemStack displayItem) {
+            return new Ingredient(material, key, value, displayItem != null ? displayItem.clone() : null);
         }
 
         public boolean isEmpty() {
@@ -217,6 +230,20 @@ public class CustomRecipe {
 
         public Material getMaterial() {
             return material;
+        }
+
+        /**
+         * Get the display item for recipe preview.
+         * Returns the custom display item if set, otherwise creates a basic ItemStack.
+         */
+        public ItemStack getDisplayItem() {
+            if (displayItem != null) {
+                return displayItem.clone();
+            }
+            if (material != null) {
+                return new ItemStack(material);
+            }
+            return null;
         }
 
         public boolean matches(ItemStack item) {
