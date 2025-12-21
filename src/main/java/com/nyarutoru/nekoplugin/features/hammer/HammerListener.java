@@ -109,6 +109,8 @@ public class HammerListener implements Listener {
             return;
 
         Player player = event.getPlayer();
+        if (player.isSneaking())
+            return;
         ItemStack tool = player.getInventory().getItemInMainHand();
 
         if (!HammerRecipes.isHammer(tool))
