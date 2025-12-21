@@ -63,10 +63,12 @@ public class DrawerManager {
     }
 
     private String locationKey(Location location) {
-        return location.getWorld().getName() + "_" +
+        // Create a deterministic UUID based on world and coordinates
+        String rawKey = location.getWorld().getName() + "_" +
                 location.getBlockX() + "_" +
                 location.getBlockY() + "_" +
                 location.getBlockZ();
+        return java.util.UUID.nameUUIDFromBytes(rawKey.getBytes()).toString();
     }
 
     public Drawer createDrawer(Location location, DrawerTier tier) {
