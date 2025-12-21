@@ -68,7 +68,7 @@ public class RecipePreviewGUI {
         gui.setBackButton(BACK_BUTTON_SLOT, event -> {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
-            Bukkit.getScheduler().runTask(plugin, () -> recipeBookGUI.openRecipeBook(p));
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> recipeBookGUI.openRecipeBook(p));
         });
 
         gui.open(player);

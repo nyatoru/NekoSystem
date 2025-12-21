@@ -153,7 +153,7 @@ public class CustomCraftingListener implements Listener {
         if (slot >= 54) {
             // If shift-clicking from player inventory, update result after
             if (event.isShiftClick()) {
-                Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> updateCraftingResult(inv));
             }
             return;
         }
@@ -170,7 +170,7 @@ public class CustomCraftingListener implements Listener {
         // Allow crafting slot interaction
         if (isCraftingSlot) {
             // Update result after a tick (handles all click types)
-            Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> updateCraftingResult(inv));
             return;
         }
 
@@ -191,7 +191,8 @@ public class CustomCraftingListener implements Listener {
                         player.setItemOnCursor(result.clone());
                         inv.setItem(RESULT_SLOT, createResultPlaceholder());
                         consumeCraftingMaterials(inv);
-                        Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+                        com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
+                                () -> updateCraftingResult(inv));
                     } else if (cursor.isSimilar(result)) {
                         // Same item on cursor - stack if possible (vanilla behavior)
                         int newAmount = cursor.getAmount() + result.getAmount();
@@ -200,7 +201,8 @@ public class CustomCraftingListener implements Listener {
                             player.setItemOnCursor(cursor);
                             inv.setItem(RESULT_SLOT, createResultPlaceholder());
                             consumeCraftingMaterials(inv);
-                            Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(inv));
+                            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
+                                    () -> updateCraftingResult(inv));
                         }
                     }
                 }
@@ -442,7 +444,8 @@ public class CustomCraftingListener implements Listener {
 
         // Update result if dragging to crafting slots
         if (affectsCrafting) {
-            Bukkit.getScheduler().runTask(plugin, () -> updateCraftingResult(event.getInventory()));
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
+                    () -> updateCraftingResult(event.getInventory()));
         }
     }
 
