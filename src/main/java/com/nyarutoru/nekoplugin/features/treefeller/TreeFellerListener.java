@@ -185,7 +185,7 @@ public class TreeFellerListener implements Listener {
      * Requires minimum logs and leaves to be considered a real tree.
      */
     private boolean isActualTree(Block startLog, Material logType) {
-        final int MIN_LOGS = 6;
+        final int MIN_LOGS = 4;
         final int MIN_LEAVES = 20;
 
         Set<Location> visitedLogs = new HashSet<>();

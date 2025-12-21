@@ -43,8 +43,9 @@ public class TPSBossBarTask extends BukkitRunnable {
                 .append(Component.text(String.format("%.1f%%", cpu), getCpuColor(cpu)));
 
         bossBar.name(title);
-        bossBar.progress(Math.min(1.0f, Math.max(0.0f, (float) (tps / 20.0))));
-        bossBar.color(getBarColor(tps));
+        // Progress bar synced to MSPT: 0ms = 0%, 50ms = 100%
+        bossBar.progress(Math.min(1.0f, Math.max(0.0f, (float) (mspt / 50.0))));
+        bossBar.color(getBarColorByMspt(mspt));
 
         // Update viewers
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -87,11 +88,13 @@ public class TPSBossBarTask extends BukkitRunnable {
         return NamedTextColor.RED;
     }
 
-    private BossBar.Color getBarColor(double tps) {
-        if (tps >= 18.0)
+    private BossBar.Color getBarColorByMspt(double mspt) {
+        if (mspt < 15.0)
             return BossBar.Color.GREEN;
-        if (tps >= 15.0)
+        if (mspt <= 45.0)
             return BossBar.Color.YELLOW;
+        if (mspt <= 50.0)
+            return BossBar.Color.PINK; // Using PINK as closest to orange
         return BossBar.Color.RED;
     }
 }
