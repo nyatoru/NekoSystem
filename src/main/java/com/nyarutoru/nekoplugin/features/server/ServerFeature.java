@@ -6,7 +6,8 @@ import org.bukkit.event.HandlerList;
 
 /**
  * Server Feature - server-side optimizations and management.
- * Includes: Pillager management, Concrete converter, Custom Crafting Table
+ * Includes: Pillager management, Concrete converter, Custom Crafting Table,
+ * Block Interactions
  */
 public class ServerFeature implements Feature {
 
@@ -17,6 +18,7 @@ public class ServerFeature implements Feature {
     private PillagerManager pillagerManager;
     private ConcreteConverter concreteConverter;
     private CustomCraftingListener customCraftingListener;
+    private ServerListener serverListener;
 
     @Override
     public String getId() {
@@ -42,8 +44,12 @@ public class ServerFeature implements Feature {
         customCraftingListener = new CustomCraftingListener(plugin);
         plugin.getServer().getPluginManager().registerEvents(customCraftingListener, plugin);
 
+        // Server Listener (instant break, ladder, anvil repair)
+        serverListener = new ServerListener(plugin);
+        plugin.getServer().getPluginManager().registerEvents(serverListener, plugin);
+
         this.enabled = true;
-        plugin.getLogger().info("Server feature enabled (Pillager, Concrete, Custom Crafting).");
+        plugin.getLogger().info("Server feature enabled.");
     }
 
     @Override
@@ -57,6 +63,9 @@ public class ServerFeature implements Feature {
         if (customCraftingListener != null) {
             HandlerList.unregisterAll(customCraftingListener);
         }
+        if (serverListener != null) {
+            HandlerList.unregisterAll(serverListener);
+        }
         this.enabled = false;
     }
 
@@ -65,3 +74,4 @@ public class ServerFeature implements Feature {
         return enabled;
     }
 }
+
