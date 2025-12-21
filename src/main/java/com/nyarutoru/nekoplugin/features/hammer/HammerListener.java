@@ -2,8 +2,15 @@ package com.nyarutoru.nekoplugin.features.hammer;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.enchantments.Enchantment;
@@ -13,13 +20,17 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Handles Hammer 3x3 mining and anvil restriction.
+ * Handles Hammer 3x3 mining, anvil restriction, and mining speed reduction.
  */
 public class HammerListener implements Listener {
 
@@ -27,6 +38,11 @@ public class HammerListener implements Listener {
 
     // Track blocks being broken to prevent recursion
     private final Set<Location> breakingBlocks = new HashSet<>();
+
+    // Mining speed modifier for hammers (35% reduction = multiply by 0.65)
+    private static final NamespacedKey HAMMER_SPEED_MODIFIER_KEY = new NamespacedKey("nekoplugin",
+            "hammer_mining_speed");
+    private static final double MINING_SPEED_REDUCTION = -0.35; // 35% reduction
 
     // Blocks that can be mined with a pickaxe
     private static final Set<Material> MINEABLE = Set.of(
@@ -251,6 +267,112 @@ public class HammerListener implements Listener {
         // If either item is a hammer, cancel the result
         if (HammerRecipes.isHammer(first) || HammerRecipes.isHammer(second)) {
             event.setResult(null);
+        }
+    }
+
+    // ========== Mining Speed Reduction ==========
+
+    /**
+     * Apply/remove mining speed modifier when player switches held item.
+     */
+    @EventHandler
+    public void onItemHeld(PlayerItemHeldEvent event) {
+        Player player = event.getPlayer();
+        ItemStack newItem = player.getInventory().getItem(event.getNewSlot());
+        updateMiningSpeedModifier(player, newItem);
+    }
+
+    /**
+     * Apply/remove mining speed modifier when player swaps items to off-hand.
+     */
+    @EventHandler
+    public void onSwapHand(PlayerSwapHandItemsEvent event) {
+        Player player = event.getPlayer();
+        // Main hand item is the one swapped to (from off-hand)
+        ItemStack newMainHand = event.getOffHandItem();
+        updateMiningSpeedModifier(player, newMainHand);
+    }
+
+    /**
+     * Check held item on join and apply modifier if needed.
+     */
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        ItemStack mainHand = player.getInventory().getItemInMainHand();
+        updateMiningSpeedModifier(player, mainHand);
+    }
+
+    /**
+     * Remove modifier on quit to clean up.
+     */
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        removeMiningSpeedModifier(event.getPlayer());
+    }
+
+    /**
+     * Updates the mining speed modifier based on whether the player is holding a
+     * hammer.
+     */
+    private void updateMiningSpeedModifier(Player player, ItemStack item) {
+        if (HammerRecipes.isHammer(item)) {
+            applyMiningSpeedModifier(player);
+        } else {
+            removeMiningSpeedModifier(player);
+        }
+    }
+
+    /**
+     * Gets the PLAYER_BLOCK_BREAK_SPEED attribute from the Paper registry.
+     */
+    private Attribute getBlockBreakSpeedAttribute() {
+        Registry<Attribute> registry = RegistryAccess.registryAccess().getRegistry(RegistryKey.ATTRIBUTE);
+        NamespacedKey key = NamespacedKey.minecraft("player.block_break_speed");
+        return registry.get(key);
+    }
+
+    /**
+     * Applies the mining speed reduction modifier to the player.
+     */
+    private void applyMiningSpeedModifier(Player player) {
+        Attribute blockBreakSpeed = getBlockBreakSpeedAttribute();
+        if (blockBreakSpeed == null)
+            return;
+
+        AttributeInstance attribute = player.getAttribute(blockBreakSpeed);
+        if (attribute == null)
+            return;
+
+        // Remove existing modifier first to prevent stacking
+        AttributeModifier existingModifier = attribute.getModifier(HAMMER_SPEED_MODIFIER_KEY);
+        if (existingModifier != null) {
+            return; // Already applied
+        }
+
+        // Create and apply modifier (35% reduction using MULTIPLY_SCALAR_1)
+        AttributeModifier modifier = new AttributeModifier(
+                HAMMER_SPEED_MODIFIER_KEY,
+                MINING_SPEED_REDUCTION,
+                AttributeModifier.Operation.MULTIPLY_SCALAR_1);
+        attribute.addModifier(modifier);
+    }
+
+    /**
+     * Removes the mining speed reduction modifier from the player.
+     */
+    private void removeMiningSpeedModifier(Player player) {
+        Attribute blockBreakSpeed = getBlockBreakSpeedAttribute();
+        if (blockBreakSpeed == null)
+            return;
+
+        AttributeInstance attribute = player.getAttribute(blockBreakSpeed);
+        if (attribute == null)
+            return;
+
+        AttributeModifier existingModifier = attribute.getModifier(HAMMER_SPEED_MODIFIER_KEY);
+        if (existingModifier != null) {
+            attribute.removeModifier(existingModifier);
         }
     }
 }
