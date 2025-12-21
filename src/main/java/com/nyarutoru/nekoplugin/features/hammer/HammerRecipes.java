@@ -9,6 +9,7 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -25,6 +26,13 @@ public class HammerRecipes {
 
     public static final NamespacedKey HAMMER_KEY = new NamespacedKey("nekoplugin", "hammer");
     public static final NamespacedKey HAMMER_TIER_KEY = new NamespacedKey("nekoplugin", "hammer_tier");
+
+    // All plank types for wooden hammer
+    private static final List<Material> ALL_PLANKS = List.of(
+            Material.OAK_PLANKS, Material.SPRUCE_PLANKS, Material.BIRCH_PLANKS,
+            Material.JUNGLE_PLANKS, Material.ACACIA_PLANKS, Material.DARK_OAK_PLANKS,
+            Material.MANGROVE_PLANKS, Material.CHERRY_PLANKS, Material.BAMBOO_PLANKS,
+            Material.CRIMSON_PLANKS, Material.WARPED_PLANKS);
 
     // Map of tier name to base pickaxe material
     public static final Map<String, HammerTier> TIERS = Map.of(
@@ -53,13 +61,15 @@ public class HammerRecipes {
         NamespacedKey key = new NamespacedKey(plugin, "hammer_" + tierName);
 
         ShapedRecipe recipe = new ShapedRecipe(key, hammer);
-        // Hammer recipe: harder to craft (uses more materials)
-        // MMM
-        // MSM
-        // S
         recipe.shape("MMM", "MSM", " S ");
-        recipe.setIngredient('M', tier.material());
         recipe.setIngredient('S', Material.STICK);
+
+        // Use RecipeChoice for wooden hammer to accept all plank types
+        if (tierName.equals("wooden")) {
+            recipe.setIngredient('M', new RecipeChoice.MaterialChoice(ALL_PLANKS));
+        } else {
+            recipe.setIngredient('M', tier.material());
+        }
 
         plugin.getServer().addRecipe(recipe);
     }
@@ -67,17 +77,32 @@ public class HammerRecipes {
     private void registerCustomRecipe(String tierName, HammerTier tier) {
         ItemStack hammer = createHammer(tierName, tier);
 
-        CustomRecipe recipe = CustomRecipe.builder("hammer_" + tierName)
-                .category("hammer")
-                .result(hammer)
-                .shaped()
-                .pattern("MMM", "MSM", " S ",
-                        Map.of(
-                                'M', CustomRecipe.Ingredient.of(tier.material()),
-                                'S', CustomRecipe.Ingredient.of(Material.STICK)))
-                .build();
-
-        RecipeAPI.getInstance().registerRecipe(recipe);
+        // For wooden hammer, register recipe for each plank type
+        if (tierName.equals("wooden")) {
+            for (Material plank : ALL_PLANKS) {
+                CustomRecipe recipe = CustomRecipe.builder("hammer_wooden_" + plank.name().toLowerCase())
+                        .category("hammer")
+                        .result(hammer)
+                        .shaped()
+                        .pattern("MMM", "MSM", " S ",
+                                Map.of(
+                                        'M', CustomRecipe.Ingredient.of(plank),
+                                        'S', CustomRecipe.Ingredient.of(Material.STICK)))
+                        .build();
+                RecipeAPI.getInstance().registerRecipe(recipe);
+            }
+        } else {
+            CustomRecipe recipe = CustomRecipe.builder("hammer_" + tierName)
+                    .category("hammer")
+                    .result(hammer)
+                    .shaped()
+                    .pattern("MMM", "MSM", " S ",
+                            Map.of(
+                                    'M', CustomRecipe.Ingredient.of(tier.material()),
+                                    'S', CustomRecipe.Ingredient.of(Material.STICK)))
+                    .build();
+            RecipeAPI.getInstance().registerRecipe(recipe);
+        }
     }
 
     public static ItemStack createHammer(String tierName, HammerTier tier) {
