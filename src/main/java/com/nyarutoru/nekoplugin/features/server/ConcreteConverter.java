@@ -49,7 +49,8 @@ public class ConcreteConverter {
     }
 
     public void start() {
-        SchedulerUtils.runGlobalTimer(this::checkItems, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
+        // Use async scheduler to safely iterate over entities in Folia
+        SchedulerUtils.runAsyncTimer(this::checkItems, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
         plugin.getLogger().info("Concrete converter started.");
     }
 

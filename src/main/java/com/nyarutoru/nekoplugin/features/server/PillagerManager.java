@@ -30,7 +30,8 @@ public class PillagerManager {
     }
 
     public void start() {
-        SchedulerUtils.runGlobalTimer(this::cleanupPillagers,
+        // Use async scheduler to safely iterate over entities in Folia
+        SchedulerUtils.runAsyncTimer(this::cleanupPillagers,
                 CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
         plugin.getLogger().info("Pillager manager started (checking every 5 minutes).");
     }
