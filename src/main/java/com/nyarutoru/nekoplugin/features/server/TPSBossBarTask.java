@@ -6,14 +6,14 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.lang.management.ManagementFactory;
 
 /**
  * Updates a BossBar with TPS, MSPT, and CPU usage for OP players.
+ * This class is scheduled via SchedulerUtils for Folia compatibility.
  */
-public class TPSBossBarTask extends BukkitRunnable {
+public class TPSBossBarTask {
 
     private final BossBar bossBar;
     private final OperatingSystemMXBean osBean;
@@ -27,7 +27,6 @@ public class TPSBossBarTask extends BukkitRunnable {
         this.osBean = (OperatingSystemMXBean) ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
     }
 
-    @Override
     public void run() {
         // Gather stats
         double tps = Bukkit.getTPS()[0];
@@ -61,7 +60,6 @@ public class TPSBossBarTask extends BukkitRunnable {
         for (Player player : Bukkit.getOnlinePlayers()) {
             player.hideBossBar(bossBar);
         }
-        this.cancel();
     }
 
     private NamedTextColor getTpsColor(double tps) {

@@ -8,7 +8,6 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Pillager;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 
@@ -19,7 +18,7 @@ import java.util.*;
 public class PillagerManager {
 
     private final NekoPlugin plugin;
-    private BukkitTask cleanupTask;
+    // Note: No BukkitTask reference needed for Folia-compatible scheduling
 
     private static final int MAX_PILLAGERS_PER_CHUNK = 8;
     private static final int MAX_PILLAGERS_CLUSTER = 20;
@@ -31,15 +30,13 @@ public class PillagerManager {
     }
 
     public void start() {
-        cleanupTask = SchedulerUtils.runSyncTimer(this::cleanupPillagers,
+        SchedulerUtils.runGlobalTimer(this::cleanupPillagers,
                 CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
         plugin.getLogger().info("Pillager manager started (checking every 5 minutes).");
     }
 
     public void stop() {
-        if (cleanupTask != null) {
-            cleanupTask.cancel();
-        }
+        // Task cleanup is handled by SchedulerUtils
     }
 
     private void cleanupPillagers() {

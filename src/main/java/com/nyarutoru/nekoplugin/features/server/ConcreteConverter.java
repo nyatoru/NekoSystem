@@ -7,7 +7,6 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Item;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 
@@ -18,7 +17,7 @@ import java.util.*;
 public class ConcreteConverter {
 
     private final NekoPlugin plugin;
-    private BukkitTask checkTask;
+    // Note: No BukkitTask reference needed for Folia-compatible scheduling
 
     // Track items in water: Item UUID -> time entered water
     private final Map<UUID, Long> itemsInWater = new HashMap<>();
@@ -50,14 +49,12 @@ public class ConcreteConverter {
     }
 
     public void start() {
-        checkTask = SchedulerUtils.runSyncTimer(this::checkItems, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
+        SchedulerUtils.runGlobalTimer(this::checkItems, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
         plugin.getLogger().info("Concrete converter started.");
     }
 
     public void stop() {
-        if (checkTask != null) {
-            checkTask.cancel();
-        }
+        // Task cleanup is handled by SchedulerUtils
         itemsInWater.clear();
     }
 

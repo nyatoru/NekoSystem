@@ -2,6 +2,7 @@ package com.nyarutoru.nekoplugin.features.server;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.core.Feature;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.event.HandlerList;
 
 /**
@@ -51,9 +52,9 @@ public class ServerFeature implements Feature {
         serverListener = new ServerListener(plugin);
         plugin.getServer().getPluginManager().registerEvents(serverListener, plugin);
 
-        // TPS BossBar
+        // TPS BossBar - run every second (20 ticks)
         tpsTask = new TPSBossBarTask();
-        tpsTask.runTaskTimer(plugin, 20L, 20L);
+        SchedulerUtils.runGlobalTimer(tpsTask::run, 20L, 20L);
 
         this.enabled = true;
         plugin.getLogger().info("Server feature enabled.");
