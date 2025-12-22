@@ -1,6 +1,5 @@
 package com.nyarutoru.nekoplugin;
 
-import org.bukkit.plugin.java.JavaPlugin;
 import com.nyarutoru.nekoplugin.api.gui.GUIManager;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolListener;
 import com.nyarutoru.nekoplugin.core.FeatureManager;
@@ -12,10 +11,15 @@ import com.nyarutoru.nekoplugin.features.player.PlayerFeature;
 import com.nyarutoru.nekoplugin.features.server.ServerFeature;
 import com.nyarutoru.nekoplugin.features.treefeller.TreeFellerFeature;
 import com.nyarutoru.nekoplugin.listeners.PlayerListener;
+import org.bukkit.plugin.java.JavaPlugin;
 
 public class NekoPlugin extends JavaPlugin {
 
     private static NekoPlugin instance;
+
+    public static NekoPlugin getInstance() {
+        return instance;
+    }
 
     @Override
     public void onEnable() {
@@ -51,9 +55,5 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().disableAll();
 
         getLogger().info("NekoPlugin has been disabled!");
-    }
-
-    public static NekoPlugin getInstance() {
-        return instance;
     }
 }

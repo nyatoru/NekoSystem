@@ -16,15 +16,9 @@ import java.util.*;
  */
 public class ConcreteConverter {
 
-    private final NekoPlugin plugin;
-    // Note: No BukkitTask reference needed for Folia-compatible scheduling
-
-    // Track items in water: Item UUID -> time entered water
-    private final Map<UUID, Long> itemsInWater = new HashMap<>();
-
     private static final long CONVERT_TIME_MS = 10 * 1000; // 10 seconds
+    // Note: No BukkitTask reference needed for Folia-compatible scheduling
     private static final long CHECK_INTERVAL_TICKS = 20; // 1 second
-
     // Map concrete powder to solid concrete
     private static final Map<Material, Material> POWDER_TO_CONCRETE = Map.ofEntries(
             Map.entry(Material.WHITE_CONCRETE_POWDER, Material.WHITE_CONCRETE),
@@ -43,6 +37,9 @@ public class ConcreteConverter {
             Map.entry(Material.GREEN_CONCRETE_POWDER, Material.GREEN_CONCRETE),
             Map.entry(Material.RED_CONCRETE_POWDER, Material.RED_CONCRETE),
             Map.entry(Material.BLACK_CONCRETE_POWDER, Material.BLACK_CONCRETE));
+    private final NekoPlugin plugin;
+    // Track items in water: Item UUID -> time entered water
+    private final Map<UUID, Long> itemsInWater = new HashMap<>();
 
     public ConcreteConverter(NekoPlugin plugin) {
         this.plugin = plugin;

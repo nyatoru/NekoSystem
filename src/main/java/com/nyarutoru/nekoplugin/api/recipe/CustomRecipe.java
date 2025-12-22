@@ -1,11 +1,11 @@
 package com.nyarutoru.nekoplugin.api.recipe;
 
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.NamespacedKey;
 
 /**
  * Represents a custom crafting recipe.
@@ -20,13 +20,17 @@ public class CustomRecipe {
     private final ResultTransformer transformer;
 
     private CustomRecipe(String id, String category, ItemStack result, RecipeShape shape,
-            Ingredient[] ingredients, ResultTransformer transformer) {
+                         Ingredient[] ingredients, ResultTransformer transformer) {
         this.id = id;
         this.category = category;
         this.result = result;
         this.shape = shape;
         this.ingredients = ingredients;
         this.transformer = transformer;
+    }
+
+    public static Builder builder(String id) {
+        return new Builder(id);
     }
 
     public String getId() {
@@ -87,6 +91,8 @@ public class CustomRecipe {
         return true;
     }
 
+    // ========== Builder ==========
+
     private boolean matchesShapeless(ItemStack[] grid) {
         boolean[] ingredientMatched = new boolean[9];
         boolean[] gridUsed = new boolean[9];
@@ -120,18 +126,35 @@ public class CustomRecipe {
         return true;
     }
 
-    // ========== Builder ==========
-
-    public static Builder builder(String id) {
-        return new Builder(id);
+    public enum RecipeShape {
+        SHAPED,
+        SHAPELESS
     }
+
+    /**
+     * Functional interface for transforming recipe results based on crafting
+     * ingredients.
+     */
+    @FunctionalInterface
+    public interface ResultTransformer {
+        /**
+         * Transform the result based on the crafting grid.
+         *
+         * @param result The base result item
+         * @param grid   The 9-slot crafting grid
+         * @return The transformed result
+         */
+        ItemStack transform(ItemStack result, ItemStack[] grid);
+    }
+
+    // ========== ResultTransformer ==========
 
     public static class Builder {
         private final String id;
+        private final Ingredient[] ingredients = new Ingredient[9];
         private String category = "custom";
         private ItemStack result;
         private RecipeShape shape = RecipeShape.SHAPED;
-        private final Ingredient[] ingredients = new Ingredient[9];
         private ResultTransformer transformer;
 
         public Builder(String id) {
@@ -175,8 +198,8 @@ public class CustomRecipe {
          * Use ' ' for empty slot.
          */
         public Builder pattern(String row1, String row2, String row3,
-                java.util.Map<Character, Ingredient> ingredientMap) {
-            String[] rows = { row1, row2, row3 };
+                               java.util.Map<Character, Ingredient> ingredientMap) {
+            String[] rows = {row1, row2, row3};
             for (int row = 0; row < 3; row++) {
                 for (int col = 0; col < 3; col++) {
                     char c = rows[row].charAt(col);
@@ -207,29 +230,6 @@ public class CustomRecipe {
             }
             return new CustomRecipe(id, category, result, shape, ingredients.clone(), transformer);
         }
-    }
-
-    public enum RecipeShape {
-        SHAPED,
-        SHAPELESS
-    }
-
-    // ========== ResultTransformer ==========
-
-    /**
-     * Functional interface for transforming recipe results based on crafting
-     * ingredients.
-     */
-    @FunctionalInterface
-    public interface ResultTransformer {
-        /**
-         * Transform the result based on the crafting grid.
-         * 
-         * @param result The base result item
-         * @param grid   The 9-slot crafting grid
-         * @return The transformed result
-         */
-        ItemStack transform(ItemStack result, ItemStack[] grid);
     }
 
     // ========== Ingredient ==========
@@ -264,7 +264,7 @@ public class CustomRecipe {
          * Create an ingredient with a custom item and display item for recipe preview.
          */
         public static Ingredient ofCustomItem(Material material, NamespacedKey key, String value,
-                ItemStack displayItem) {
+                                              ItemStack displayItem) {
             return new Ingredient(material, key, value, displayItem != null ? displayItem.clone() : null);
         }
 

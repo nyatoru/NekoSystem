@@ -24,7 +24,7 @@ public class TPSBossBarTask {
                 1.0f,
                 BossBar.Color.GREEN,
                 BossBar.Overlay.PROGRESS);
-        this.osBean = (OperatingSystemMXBean) ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+        this.osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
     }
 
     public void run() {

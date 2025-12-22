@@ -4,10 +4,10 @@ import com.nyarutoru.nekoplugin.api.gui.BaseGUI;
 import com.nyarutoru.nekoplugin.features.drawer.data.Drawer;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerManager;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
+import com.nyarutoru.nekoplugin.utils.LocationUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -17,12 +17,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.text.NumberFormat;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Custom GUI for drawer interaction.
@@ -55,7 +50,16 @@ public class DrawerGUI extends BaseGUI {
     }
 
     private static String locationKey(Location loc) {
-        return loc.getWorld().getName() + "_" + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ();
+        return LocationUtils.getSimpleLocationKey(loc);
+    }
+
+    public static void refreshAllViewers(Drawer drawer) {
+        String key = locationKey(drawer.getLocation());
+        Set<DrawerGUI> viewers = openViewers.get(key);
+        if (viewers != null) {
+            for (DrawerGUI gui : viewers)
+                gui.refresh();
+        }
     }
 
     public Drawer getDrawer() {
@@ -76,15 +80,6 @@ public class DrawerGUI extends BaseGUI {
             viewers.remove(this);
             if (viewers.isEmpty())
                 openViewers.remove(drawerKey);
-        }
-    }
-
-    public static void refreshAllViewers(Drawer drawer) {
-        String key = locationKey(drawer.getLocation());
-        Set<DrawerGUI> viewers = openViewers.get(key);
-        if (viewers != null) {
-            for (DrawerGUI gui : viewers)
-                gui.refresh();
         }
     }
 
@@ -211,7 +206,7 @@ public class DrawerGUI extends BaseGUI {
      * Properly updates the item stack in the player's inventory.
      */
     private void depositItemFromInventory(Player player, ItemStack item, org.bukkit.inventory.Inventory sourceInventory,
-            int slot) {
+                                          int slot) {
         if (!Drawer.isAllowedItem(item)) {
             return;
         }

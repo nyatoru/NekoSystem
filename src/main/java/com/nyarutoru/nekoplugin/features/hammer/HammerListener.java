@@ -34,16 +34,10 @@ import java.util.Set;
  */
 public class HammerListener implements Listener {
 
-    private final NekoPlugin plugin;
-
-    // Track blocks being broken to prevent recursion
-    private final Set<Location> breakingBlocks = new HashSet<>();
-
     // Mining speed modifier for hammers (35% reduction = multiply by 0.65)
     private static final NamespacedKey HAMMER_SPEED_MODIFIER_KEY = new NamespacedKey("nekoplugin",
             "hammer_mining_speed");
     private static final double MINING_SPEED_REDUCTION = -0.35; // 35% reduction
-
     // Blocks that can be mined with a pickaxe
     private static final Set<Material> MINEABLE = Set.of(
             // Stone types
@@ -114,6 +108,9 @@ public class HammerListener implements Listener {
             // Misc
             Material.GLOWSTONE, Material.MAGMA_BLOCK, Material.BONE_BLOCK,
             Material.LODESTONE, Material.RESPAWN_ANCHOR);
+    private final NekoPlugin plugin;
+    // Track blocks being broken to prevent recursion
+    private final Set<Location> breakingBlocks = new HashSet<>();
 
     public HammerListener(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -209,22 +206,22 @@ public class HammerListener implements Listener {
 
     private int[][] get3x3Offsets(BlockFace face) {
         return switch (face) {
-            case UP, DOWN -> new int[][] {
-                    { -1, 0, -1 }, { 0, 0, -1 }, { 1, 0, -1 },
-                    { -1, 0, 0 }, { 0, 0, 0 }, { 1, 0, 0 },
-                    { -1, 0, 1 }, { 0, 0, 1 }, { 1, 0, 1 }
+            case UP, DOWN -> new int[][]{
+                    {-1, 0, -1}, {0, 0, -1}, {1, 0, -1},
+                    {-1, 0, 0}, {0, 0, 0}, {1, 0, 0},
+                    {-1, 0, 1}, {0, 0, 1}, {1, 0, 1}
             };
-            case NORTH, SOUTH -> new int[][] {
-                    { -1, -1, 0 }, { 0, -1, 0 }, { 1, -1, 0 },
-                    { -1, 0, 0 }, { 0, 0, 0 }, { 1, 0, 0 },
-                    { -1, 1, 0 }, { 0, 1, 0 }, { 1, 1, 0 }
+            case NORTH, SOUTH -> new int[][]{
+                    {-1, -1, 0}, {0, -1, 0}, {1, -1, 0},
+                    {-1, 0, 0}, {0, 0, 0}, {1, 0, 0},
+                    {-1, 1, 0}, {0, 1, 0}, {1, 1, 0}
             };
-            case EAST, WEST -> new int[][] {
-                    { 0, -1, -1 }, { 0, -1, 0 }, { 0, -1, 1 },
-                    { 0, 0, -1 }, { 0, 0, 0 }, { 0, 0, 1 },
-                    { 0, 1, -1 }, { 0, 1, 0 }, { 0, 1, 1 }
+            case EAST, WEST -> new int[][]{
+                    {0, -1, -1}, {0, -1, 0}, {0, -1, 1},
+                    {0, 0, -1}, {0, 0, 0}, {0, 0, 1},
+                    {0, 1, -1}, {0, 1, 0}, {0, 1, 1}
             };
-            default -> new int[][] { { 0, 0, 0 } };
+            default -> new int[][]{{0, 0, 0}};
         };
     }
 

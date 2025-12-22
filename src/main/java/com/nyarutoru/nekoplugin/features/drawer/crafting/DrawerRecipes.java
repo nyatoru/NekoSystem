@@ -28,18 +28,6 @@ public class DrawerRecipes {
         this.plugin = plugin;
     }
 
-    public void registerAll() {
-        registerBaseCustomRecipe();
-
-        for (DrawerTier tier : DrawerTier.values()) {
-            if (tier == DrawerTier.TIER_1)
-                continue;
-            registerUpgradeCustomRecipe(tier);
-        }
-
-        plugin.getLogger().info("Registered drawer crafting recipes.");
-    }
-
     public static ItemStack createDrawerItem(DrawerTier tier) {
         return createDrawerItemWithContents(tier, null, 0);
     }
@@ -154,7 +142,44 @@ public class DrawerRecipes {
         return getTierFromItem(item) != null;
     }
 
+    public static NamespacedKey getDrawerTierKey() {
+        return new NamespacedKey("nekoplugin", "drawer_tier");
+    }
+
     // ========== RecipeAPI Custom Recipes ==========
+
+    public static NamespacedKey getStoredItemKey() {
+        return new NamespacedKey("nekoplugin", "drawer_stored_item");
+    }
+
+    public static NamespacedKey getStoredCountKey() {
+        return new NamespacedKey("nekoplugin", "drawer_stored_count");
+    }
+
+    private static String formatMaterial(Material material) {
+        if (material == null)
+            return "None";
+        String name = material.name().replace("_", " ").toLowerCase();
+        StringBuilder result = new StringBuilder();
+        for (String word : name.split(" ")) {
+            if (!result.isEmpty())
+                result.append(" ");
+            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return result.toString();
+    }
+
+    public void registerAll() {
+        registerBaseCustomRecipe();
+
+        for (DrawerTier tier : DrawerTier.values()) {
+            if (tier == DrawerTier.TIER_1)
+                continue;
+            registerUpgradeCustomRecipe(tier);
+        }
+
+        plugin.getLogger().info("Registered drawer crafting recipes.");
+    }
 
     private void registerBaseCustomRecipe() {
         ItemStack result = createDrawerItem(DrawerTier.TIER_1);
@@ -229,30 +254,5 @@ public class DrawerRecipes {
                 .build();
 
         RecipeAPI.getInstance().registerRecipe(recipe);
-    }
-
-    public static NamespacedKey getDrawerTierKey() {
-        return new NamespacedKey("nekoplugin", "drawer_tier");
-    }
-
-    public static NamespacedKey getStoredItemKey() {
-        return new NamespacedKey("nekoplugin", "drawer_stored_item");
-    }
-
-    public static NamespacedKey getStoredCountKey() {
-        return new NamespacedKey("nekoplugin", "drawer_stored_count");
-    }
-
-    private static String formatMaterial(Material material) {
-        if (material == null)
-            return "None";
-        String name = material.name().replace("_", " ").toLowerCase();
-        StringBuilder result = new StringBuilder();
-        for (String word : name.split(" ")) {
-            if (!result.isEmpty())
-                result.append(" ");
-            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
-        }
-        return result.toString();
     }
 }

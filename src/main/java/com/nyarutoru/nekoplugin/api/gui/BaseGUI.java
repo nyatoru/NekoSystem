@@ -1,5 +1,6 @@
 package com.nyarutoru.nekoplugin.api.gui;
 
+import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
@@ -30,7 +31,7 @@ public abstract class BaseGUI implements InventoryHolder {
 
     /**
      * Creates a new GUI with the specified size and title.
-     * 
+     *
      * @param size  The inventory size (must be multiple of 9, max 54)
      * @param title The inventory title
      */
@@ -129,63 +130,27 @@ public abstract class BaseGUI implements InventoryHolder {
      * Creates a simple item with a display name.
      */
     protected ItemStack createItem(Material material, String name) {
-        return createItem(material, name, null);
+        return ItemUtils.createDisplayItem(material, name);
     }
 
     /**
      * Creates an item with a display name and lore.
      */
     protected ItemStack createItem(Material material, String name, List<String> lore) {
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text(name).decoration(TextDecoration.ITALIC, false));
-
-            if (lore != null && !lore.isEmpty()) {
-                List<Component> loreComponents = new ArrayList<>();
-                for (String line : lore) {
-                    loreComponents.add(Component.text(line).decoration(TextDecoration.ITALIC, false));
-                }
-                meta.lore(loreComponents);
-            }
-
-            item.setItemMeta(meta);
-        }
-        return item;
+        return ItemUtils.createDisplayItem(material, name, lore);
     }
 
     /**
      * Creates a close button.
      */
     protected ItemStack createCloseButton() {
-        ItemStack item = new ItemStack(Material.BARRIER);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(Component.text("Close")
-                    .color(net.kyori.adventure.text.format.NamedTextColor.RED)
-                    .decoration(TextDecoration.BOLD, true)
-                    .decoration(TextDecoration.ITALIC, false));
-            meta.lore(List.of(Component.text("Click to close")
-                    .color(net.kyori.adventure.text.format.NamedTextColor.GRAY)
-                    .decoration(TextDecoration.ITALIC, false)));
-            item.setItemMeta(meta);
-        }
-        return item;
+        return ItemUtils.createCloseButton();
     }
 
     /**
      * Formats a material name for display (e.g., DIAMOND_SWORD -> Diamond Sword).
      */
     protected String formatMaterial(Material material) {
-        if (material == null)
-            return "None";
-        String name = material.name().replace("_", " ").toLowerCase();
-        StringBuilder result = new StringBuilder();
-        for (String word : name.split(" ")) {
-            if (!result.isEmpty())
-                result.append(" ");
-            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
-        }
-        return result.toString();
+        return ItemUtils.formatMaterialName(material);
     }
 }

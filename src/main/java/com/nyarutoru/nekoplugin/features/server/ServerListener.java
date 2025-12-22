@@ -30,7 +30,19 @@ import java.util.Set;
  */
 public class ServerListener implements Listener {
 
-    private final NekoPlugin plugin;
+    // Instant mining requirements
+    private static final int MIN_EFFICIENCY_LEVEL = 5;
+    private static final int MIN_HASTE_AMPLIFIER = 1;
+
+    // Lag notification constants
+    private static final int MIN_PLAYERS_FOR_LAG_WARNING = 2;
+    private static final double LAG_WARNING_TPS_THRESHOLD = 18.0;
+    private static final int LAG_WARNING_DISTANCE_SQUARED = 128 * 128;
+    private static final int LAG_WARNING_CHUNK_CENTER_Y = 64;
+    private static final int LAG_WARNING_CHUNK_CENTER_XZ = 8;
+
+    // Pitch detection for ladder placement
+    private static final double DOWNWARD_PITCH_THRESHOLD = 0;
 
     // Deepslate blocks that can be instant-mined
     private static final Set<Material> DEEPSLATE_BLOCKS = Set.of(
@@ -54,7 +66,6 @@ public class ServerListener implements Listener {
             Material.DEEPSLATE_TILE_WALL,
             Material.COBBLED_DEEPSLATE_WALL,
             Material.POLISHED_DEEPSLATE_WALL);
-
     // Glass blocks that can be instant-mined
     private static final Set<Material> GLASS_BLOCKS = Set.of(
             Material.GLASS,
@@ -76,6 +87,7 @@ public class ServerListener implements Listener {
             Material.RED_STAINED_GLASS, Material.RED_STAINED_GLASS_PANE,
             Material.BLACK_STAINED_GLASS, Material.BLACK_STAINED_GLASS_PANE,
             Material.TINTED_GLASS);
+    private final NekoPlugin plugin;
 
     public ServerListener(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -101,7 +113,6 @@ public class ServerListener implements Listener {
                         event.getBlock().getLocation().add(0.5, 0.5, 0.5),
                         new ItemStack(blockType));
             }
-            return;
         }
 
         // Deepslate: needs Efficiency 5 + Haste 2
@@ -125,12 +136,12 @@ public class ServerListener implements Listener {
 
         // Check Efficiency 5
         int effLevel = tool.getEnchantmentLevel(Enchantment.EFFICIENCY);
-        if (effLevel < 5)
+        if (effLevel < MIN_EFFICIENCY_LEVEL)
             return;
 
         // Check Haste 2
         var hasteEffect = player.getPotionEffect(PotionEffectType.HASTE);
-        if (hasteEffect == null || hasteEffect.getAmplifier() < 1)
+        if (hasteEffect == null || hasteEffect.getAmplifier() < MIN_HASTE_AMPLIFIER)
             return; // Amplifier 1 = Haste 2
 
         // Instant break - set to insta-break mode
@@ -160,7 +171,7 @@ public class ServerListener implements Listener {
             return;
 
         // Determine direction based on player pitch
-        BlockFace direction = player.getLocation().getPitch() > 0 ? BlockFace.DOWN : BlockFace.UP;
+        BlockFace direction = player.getLocation().getPitch() > DOWNWARD_PITCH_THRESHOLD ? BlockFace.DOWN : BlockFace.UP;
         Block target = clicked.getRelative(direction);
 
         // Find the end of the ladder chain
@@ -247,23 +258,23 @@ public class ServerListener implements Listener {
             return;
 
         // Condition: More than 2 players online
-        if (org.bukkit.Bukkit.getOnlinePlayers().size() <= 2)
+        if (org.bukkit.Bukkit.getOnlinePlayers().size() <= MIN_PLAYERS_FOR_LAG_WARNING)
             return;
 
         // Condition: TPS < 18
         double tps = org.bukkit.Bukkit.getTPS()[0]; // 1m average
-        if (tps >= 18.0)
+        if (tps >= LAG_WARNING_TPS_THRESHOLD)
             return;
 
         org.bukkit.Chunk chunk = event.getChunk();
 
         // Find the player responsible (nearest player)
         Player nearestPlayer = chunk.getWorld().getPlayers().stream()
-                .filter(p -> p.getLocation().distanceSquared(chunk.getBlock(8, 64, 8).getLocation()) < 128 * 128) // Within
-                                                                                                                  // render
-                                                                                                                  // distance-ish
+                .filter(p -> p.getLocation().distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y, LAG_WARNING_CHUNK_CENTER_XZ).getLocation()) < LAG_WARNING_DISTANCE_SQUARED) // Within
+                // render
+                // distance-ish
                 .min(java.util.Comparator
-                        .comparingDouble(p -> p.getLocation().distanceSquared(chunk.getBlock(8, 64, 8).getLocation())))
+                        .comparingDouble(p -> p.getLocation().distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y, LAG_WARNING_CHUNK_CENTER_XZ).getLocation())))
                 .orElse(null);
 
         if (nearestPlayer != null) {

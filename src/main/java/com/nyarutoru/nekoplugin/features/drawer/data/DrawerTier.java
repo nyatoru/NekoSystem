@@ -54,6 +54,22 @@ public enum DrawerTier {
         this.color = color;
     }
 
+    public static DrawerTier getByLevel(int level) {
+        for (DrawerTier tier : values()) {
+            if (tier.level == level)
+                return tier;
+        }
+        return TIER_1;
+    }
+
+    public static DrawerTier getByName(String name) {
+        try {
+            return valueOf(name.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return TIER_1;
+        }
+    }
+
     public int getLevel() {
         return level;
     }
@@ -98,21 +114,5 @@ public enum DrawerTier {
             return values()[this.ordinal() + 1];
         }
         return null;
-    }
-
-    public static DrawerTier getByLevel(int level) {
-        for (DrawerTier tier : values()) {
-            if (tier.level == level)
-                return tier;
-        }
-        return TIER_1;
-    }
-
-    public static DrawerTier getByName(String name) {
-        try {
-            return valueOf(name.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            return TIER_1;
-        }
     }
 }

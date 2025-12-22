@@ -22,18 +22,8 @@ import java.util.Map;
  */
 public class HammerRecipes {
 
-    private final NekoPlugin plugin;
-
     public static final NamespacedKey HAMMER_KEY = new NamespacedKey("nekoplugin", "hammer");
     public static final NamespacedKey HAMMER_TIER_KEY = new NamespacedKey("nekoplugin", "hammer_tier");
-
-    // All plank types for wooden hammer
-    private static final List<Material> ALL_PLANKS = List.of(
-            Material.OAK_PLANKS, Material.SPRUCE_PLANKS, Material.BIRCH_PLANKS,
-            Material.JUNGLE_PLANKS, Material.ACACIA_PLANKS, Material.DARK_OAK_PLANKS,
-            Material.MANGROVE_PLANKS, Material.CHERRY_PLANKS, Material.BAMBOO_PLANKS,
-            Material.CRIMSON_PLANKS, Material.WARPED_PLANKS);
-
     // Map of tier name to base pickaxe material
     public static final Map<String, HammerTier> TIERS = Map.of(
             "wooden", new HammerTier("Wooden", Material.WOODEN_PICKAXE, Material.OAK_PLANKS, NamedTextColor.GOLD),
@@ -43,9 +33,61 @@ public class HammerRecipes {
             "diamond", new HammerTier("Diamond", Material.DIAMOND_PICKAXE, Material.DIAMOND, NamedTextColor.AQUA),
             "netherite",
             new HammerTier("Netherite", Material.NETHERITE_PICKAXE, Material.NETHERITE_INGOT, NamedTextColor.DARK_RED));
+    // All plank types for wooden hammer
+    private static final List<Material> ALL_PLANKS = List.of(
+            Material.OAK_PLANKS, Material.SPRUCE_PLANKS, Material.BIRCH_PLANKS,
+            Material.JUNGLE_PLANKS, Material.ACACIA_PLANKS, Material.DARK_OAK_PLANKS,
+            Material.MANGROVE_PLANKS, Material.CHERRY_PLANKS, Material.BAMBOO_PLANKS,
+            Material.CRIMSON_PLANKS, Material.WARPED_PLANKS);
+    private final NekoPlugin plugin;
 
     public HammerRecipes(NekoPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public static ItemStack createHammer(String tierName, HammerTier tier) {
+        ItemStack hammer = new ItemStack(tier.baseTool());
+        ItemMeta meta = hammer.getItemMeta();
+
+        if (meta != null) {
+            meta.displayName(Component.text(tier.displayName() + " Hammer")
+                    .color(tier.color())
+                    .decoration(TextDecoration.ITALIC, false)
+                    .decoration(TextDecoration.BOLD, true));
+
+            meta.lore(List.of(
+                    Component.empty(),
+                    Component.text("3×3 Mining Area")
+                            .color(NamedTextColor.GRAY)
+                            .decoration(TextDecoration.ITALIC, false),
+                    Component.empty(),
+                    Component.text("Cannot use Ore Excavation")
+                            .color(NamedTextColor.RED)
+                            .decoration(TextDecoration.ITALIC, false)));
+
+            // Mark as hammer
+            meta.getPersistentDataContainer().set(HAMMER_KEY, PersistentDataType.BYTE, (byte) 1);
+            meta.getPersistentDataContainer().set(HAMMER_TIER_KEY, PersistentDataType.STRING, tierName);
+
+            hammer.setItemMeta(meta);
+        }
+
+        return hammer;
+    }
+
+    public static boolean isHammer(ItemStack item) {
+        if (item == null || !item.hasItemMeta())
+            return false;
+        ItemMeta meta = item.getItemMeta();
+        Byte value = meta.getPersistentDataContainer().get(HAMMER_KEY, PersistentDataType.BYTE);
+        return value != null && value == 1;
+    }
+
+    public static String getHammerTier(ItemStack item) {
+        if (item == null || !item.hasItemMeta())
+            return null;
+        ItemMeta meta = item.getItemMeta();
+        return meta.getPersistentDataContainer().get(HAMMER_TIER_KEY, PersistentDataType.STRING);
     }
 
     public void registerAll() {
@@ -103,51 +145,6 @@ public class HammerRecipes {
                     .build();
             RecipeAPI.getInstance().registerRecipe(recipe);
         }
-    }
-
-    public static ItemStack createHammer(String tierName, HammerTier tier) {
-        ItemStack hammer = new ItemStack(tier.baseTool());
-        ItemMeta meta = hammer.getItemMeta();
-
-        if (meta != null) {
-            meta.displayName(Component.text(tier.displayName() + " Hammer")
-                    .color(tier.color())
-                    .decoration(TextDecoration.ITALIC, false)
-                    .decoration(TextDecoration.BOLD, true));
-
-            meta.lore(List.of(
-                    Component.empty(),
-                    Component.text("3×3 Mining Area")
-                            .color(NamedTextColor.GRAY)
-                            .decoration(TextDecoration.ITALIC, false),
-                    Component.empty(),
-                    Component.text("Cannot use Ore Excavation")
-                            .color(NamedTextColor.RED)
-                            .decoration(TextDecoration.ITALIC, false)));
-
-            // Mark as hammer
-            meta.getPersistentDataContainer().set(HAMMER_KEY, PersistentDataType.BYTE, (byte) 1);
-            meta.getPersistentDataContainer().set(HAMMER_TIER_KEY, PersistentDataType.STRING, tierName);
-
-            hammer.setItemMeta(meta);
-        }
-
-        return hammer;
-    }
-
-    public static boolean isHammer(ItemStack item) {
-        if (item == null || !item.hasItemMeta())
-            return false;
-        ItemMeta meta = item.getItemMeta();
-        Byte value = meta.getPersistentDataContainer().get(HAMMER_KEY, PersistentDataType.BYTE);
-        return value != null && value == 1;
-    }
-
-    public static String getHammerTier(ItemStack item) {
-        if (item == null || !item.hasItemMeta())
-            return null;
-        ItemMeta meta = item.getItemMeta();
-        return meta.getPersistentDataContainer().get(HAMMER_TIER_KEY, PersistentDataType.STRING);
     }
 
     public record HammerTier(String displayName, Material baseTool, Material material, NamedTextColor color) {

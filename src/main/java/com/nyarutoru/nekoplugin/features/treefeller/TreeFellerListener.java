@@ -4,7 +4,6 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
-
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -19,13 +18,7 @@ import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Handles Tree Feller events using ActiveToolAPI.
@@ -34,8 +27,30 @@ public class TreeFellerListener implements Listener {
 
     public static final String TOOL_NAME = "Tree Feller";
 
-    private final NekoPlugin plugin;
-    private final NamespacedKey playerPlacedKey;
+    // Tree validation constants
+    private static final int MIN_LOGS_FOR_TREE = 4;
+    private static final int MIN_LEAVES_FOR_TREE = 20;
+    private static final int TALL_TREE_HEIGHT_THRESHOLD = 10;
+    private static final int MAX_TREE_HEIGHT_SEARCH = 64;
+
+    // Leaf search ranges
+    private static final int LEAF_SEARCH_MIN_X = -3;
+    private static final int LEAF_SEARCH_MAX_X = 3;
+    private static final int LEAF_SEARCH_MIN_Y = -2;
+    private static final int LEAF_SEARCH_MAX_Y = 4;
+    private static final int LEAF_SEARCH_MIN_Z = -3;
+    private static final int LEAF_SEARCH_MAX_Z = 3;
+
+    // Leaf decay timing constants
+    private static final int LEAF_DECAY_WAVE_SIZE = 10;
+    private static final int LEAF_DECAY_INITIAL_DELAY = 1;
+    private static final int LEAF_DECAY_WAVE_1_DELAY = 20;
+    private static final int LEAF_DECAY_WAVE_2_DELAY = 40;
+    private static final int LEAF_DECAY_WAVE_3_DELAY = 60;
+    private static final int LEAF_DECAY_WAVE_4_DELAY = 80;
+    private static final int LEAF_DECAY_WAVE_5_DELAY = 100;
+    private static final int LEAF_DECAY_WAVE_6_DELAY = 120;
+    private static final int MAX_DECAY_WAVE_RANGE = 3;
 
     // All log types
     private static final Set<Material> LOGS = Set.of(
@@ -49,7 +64,6 @@ public class TreeFellerListener implements Listener {
             Material.STRIPPED_ACACIA_LOG, Material.STRIPPED_DARK_OAK_LOG,
             Material.STRIPPED_MANGROVE_LOG, Material.STRIPPED_CHERRY_LOG,
             Material.STRIPPED_CRIMSON_STEM, Material.STRIPPED_WARPED_STEM);
-
     // All leaf types
     private static final Set<Material> LEAVES = Set.of(
             Material.OAK_LEAVES, Material.SPRUCE_LEAVES, Material.BIRCH_LEAVES,
@@ -57,6 +71,8 @@ public class TreeFellerListener implements Listener {
             Material.MANGROVE_LEAVES, Material.CHERRY_LEAVES, Material.AZALEA_LEAVES,
             Material.FLOWERING_AZALEA_LEAVES,
             Material.NETHER_WART_BLOCK, Material.WARPED_WART_BLOCK);
+    private final NekoPlugin plugin;
+    private final NamespacedKey playerPlacedKey;
 
     public TreeFellerListener(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -154,8 +170,8 @@ public class TreeFellerListener implements Listener {
      * Requires minimum logs and leaves to be considered a real tree.
      */
     private boolean isActualTree(Block startLog, Material logType) {
-        final int MIN_LOGS = 4;
-        final int MIN_LEAVES = 20;
+        final int MIN_LOGS = MIN_LOGS_FOR_TREE;
+        final int MIN_LEAVES = MIN_LEAVES_FOR_TREE;
 
         Set<Location> visitedLogs = new HashSet<>();
         Set<Location> visitedLeaves = new HashSet<>();
@@ -172,14 +188,14 @@ public class TreeFellerListener implements Listener {
             // Search for connected logs in all directions
             int[][] logOffsets = {
                     // Vertical
-                    { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
-                    { 0, -1, 0 }, { 0, -2, 0 },
+                    {0, 1, 0}, {0, 2, 0}, {0, 3, 0},
+                    {0, -1, 0}, {0, -2, 0},
                     // Horizontal
-                    { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
-                    { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+                    {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1},
+                    {1, 0, 1}, {1, 0, -1}, {-1, 0, 1}, {-1, 0, -1},
                     // Diagonal
-                    { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
-                    { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+                    {1, 1, 0}, {-1, 1, 0}, {0, 1, 1}, {0, 1, -1},
+                    {1, -1, 0}, {-1, -1, 0}, {0, -1, 1}, {0, -1, -1},
             };
 
             for (int[] offset : logOffsets) {
@@ -228,7 +244,7 @@ public class TreeFellerListener implements Listener {
 
         // Measure tree height first to determine search distance
         int treeHeight = measureTreeHeight(origin, logType);
-        boolean isTallTree = treeHeight > 10; // Jungle, Spruce, tall oaks
+        boolean isTallTree = treeHeight > TALL_TREE_HEIGHT_THRESHOLD; // Jungle, Spruce, tall oaks
 
         toCheck.add(origin);
         visited.add(origin);
@@ -262,9 +278,9 @@ public class TreeFellerListener implements Listener {
             }
 
             // Collect nearby leaves for decay (expanded range for tall trees)
-            for (int dx = -3; dx <= 3; dx++) {
-                for (int dy = -2; dy <= 4; dy++) {
-                    for (int dz = -3; dz <= 3; dz++) {
+            for (int dx = LEAF_SEARCH_MIN_X; dx <= LEAF_SEARCH_MAX_X; dx++) {
+                for (int dy = LEAF_SEARCH_MIN_Y; dy <= LEAF_SEARCH_MAX_Y; dy++) {
+                    for (int dz = LEAF_SEARCH_MIN_Z; dz <= LEAF_SEARCH_MAX_Z; dz++) {
                         Block leafBlock = current.clone().add(dx, dy, dz).getBlock();
                         if (isLeaf(leafBlock.getType())) {
                             leavesToDecay.add(leafBlock);
@@ -284,15 +300,10 @@ public class TreeFellerListener implements Listener {
             if (currentAxe.getType() != axe.getType())
                 break;
 
-            // Check durability
-            if (!ItemUtils.isUnbreakable(currentAxe) &&
-                    ItemUtils.wouldBreakFromDamage(currentAxe, 1)) {
-                ActiveToolAPI.getInstance().deactivate(player, "tool broke");
+            // Check and consume durability
+            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
                 break;
             }
-
-            // Apply durability with Unbreaking support
-            ItemUtils.applyDurabilityDamage(currentAxe, 1);
 
             // Drop items at origin for easy collection
             for (ItemStack drop : log.getDrops(currentAxe)) {
@@ -317,7 +328,7 @@ public class TreeFellerListener implements Listener {
         int height = 0;
         Location check = origin.clone();
 
-        for (int y = 0; y < 64; y++) {
+        for (int y = 0; y < MAX_TREE_HEIGHT_SEARCH; y++) {
             Block block = check.clone().add(0, y, 0).getBlock();
             if (block.getType() == logType && !isPlayerPlaced(block)) {
                 height++;
@@ -337,21 +348,21 @@ public class TreeFellerListener implements Listener {
      * Max 1 block horizontal to prevent spreading.
      */
     private int[][] getCompactOffsets() {
-        return new int[][] {
+        return new int[][]{
                 // Vertical
-                { 0, 1, 0 }, { 0, 2, 0 },
-                { 0, -1, 0 },
+                {0, 1, 0}, {0, 2, 0},
+                {0, -1, 0},
 
                 // Horizontal (1 block only)
-                { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
-                { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+                {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1},
+                {1, 0, 1}, {1, 0, -1}, {-1, 0, 1}, {-1, 0, -1},
 
                 // Diagonal up (+1 Y)
-                { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
-                { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
+                {1, 1, 0}, {-1, 1, 0}, {0, 1, 1}, {0, 1, -1},
+                {1, 1, 1}, {-1, 1, 1}, {1, 1, -1}, {-1, 1, -1},
 
                 // Diagonal down
-                { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+                {1, -1, 0}, {-1, -1, 0}, {0, -1, 1}, {0, -1, -1},
         };
     }
 
@@ -360,31 +371,31 @@ public class TreeFellerListener implements Listener {
      * Max 2 blocks horizontal for wider canopies.
      */
     private int[][] getTallTreeOffsets() {
-        return new int[][] {
+        return new int[][]{
                 // Vertical
-                { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
-                { 0, -1, 0 }, { 0, -2, 0 },
+                {0, 1, 0}, {0, 2, 0}, {0, 3, 0},
+                {0, -1, 0}, {0, -2, 0},
 
                 // Horizontal cardinal (1-2 blocks)
-                { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
-                { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 },
+                {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1},
+                {2, 0, 0}, {-2, 0, 0}, {0, 0, 2}, {0, 0, -2},
 
                 // Horizontal diagonal
-                { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+                {1, 0, 1}, {1, 0, -1}, {-1, 0, 1}, {-1, 0, -1},
 
                 // Diagonal up (+1 Y)
-                { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
-                { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
-                { 2, 1, 0 }, { -2, 1, 0 }, { 0, 1, 2 }, { 0, 1, -2 },
+                {1, 1, 0}, {-1, 1, 0}, {0, 1, 1}, {0, 1, -1},
+                {1, 1, 1}, {-1, 1, 1}, {1, 1, -1}, {-1, 1, -1},
+                {2, 1, 0}, {-2, 1, 0}, {0, 1, 2}, {0, 1, -2},
 
                 // Diagonal up (+2 Y)
-                { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 },
-                { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 },
-                { 2, 2, 0 }, { -2, 2, 0 }, { 0, 2, 2 }, { 0, 2, -2 },
+                {1, 2, 0}, {-1, 2, 0}, {0, 2, 1}, {0, 2, -1},
+                {1, 2, 1}, {-1, 2, 1}, {1, 2, -1}, {-1, 2, -1},
+                {2, 2, 0}, {-2, 2, 0}, {0, 2, 2}, {0, 2, -2},
 
                 // Diagonal down
-                { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
-                { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 },
+                {1, -1, 0}, {-1, -1, 0}, {0, -1, 1}, {0, -1, -1},
+                {1, -1, 1}, {-1, -1, 1}, {1, -1, -1}, {-1, -1, -1},
         };
     }
 
@@ -399,8 +410,8 @@ public class TreeFellerListener implements Listener {
         Collections.shuffle(leafList);
 
         // Process leaves in waves to avoid lag
-        int waveSize = 10;
-        int tickDelay = 1;
+        int waveSize = LEAF_DECAY_WAVE_SIZE;
+        int tickDelay = LEAF_DECAY_INITIAL_DELAY;
 
         for (int i = 0; i < leafList.size(); i++) {
             Block leaf = leafList.get(i);
@@ -417,12 +428,12 @@ public class TreeFellerListener implements Listener {
         }
 
         // Schedule follow-up waves to ensure complete decay for tall trees
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 1), 20);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 2), 40);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 3), 60);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 4), 80);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 5), 100);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 6), 120);
+        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 1), LEAF_DECAY_WAVE_1_DELAY);
+        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 2), LEAF_DECAY_WAVE_2_DELAY);
+        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 3), LEAF_DECAY_WAVE_3_DELAY);
+        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 4), LEAF_DECAY_WAVE_4_DELAY);
+        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 5), LEAF_DECAY_WAVE_5_DELAY);
+        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 6), LEAF_DECAY_WAVE_6_DELAY);
     }
 
     /**
@@ -433,7 +444,7 @@ public class TreeFellerListener implements Listener {
         Set<Block> remainingLeaves = new HashSet<>();
 
         // Check original leaves and expand search (larger range for tall trees)
-        int range = Math.min(wave, 3); // Expand range with each wave
+        int range = Math.min(wave, MAX_DECAY_WAVE_RANGE); // Expand range with each wave
         for (Block original : originalLeaves) {
             Location loc = original.getLocation();
             for (int dx = -range; dx <= range; dx++) {

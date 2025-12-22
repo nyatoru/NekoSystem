@@ -46,7 +46,7 @@ public class RecipeAPI {
 
     /**
      * Find a matching recipe for the given crafting grid.
-     * 
+     *
      * @param grid 9-element array representing 3x3 crafting grid
      * @return Matching recipe result, or null if no match
      */

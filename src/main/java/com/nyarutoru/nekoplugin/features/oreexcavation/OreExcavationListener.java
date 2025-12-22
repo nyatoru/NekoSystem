@@ -15,12 +15,7 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Handles ore excavation events using ActiveToolAPI.
@@ -150,16 +145,10 @@ public class OreExcavationListener implements Listener {
                 break;
             }
 
-            // Check if pickaxe would break
-            if (!ItemUtils.isUnbreakable(currentPickaxe) &&
-                    ItemUtils.wouldBreakFromDamage(currentPickaxe, 1)) {
-                // Deactivate when tool breaks
-                ActiveToolAPI.getInstance().deactivate(player, "tool broke");
+            // Check and consume durability
+            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentPickaxe, 1, TOOL_NAME)) {
                 break;
             }
-
-            // Apply durability damage with Unbreaking support
-            ItemUtils.applyDurabilityDamage(currentPickaxe, 1);
 
             // Break block with proper drops at origin location
             if (hasSilkTouch) {

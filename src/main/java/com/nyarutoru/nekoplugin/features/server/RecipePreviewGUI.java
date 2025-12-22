@@ -6,7 +6,6 @@ import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -20,19 +19,17 @@ import java.util.List;
  */
 public class RecipePreviewGUI {
 
-    private final NekoPlugin plugin;
-    private final RecipeBookGUI recipeBookGUI;
-
     // Preview GUI layout
-    private static final int[] CRAFTING_SLOTS = { 10, 11, 12, 19, 20, 21, 28, 29, 30 };
+    private static final int[] CRAFTING_SLOTS = {10, 11, 12, 19, 20, 21, 28, 29, 30};
     private static final int RESULT_SLOT = 24;
     private static final int ARROW_SLOT = 23;
     private static final int INFO_SLOT = 4;
     private static final int BACK_BUTTON_SLOT = 49;
-
     private static final Component PREVIEW_TITLE = Component.text("✦ Recipe Preview ✦")
             .color(NamedTextColor.GREEN)
             .decoration(TextDecoration.BOLD, true);
+    private final NekoPlugin plugin;
+    private final RecipeBookGUI recipeBookGUI;
 
     public RecipePreviewGUI(NekoPlugin plugin, RecipeBookGUI recipeBookGUI) {
         this.plugin = plugin;

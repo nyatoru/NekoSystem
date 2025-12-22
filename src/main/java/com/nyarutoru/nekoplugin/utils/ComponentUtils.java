@@ -173,7 +173,7 @@ public final class ComponentUtils {
 
     /**
      * Create a progress bar component for activation.
-     * 
+     *
      * @param current Current progress value
      * @param max     Maximum progress value
      * @param filled  Character for filled portion
@@ -194,8 +194,8 @@ public final class ComponentUtils {
         }
 
         bar = bar.append(Component.text("] ")
-                .color(NamedTextColor.YELLOW)
-                .decoration(TextDecoration.BOLD, false))
+                        .color(NamedTextColor.YELLOW)
+                        .decoration(TextDecoration.BOLD, false))
                 .append(Component.text(String.valueOf(current))
                         .color(NamedTextColor.WHITE)
                         .decoration(TextDecoration.BOLD, false))

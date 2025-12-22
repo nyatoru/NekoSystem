@@ -16,7 +16,7 @@ import java.util.function.Predicate;
 /**
  * API for managing active tool states.
  * Handles shift-activation, persistent action bars, and proper cancellation.
- * 
+ * <p>
  * Features:
  * - Rapid shift activation (10 shifts within 3 seconds)
  * - Prevents re-activation while already active
@@ -25,19 +25,16 @@ import java.util.function.Predicate;
  */
 public class ActiveToolAPI {
 
+    private static final int SHIFTS_REQUIRED = 10;
+    private static final long SHIFT_TIMEOUT_MS = 3000;
+    private static final long ACTION_BAR_REFRESH_TICKS = 20L;
     private static ActiveToolAPI instance;
-
     // Player activation state (keyed by UUID:toolName for tool-specific tracking)
     private final Map<String, Integer> shiftCount = new HashMap<>();
     private final Map<String, Long> lastShiftTime = new HashMap<>();
     private final Map<String, BukkitTask> shiftTimeoutTasks = new HashMap<>();
-
     // Active tool state
     private final Map<UUID, ActiveToolState> activeTools = new HashMap<>();
-
-    private static final int SHIFTS_REQUIRED = 10;
-    private static final long SHIFT_TIMEOUT_MS = 3000;
-    private static final long ACTION_BAR_REFRESH_TICKS = 20L;
 
     private ActiveToolAPI() {
     }

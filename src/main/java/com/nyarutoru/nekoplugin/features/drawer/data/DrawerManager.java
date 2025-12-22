@@ -1,22 +1,17 @@
 package com.nyarutoru.nekoplugin.features.drawer.data;
 
-import com.nyarutoru.nekoplugin.NekoPlugin;
-import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
+import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.utils.LocationUtils;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Reader;
-import java.io.Writer;
+import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -31,15 +26,16 @@ import java.util.logging.Level;
  */
 public class DrawerManager {
 
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final long AUTO_SAVE_TICKS = 20L * 60 * 5; // 5 minutes
+    private static final int MAX_SAVE_RETRIES = 3;
     private static volatile DrawerManager instance;
     private final Map<String, Drawer> drawers = new ConcurrentHashMap<>();
     private File dataFile;
+    private File backupFile;
     private NekoPlugin plugin;
     private BukkitTask autoSaveTask;
     private boolean dirty = false;
-
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final long AUTO_SAVE_TICKS = 20L * 60 * 5;
 
     private DrawerManager() {
     }
@@ -58,6 +54,7 @@ public class DrawerManager {
     public void initialize(NekoPlugin plugin) {
         this.plugin = plugin;
         this.dataFile = new File(plugin.getDataFolder(), "drawers.json");
+        this.backupFile = new File(plugin.getDataFolder(), "drawers.json.backup");
         loadAll();
         startAutoSave();
     }
@@ -72,12 +69,7 @@ public class DrawerManager {
     }
 
     private String locationKey(Location location) {
-        // Create a deterministic UUID based on world and coordinates
-        String rawKey = location.getWorld().getName() + "_" +
-                location.getBlockX() + "_" +
-                location.getBlockY() + "_" +
-                location.getBlockZ();
-        return UUID.nameUUIDFromBytes(rawKey.getBytes()).toString();
+        return LocationUtils.getLocationKey(location);
     }
 
     public Drawer createDrawer(Location location, DrawerTier tier) {
@@ -127,33 +119,92 @@ public class DrawerManager {
         if (plugin == null)
             return;
 
-        try {
-            if (!plugin.getDataFolder().exists()) {
-                plugin.getDataFolder().mkdirs();
-            }
+        for (int attempt = 1; attempt <= MAX_SAVE_RETRIES; attempt++) {
+            try {
+                if (!plugin.getDataFolder().exists()) {
+                    plugin.getDataFolder().mkdirs();
+                }
 
-            Map<String, DrawerData> dataMap = new HashMap<>();
-            for (Map.Entry<String, Drawer> entry : drawers.entrySet()) {
-                dataMap.put(entry.getKey(), DrawerData.fromDrawer(entry.getValue()));
-            }
+                // Create backup of existing file before saving
+                if (dataFile.exists() && dataFile.length() > 0) {
+                    copyFile(dataFile, backupFile);
+                }
 
-            try (Writer writer = new OutputStreamWriter(new FileOutputStream(dataFile), StandardCharsets.UTF_8)) {
-                GSON.toJson(dataMap, writer);
-            }
+                Map<String, DrawerData> dataMap = new HashMap<>();
+                for (Map.Entry<String, Drawer> entry : drawers.entrySet()) {
+                    dataMap.put(entry.getKey(), DrawerData.fromDrawer(entry.getValue()));
+                }
 
-            dirty = false;
-        } catch (IOException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to save drawers!", e);
+                // Write to temporary file first
+                File tempFile = new File(dataFile.getParentFile(), dataFile.getName() + ".tmp");
+                try (Writer writer = new OutputStreamWriter(new FileOutputStream(tempFile), StandardCharsets.UTF_8)) {
+                    GSON.toJson(dataMap, writer);
+                }
+
+                // Atomic rename to actual file
+                if (dataFile.exists()) {
+                    dataFile.delete();
+                }
+                tempFile.renameTo(dataFile);
+
+                dirty = false;
+                return; // Success
+            } catch (IOException e) {
+                plugin.getLogger().log(Level.WARNING, "Failed to save drawers (attempt " + attempt + "/" + MAX_SAVE_RETRIES + ")", e);
+                if (attempt == MAX_SAVE_RETRIES) {
+                    plugin.getLogger().log(Level.SEVERE, "All save attempts failed! Data may be lost.", e);
+                } else {
+                    try {
+                        Thread.sleep(100 * attempt); // Exponential backoff
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+    }
+
+    private void copyFile(File source, File dest) throws IOException {
+        try (InputStream in = new FileInputStream(source);
+             OutputStream out = new FileOutputStream(dest)) {
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = in.read(buffer)) > 0) {
+                out.write(buffer, 0, length);
+            }
         }
     }
 
     public void loadAll() {
-        if (plugin == null || !dataFile.exists())
+        if (plugin == null)
             return;
 
         drawers.clear();
 
-        try (Reader reader = new InputStreamReader(new FileInputStream(dataFile), StandardCharsets.UTF_8)) {
+        // Try to load from main file first
+        if (dataFile.exists()) {
+            if (loadFromFile(dataFile)) {
+                plugin.getLogger().info("Loaded " + drawers.size() + " drawers.");
+                return;
+            }
+        }
+
+        // If main file failed, try backup
+        if (backupFile.exists()) {
+            plugin.getLogger().warning("Main drawer file corrupted or missing, attempting to load from backup...");
+            if (loadFromFile(backupFile)) {
+                plugin.getLogger().info("Successfully loaded " + drawers.size() + " drawers from backup.");
+                // Save to main file to restore it
+                saveAll();
+                return;
+            }
+        }
+
+        plugin.getLogger().info("No drawer data found or all files corrupted. Starting fresh.");
+    }
+
+    private boolean loadFromFile(File file) {
+        try (Reader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
             Type type = new TypeToken<Map<String, DrawerData>>() {
             }.getType();
             Map<String, DrawerData> dataMap = GSON.fromJson(reader, type);
@@ -165,12 +216,12 @@ public class DrawerManager {
                         drawers.put(entry.getKey(), drawer);
                     }
                 }
+                return true;
             }
-
-            plugin.getLogger().info("Loaded " + drawers.size() + " drawers.");
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to load drawers!", e);
+        } catch (IOException | JsonSyntaxException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to load from " + file.getName(), e);
         }
+        return false;
     }
 
     public void shutdown() {

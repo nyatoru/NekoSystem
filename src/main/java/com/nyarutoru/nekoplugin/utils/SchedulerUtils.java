@@ -170,7 +170,7 @@ public class SchedulerUtils {
 
     /**
      * Run a task synchronously. Returns BukkitTask on Paper, null on Folia.
-     * 
+     *
      * @deprecated Use runGlobal() or runAtEntity() instead
      */
     @Deprecated
@@ -186,7 +186,7 @@ public class SchedulerUtils {
     /**
      * Run a task synchronously after a delay. Returns BukkitTask on Paper, null on
      * Folia.
-     * 
+     *
      * @deprecated Use runGlobalLater() or runAtEntityLater() instead
      */
     @Deprecated
@@ -202,7 +202,7 @@ public class SchedulerUtils {
     /**
      * Run a repeating task synchronously. Returns BukkitTask on Paper, null on
      * Folia.
-     * 
+     *
      * @deprecated Use runGlobalTimer() instead
      */
     @Deprecated

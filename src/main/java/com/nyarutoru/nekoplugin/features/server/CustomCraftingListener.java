@@ -15,12 +15,15 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Custom Crafting Table with Double Chest GUI.
@@ -28,9 +31,9 @@ import java.util.*;
  */
 public class CustomCraftingListener implements Listener {
 
-    private final NekoPlugin plugin;
-    private final Set<UUID> openCraftingGUIs = new HashSet<>();
-    private RecipeBookGUI recipeBookGUI;
+    private static final int[] CRAFTING_SLOTS = {10, 11, 12, 19, 20, 21, 28, 29, 30};
+    private static final int RESULT_SLOT = 24;
+    private static final int CRAFT_BUTTON_SLOT = 23;
 
     // GUI Layout (54 slots - double chest)
     // Slots 0-8: Top decoration row
@@ -40,16 +43,14 @@ public class CustomCraftingListener implements Listener {
     // Slots 36-38: 3x3 crafting grid (row 3)
     // Slot 24: Result slot
     // Slots 45-53: Bottom decoration row
-
-    private static final int[] CRAFTING_SLOTS = { 10, 11, 12, 19, 20, 21, 28, 29, 30 };
-    private static final int RESULT_SLOT = 24;
-    private static final int CRAFT_BUTTON_SLOT = 23;
     private static final int CLOSE_SLOT = 49;
     private static final int RECIPE_BOOK_SLOT = 18;
-
     private static final Component TITLE = Component.text("✦ Crafting Table ✦")
             .color(NamedTextColor.GOLD)
             .decoration(TextDecoration.BOLD, true);
+    private final NekoPlugin plugin;
+    private final Set<UUID> openCraftingGUIs = new HashSet<>();
+    private final RecipeBookGUI recipeBookGUI;
 
     public CustomCraftingListener(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -121,7 +122,7 @@ public class CustomCraftingListener implements Listener {
         }
 
         // Additional unused slots - black glass pane
-        int[] unusedSlots = { 13, 14, 15, 16, 22, 25, 31, 32, 33, 34 };
+        int[] unusedSlots = {13, 14, 15, 16, 22, 25, 31, 32, 33, 34};
         for (int slot : unusedSlots) {
             gui.setItem(slot, blackGlass);
         }

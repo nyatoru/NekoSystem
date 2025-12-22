@@ -17,14 +17,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
-import org.bukkit.event.player.PlayerBucketEmptyEvent;
-import org.bukkit.event.player.PlayerCommandPreprocessEvent;
-import org.bukkit.event.player.PlayerInteractEntityEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerItemConsumeEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -32,11 +25,7 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Unified Player Feature Listener.
@@ -44,22 +33,11 @@ import java.util.UUID;
  */
 public class PlayerFeatureListener implements Listener {
 
-    private final NekoPlugin plugin;
-
-    // ========== Pet Carrying ==========
-    private final Map<UUID, Entity> carriedPets = new HashMap<>();
     private static final Set<EntityType> CARRIABLE_PETS = Set.of(
             EntityType.CAT, EntityType.WOLF, EntityType.PARROT, EntityType.FOX,
             EntityType.RABBIT, EntityType.CHICKEN, EntityType.OCELOT,
             EntityType.AXOLOTL, EntityType.FROG, EntityType.ALLAY, EntityType.BEE);
-
-    // ========== AFK System ==========
-    private final Map<UUID, Long> lastActivity = new HashMap<>();
-    private final Map<UUID, Boolean> afkStatus = new HashMap<>();
-    private BukkitTask afkCheckTask;
-    private Team afkTeam;
     private static final long AFK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-
     // ========== Auto Replenish ==========
     private static final Set<Material> FOODS = Set.of(
             Material.APPLE, Material.BAKED_POTATO, Material.BEEF, Material.BEETROOT,
@@ -71,6 +49,14 @@ public class PlayerFeatureListener implements Listener {
             Material.MELON_SLICE, Material.MUTTON, Material.PORKCHOP, Material.POTATO,
             Material.PUMPKIN_PIE, Material.RABBIT, Material.SALMON, Material.SWEET_BERRIES,
             Material.GLOW_BERRIES);
+    private final NekoPlugin plugin;
+    // ========== Pet Carrying ==========
+    private final Map<UUID, Entity> carriedPets = new HashMap<>();
+    // ========== AFK System ==========
+    private final Map<UUID, Long> lastActivity = new HashMap<>();
+    private final Map<UUID, Boolean> afkStatus = new HashMap<>();
+    private BukkitTask afkCheckTask;
+    private Team afkTeam;
 
     public PlayerFeatureListener(NekoPlugin plugin) {
         this.plugin = plugin;

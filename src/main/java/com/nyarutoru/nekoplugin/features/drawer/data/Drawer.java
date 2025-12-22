@@ -15,16 +15,15 @@ import java.util.Set;
  */
 public class Drawer implements ConfigurationSerializable {
 
-    private final Location location;
-    private Material itemType;
-    private int itemCount;
-    private DrawerTier tier;
-
     private static final Set<String> BLOCKED_CATEGORIES = Set.of(
             "_SWORD", "_AXE", "_HOE", "_PICKAXE", "_SHOVEL",
             "BOW", "CROSSBOW", "TRIDENT", "SHIELD",
             "HELMET", "CHESTPLATE", "LEGGINGS", "BOOTS",
             "ELYTRA", "TURTLE_HELMET");
+    private final Location location;
+    private Material itemType;
+    private int itemCount;
+    private DrawerTier tier;
 
     public Drawer(Location location) {
         this(location, null, 0, DrawerTier.TIER_1);
@@ -35,6 +34,55 @@ public class Drawer implements ConfigurationSerializable {
         this.itemType = itemType;
         this.itemCount = itemCount;
         this.tier = tier;
+    }
+
+    public static boolean isAllowedItem(ItemStack item) {
+        if (item == null || item.getType() == Material.AIR)
+            return false;
+        if (DrawerRecipes.isDrawerItem(item))
+            return false;
+        if (!item.getEnchantments().isEmpty())
+            return false;
+        if (item.hasItemMeta() && item.getItemMeta().hasDisplayName())
+            return false;
+
+        String materialName = item.getType().name();
+        for (String blocked : BLOCKED_CATEGORIES) {
+            if (materialName.contains(blocked))
+                return false;
+        }
+        return true;
+    }
+
+    public static boolean isAllowedMaterial(Material material) {
+        if (material == null || !material.isItem())
+            return false;
+
+        String materialName = material.name();
+        for (String blocked : BLOCKED_CATEGORIES) {
+            if (materialName.contains(blocked))
+                return false;
+        }
+        return true;
+    }
+
+    public static Drawer deserialize(Map<String, Object> map, org.bukkit.Server server) {
+        String worldName = (String) map.get("world");
+        int x = (int) map.get("x");
+        int y = (int) map.get("y");
+        int z = (int) map.get("z");
+
+        org.bukkit.World world = server.getWorld(worldName);
+        if (world == null)
+            return null;
+
+        Location location = new Location(world, x, y, z);
+        String itemTypeName = (String) map.get("itemType");
+        Material itemType = itemTypeName != null ? Material.getMaterial(itemTypeName) : null;
+        int itemCount = (int) map.get("itemCount");
+        DrawerTier tier = DrawerTier.getByName((String) map.get("tier"));
+
+        return new Drawer(location, itemType, itemCount, tier);
     }
 
     public Location getLocation() {
@@ -71,36 +119,6 @@ public class Drawer implements ConfigurationSerializable {
 
     public boolean isEmpty() {
         return itemCount == 0 || itemType == null;
-    }
-
-    public static boolean isAllowedItem(ItemStack item) {
-        if (item == null || item.getType() == Material.AIR)
-            return false;
-        if (DrawerRecipes.isDrawerItem(item))
-            return false;
-        if (!item.getEnchantments().isEmpty())
-            return false;
-        if (item.hasItemMeta() && item.getItemMeta().hasDisplayName())
-            return false;
-
-        String materialName = item.getType().name();
-        for (String blocked : BLOCKED_CATEGORIES) {
-            if (materialName.contains(blocked))
-                return false;
-        }
-        return true;
-    }
-
-    public static boolean isAllowedMaterial(Material material) {
-        if (material == null || !material.isItem())
-            return false;
-
-        String materialName = material.name();
-        for (String blocked : BLOCKED_CATEGORIES) {
-            if (materialName.contains(blocked))
-                return false;
-        }
-        return true;
     }
 
     public boolean canAccept(Material material) {
@@ -174,25 +192,6 @@ public class Drawer implements ConfigurationSerializable {
         map.put("itemCount", itemCount);
         map.put("tier", tier.name());
         return map;
-    }
-
-    public static Drawer deserialize(Map<String, Object> map, org.bukkit.Server server) {
-        String worldName = (String) map.get("world");
-        int x = (int) map.get("x");
-        int y = (int) map.get("y");
-        int z = (int) map.get("z");
-
-        org.bukkit.World world = server.getWorld(worldName);
-        if (world == null)
-            return null;
-
-        Location location = new Location(world, x, y, z);
-        String itemTypeName = (String) map.get("itemType");
-        Material itemType = itemTypeName != null ? Material.getMaterial(itemTypeName) : null;
-        int itemCount = (int) map.get("itemCount");
-        DrawerTier tier = DrawerTier.getByName((String) map.get("tier"));
-
-        return new Drawer(location, itemType, itemCount, tier);
     }
 
     @Override

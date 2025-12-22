@@ -17,13 +17,12 @@ import java.util.*;
  */
 public class PillagerManager {
 
-    private final NekoPlugin plugin;
-    // Note: No BukkitTask reference needed for Folia-compatible scheduling
-
     private static final int MAX_PILLAGERS_PER_CHUNK = 8;
+    // Note: No BukkitTask reference needed for Folia-compatible scheduling
     private static final int MAX_PILLAGERS_CLUSTER = 20;
     private static final double CLUSTER_RADIUS = 32.0;
     private static final long CHECK_INTERVAL_TICKS = 20 * 60 * 5; // 5 minutes
+    private final NekoPlugin plugin;
 
     public PillagerManager(NekoPlugin plugin) {
         this.plugin = plugin;

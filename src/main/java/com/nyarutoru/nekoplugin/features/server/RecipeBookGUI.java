@@ -17,24 +17,13 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Recipe Book GUI for browsing custom recipes.
  * Shows all RecipeAPI items and displays crafting recipes when clicked.
  */
 public class RecipeBookGUI implements Listener {
-
-    private final NekoPlugin plugin;
-    private RecipePreviewGUI recipePreviewGUI;
-
-    // Track which GUI players have open
-    private final Map<UUID, GUIState> playerStates = new HashMap<>();
 
     // GUI Layout constants
     private static final int ITEMS_PER_PAGE = 28; // 4 rows of 7 items
@@ -44,21 +33,24 @@ public class RecipeBookGUI implements Listener {
             28, 29, 30, 31, 32, 33, 34,
             37, 38, 39, 40, 41, 42, 43
     };
-
     private static final Component BOOK_TITLE = Component.text("✦ Recipe Book ✦")
             .color(NamedTextColor.LIGHT_PURPLE)
             .decoration(TextDecoration.BOLD, true);
+    private final NekoPlugin plugin;
+    // Track which GUI players have open
+    private final Map<UUID, GUIState> playerStates = new HashMap<>();
+    private RecipePreviewGUI recipePreviewGUI;
 
     public RecipeBookGUI(NekoPlugin plugin) {
         this.plugin = plugin;
     }
 
-    public void setRecipePreviewGUI(RecipePreviewGUI recipePreviewGUI) {
-        this.recipePreviewGUI = recipePreviewGUI;
-    }
-
     public RecipePreviewGUI getRecipePreviewGUI() {
         return recipePreviewGUI;
+    }
+
+    public void setRecipePreviewGUI(RecipePreviewGUI recipePreviewGUI) {
+        this.recipePreviewGUI = recipePreviewGUI;
     }
 
     /**
