@@ -117,7 +117,9 @@ public class SchedulerUtils {
      */
     public static void runGlobalTimer(Runnable task, long delayTicks, long periodTicks) {
         if (IS_FOLIA) {
-            Bukkit.getGlobalRegionScheduler().runAtFixedRate(getPlugin(), t -> task.run(), delayTicks, periodTicks);
+            // Folia requires delay to be at least 1 tick
+            long actualDelay = Math.max(1, delayTicks);
+            Bukkit.getGlobalRegionScheduler().runAtFixedRate(getPlugin(), t -> task.run(), actualDelay, periodTicks);
         } else {
             Bukkit.getScheduler().runTaskTimer(getPlugin(), task, delayTicks, periodTicks);
         }
