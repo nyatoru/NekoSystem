@@ -7,6 +7,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -81,10 +82,49 @@ public class PetCarryListener implements Listener {
             // Set rotation to match player's rotation (optional, but looks better)
             loc.setYaw(player.getLocation().getYaw());
 
-            passenger.teleport(loc);
+            passenger.teleportAsync(loc);
         }
 
         // Prevent placing blocks or using items when placing an entity
         event.setCancelled(true);
+    }
+
+    /**
+     * Ejects passengers before portal teleportation to prevent Folia async errors.
+     * Portal teleportation tries to asynchronously create new entities for
+     * passengers,
+     * which fails for complex entities like villagers with brain logic.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPortalEntry(org.bukkit.event.player.PlayerPortalEvent event) {
+        Player player = event.getPlayer();
+        List<Entity> passengers = player.getPassengers();
+
+        if (passengers.isEmpty())
+            return;
+
+        // Eject all passengers before portal teleportation
+        for (Entity passenger : List.copyOf(passengers)) {
+            player.removePassenger(passenger);
+
+            // Place passenger at player's current location
+            // Use async teleport to avoid threading issues
+            Location loc = player.getLocation().clone();
+            passenger.teleportAsync(loc);
+        }
+    }
+
+    /**
+     * Prevent passengers from entering portals on their own.
+     * This prevents the async entity creation error.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onEntityPortal(org.bukkit.event.entity.EntityPortalEvent event) {
+        Entity entity = event.getEntity();
+
+        // If entity is a passenger, prevent portal travel
+        if (entity.isInsideVehicle()) {
+            event.setCancelled(true);
+        }
     }
 }
