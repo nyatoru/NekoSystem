@@ -9,6 +9,7 @@ import com.nyarutoru.nekoplugin.features.hammer.HammerFeature;
 import com.nyarutoru.nekoplugin.features.oreexcavation.OreExcavationFeature;
 import com.nyarutoru.nekoplugin.features.player.PlayerFeature;
 import com.nyarutoru.nekoplugin.features.server.ServerFeature;
+import com.nyarutoru.nekoplugin.features.tool.SandExcavationFeature;
 import com.nyarutoru.nekoplugin.features.treefeller.TreeFellerFeature;
 import com.nyarutoru.nekoplugin.listeners.PlayerListener;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -33,6 +34,7 @@ public class NekoPlugin extends JavaPlugin {
         // Register features
         FeatureManager.getInstance().registerFeature(new DrawerFeature());
         FeatureManager.getInstance().registerFeature(new OreExcavationFeature());
+        FeatureManager.getInstance().registerFeature(new SandExcavationFeature());
         FeatureManager.getInstance().registerFeature(new TreeFellerFeature());
         FeatureManager.getInstance().registerFeature(new HammerFeature());
         FeatureManager.getInstance().registerFeature(new PlayerFeature());

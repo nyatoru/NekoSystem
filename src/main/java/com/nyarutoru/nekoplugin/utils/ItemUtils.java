@@ -62,6 +62,13 @@ public class ItemUtils {
     }
 
     /**
+     * Checks if the item is a shovel.
+     */
+    public static boolean isShovel(ItemStack item) {
+        return item != null && SHOVELS.contains(item.getType());
+    }
+
+    /**
      * Checks if the item is any type of tool.
      */
     public static boolean isTool(ItemStack item) {
@@ -151,7 +158,7 @@ public class ItemUtils {
      * @param item   The item to damage
      * @param amount The base damage amount
      * @return true if damage was applied, false if item is unbreakable or saved by
-     * Unbreaking
+     *         Unbreaking
      */
     public static boolean applyDurabilityDamage(ItemStack item, int amount) {
         if (item == null)
@@ -187,7 +194,7 @@ public class ItemUtils {
      * @param item   The item to damage
      * @param amount The base damage amount
      * @return The actual damage applied (may be less if stopped to prevent
-     * breaking)
+     *         breaking)
      */
     public static int safeDamageItem(ItemStack item, int amount) {
         if (item == null || isUnbreakable(item))
@@ -297,8 +304,7 @@ public class ItemUtils {
                 Component.text("Close")
                         .color(NamedTextColor.RED)
                         .decoration(TextDecoration.BOLD, true),
-                List.of(Component.text("Click to close").color(NamedTextColor.GRAY))
-        );
+                List.of(Component.text("Click to close").color(NamedTextColor.GRAY)));
     }
 
     /**
@@ -309,7 +315,8 @@ public class ItemUtils {
      * @param tool     The tool ItemStack
      * @param amount   The durability damage amount
      * @param toolName The name of the tool ability for deactivation message
-     * @return true if durability was consumed successfully, false if tool broke or would break
+     * @return true if durability was consumed successfully, false if tool broke or
+     *         would break
      */
     public static boolean consumeDurabilityOrDeactivate(Player player, ItemStack tool, int amount, String toolName) {
         if (isUnbreakable(tool)) {
