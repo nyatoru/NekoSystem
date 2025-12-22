@@ -95,7 +95,7 @@ public class ActiveToolAPI {
     private void startShiftTimeout(Player player, String key) {
         SchedulerUtils.cancelTask(shiftTimeoutTasks.remove(key));
 
-        BukkitTask task = SchedulerUtils.runSyncLater(() -> {
+        SchedulerUtils.runAtEntityLater(player, () -> {
             if (shiftCount.containsKey(key)) {
                 resetShiftCount(key);
                 if (player.isOnline()) {
@@ -103,8 +103,6 @@ public class ActiveToolAPI {
                 }
             }
         }, SchedulerUtils.secondsToTicks(3));
-
-        shiftTimeoutTasks.put(key, task);
     }
 
     private void resetShiftCount(String key) {
@@ -122,7 +120,7 @@ public class ActiveToolAPI {
         ActiveToolState state = new ActiveToolState(toolName, player.getInventory().getItemInMainHand().clone());
         activeTools.put(uuid, state);
 
-        state.actionBarTask = SchedulerUtils.runSyncTimer(() -> {
+        SchedulerUtils.runGlobalTimer(() -> {
             if (player.isOnline() && isActive(player, toolName)) {
                 player.sendActionBar(ComponentUtils.activeStatus(toolName));
             }
@@ -146,7 +144,6 @@ public class ActiveToolAPI {
         ActiveToolState state = activeTools.remove(uuid);
 
         if (state != null) {
-            SchedulerUtils.cancelTask(state.actionBarTask);
             player.sendActionBar(ComponentUtils.disabledStatus(state.toolName, reason));
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
 
@@ -207,18 +204,12 @@ public class ActiveToolAPI {
             return false;
         });
 
-        ActiveToolState state = activeTools.remove(uuid);
-        if (state != null) {
-            SchedulerUtils.cancelTask(state.actionBarTask);
-        }
+        activeTools.remove(uuid);
     }
 
     public void shutdown() {
         for (BukkitTask task : shiftTimeoutTasks.values()) {
             task.cancel();
-        }
-        for (ActiveToolState state : activeTools.values()) {
-            SchedulerUtils.cancelTask(state.actionBarTask);
         }
         shiftTimeoutTasks.clear();
         shiftCount.clear();
@@ -226,14 +217,6 @@ public class ActiveToolAPI {
         activeTools.clear();
     }
 
-    private static class ActiveToolState {
-        final String toolName;
-        final ItemStack originalItem;
-        BukkitTask actionBarTask;
-
-        ActiveToolState(String toolName, ItemStack originalItem) {
-            this.toolName = toolName;
-            this.originalItem = originalItem;
-        }
+    private record ActiveToolState(String toolName, ItemStack originalItem) {
     }
 }

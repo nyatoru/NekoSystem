@@ -42,6 +42,7 @@ public class DrawerGUI extends BaseGUI {
     private final String drawerKey;
     private final NumberFormat numberFormat = NumberFormat.getInstance();
 
+    @SuppressWarnings("this-escape")
     public DrawerGUI(Drawer drawer) {
         super(SIZE, Component.text("Drawer - ").append(drawer.getTier().getDisplayNameComponent()));
         this.drawer = drawer;

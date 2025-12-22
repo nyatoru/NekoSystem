@@ -418,7 +418,7 @@ public class TreeFellerListener implements Listener {
             int wave = i / waveSize;
             int delay = tickDelay + wave;
 
-            SchedulerUtils.runSyncLater(() -> {
+            SchedulerUtils.runAtLocationLater(leaf.getLocation(), () -> {
                 if (isLeaf(leaf.getType())) {
                     // Simulate random tick to trigger natural decay
                     // Leaves will check for logs and decay naturally
@@ -428,12 +428,15 @@ public class TreeFellerListener implements Listener {
         }
 
         // Schedule follow-up waves to ensure complete decay for tall trees
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 1), LEAF_DECAY_WAVE_1_DELAY);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 2), LEAF_DECAY_WAVE_2_DELAY);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 3), LEAF_DECAY_WAVE_3_DELAY);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 4), LEAF_DECAY_WAVE_4_DELAY);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 5), LEAF_DECAY_WAVE_5_DELAY);
-        SchedulerUtils.runSyncLater(() -> triggerDecayWave(leaves, 6), LEAF_DECAY_WAVE_6_DELAY);
+        if (!leaves.isEmpty()) {
+            Location treeLocation = leaves.iterator().next().getLocation();
+            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 1), LEAF_DECAY_WAVE_1_DELAY);
+            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 2), LEAF_DECAY_WAVE_2_DELAY);
+            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 3), LEAF_DECAY_WAVE_3_DELAY);
+            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 4), LEAF_DECAY_WAVE_4_DELAY);
+            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 5), LEAF_DECAY_WAVE_5_DELAY);
+            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 6), LEAF_DECAY_WAVE_6_DELAY);
+        }
     }
 
     /**

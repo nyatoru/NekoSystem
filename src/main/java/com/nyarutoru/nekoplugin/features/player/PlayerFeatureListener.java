@@ -21,7 +21,6 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
@@ -55,7 +54,6 @@ public class PlayerFeatureListener implements Listener {
     // ========== AFK System ==========
     private final Map<UUID, Long> lastActivity = new HashMap<>();
     private final Map<UUID, Boolean> afkStatus = new HashMap<>();
-    private BukkitTask afkCheckTask;
     private Team afkTeam;
 
     public PlayerFeatureListener(NekoPlugin plugin) {
@@ -73,7 +71,7 @@ public class PlayerFeatureListener implements Listener {
         afkTeam.prefix(Component.text("[AFK] ").color(NamedTextColor.GRAY));
 
         // Start AFK check
-        afkCheckTask = SchedulerUtils.runSyncTimer(this::checkAfkPlayers, 20 * 30, 20 * 30);
+        SchedulerUtils.runGlobalTimer(this::checkAfkPlayers, 20 * 30, 20 * 30);
 
         // Initialize online players
         for (Player player : Bukkit.getOnlinePlayers()) {
@@ -82,8 +80,6 @@ public class PlayerFeatureListener implements Listener {
     }
 
     public void stop() {
-        if (afkCheckTask != null)
-            afkCheckTask.cancel();
         if (afkTeam != null) {
             for (String entry : afkTeam.getEntries()) {
                 afkTeam.removeEntry(entry);
@@ -260,7 +256,7 @@ public class PlayerFeatureListener implements Listener {
         Material bucket = event.getBucket();
         updateActivity(player);
 
-        SchedulerUtils.runSyncLater(() -> replenishItem(player, bucket), 1);
+        SchedulerUtils.runAtEntityLater(player, () -> replenishItem(player, bucket), 1);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -271,7 +267,7 @@ public class PlayerFeatureListener implements Listener {
 
         if (consumed.getAmount() <= 1) {
             Material type = consumed.getType();
-            SchedulerUtils.runSyncLater(() -> {
+            SchedulerUtils.runAtEntityLater(player, () -> {
                 if (!replenishItem(player, type) && FOODS.contains(type)) {
                     replenishAnyFood(player);
                 }
@@ -294,7 +290,7 @@ public class PlayerFeatureListener implements Listener {
 
         if (type != null) {
             Material finalType = type;
-            SchedulerUtils.runSyncLater(() -> {
+            SchedulerUtils.runAtEntityLater(player, () -> {
                 if (player.getInventory().getItemInMainHand().getType() == Material.AIR) {
                     replenishItem(player, finalType);
                 }
