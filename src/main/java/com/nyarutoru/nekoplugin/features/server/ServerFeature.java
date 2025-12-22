@@ -56,6 +56,9 @@ public class ServerFeature implements Feature {
         tpsTask = new TPSBossBarTask();
         SchedulerUtils.runGlobalTimer(tpsTask::run, 20L, 20L);
 
+        // Server Recipes (furnace recipes, etc.)
+        new ServerRecipes(plugin).registerAll();
+
         this.enabled = true;
         plugin.getLogger().info("Server feature enabled.");
     }

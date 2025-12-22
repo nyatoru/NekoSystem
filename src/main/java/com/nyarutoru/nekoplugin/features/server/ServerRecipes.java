@@ -1,0 +1,45 @@
+package com.nyarutoru.nekoplugin.features.server;
+
+import com.nyarutoru.nekoplugin.NekoPlugin;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.inventory.FurnaceRecipe;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.RecipeChoice;
+
+/**
+ * Server-side custom recipes (furnace, smelting, etc.)
+ */
+public class ServerRecipes {
+
+    private final NekoPlugin plugin;
+
+    public ServerRecipes(NekoPlugin plugin) {
+        this.plugin = plugin;
+    }
+
+    /**
+     * Register all server recipes.
+     */
+    public void registerAll() {
+        registerRottenFleshToLeather();
+        plugin.getLogger().info("Registered server recipes.");
+    }
+
+    /**
+     * Register rotten flesh to leather furnace recipe.
+     * Allows players to obtain leather by smelting rotten flesh.
+     */
+    private void registerRottenFleshToLeather() {
+        NamespacedKey key = new NamespacedKey(plugin, "rotten_flesh_to_leather");
+
+        ItemStack result = new ItemStack(Material.LEATHER);
+        RecipeChoice.MaterialChoice input = new RecipeChoice.MaterialChoice(Material.ROTTEN_FLESH);
+
+        // Experience: 0.35 (similar to cooking meat)
+        // Cooking time: 200 ticks (10 seconds, standard furnace time)
+        FurnaceRecipe recipe = new FurnaceRecipe(key, result, input, 0.35f, 200);
+
+        plugin.getServer().addRecipe(recipe);
+    }
+}
