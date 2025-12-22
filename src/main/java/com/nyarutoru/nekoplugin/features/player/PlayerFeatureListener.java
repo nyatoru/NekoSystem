@@ -21,8 +21,6 @@ import org.bukkit.event.player.*;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.scoreboard.Scoreboard;
-import org.bukkit.scoreboard.Team;
 
 import java.util.*;
 
@@ -54,22 +52,14 @@ public class PlayerFeatureListener implements Listener {
     // ========== AFK System ==========
     private final Map<UUID, Long> lastActivity = new HashMap<>();
     private final Map<UUID, Boolean> afkStatus = new HashMap<>();
-    private Team afkTeam;
+    // Store original display names to restore when player returns from AFK
+    private final Map<UUID, Component> originalDisplayNames = new HashMap<>();
 
     public PlayerFeatureListener(NekoPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void start() {
-        // Setup AFK team
-        Scoreboard scoreboard = Bukkit.getScoreboardManager().getMainScoreboard();
-        afkTeam = scoreboard.getTeam("neko_afk");
-        if (afkTeam == null) {
-            afkTeam = scoreboard.registerNewTeam("neko_afk");
-        }
-        afkTeam.color(NamedTextColor.GRAY);
-        afkTeam.prefix(Component.text("[AFK] ").color(NamedTextColor.GRAY));
-
         // Start AFK check
         SchedulerUtils.runGlobalTimer(this::checkAfkPlayers, 20 * 30, 20 * 30);
 
@@ -80,9 +70,10 @@ public class PlayerFeatureListener implements Listener {
     }
 
     public void stop() {
-        if (afkTeam != null) {
-            for (String entry : afkTeam.getEntries()) {
-                afkTeam.removeEntry(entry);
+        // Restore all AFK players' display names
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (afkStatus.getOrDefault(player.getUniqueId(), false)) {
+                restoreDisplayName(player);
             }
         }
         // Drop all carried pets
@@ -190,11 +181,23 @@ public class PlayerFeatureListener implements Listener {
     private void setAfk(Player player, boolean afk) {
         afkStatus.put(player.getUniqueId(), afk);
         if (afk) {
-            afkTeam.addEntry(player.getName());
+            // Store original display name
+            originalDisplayNames.put(player.getUniqueId(), player.displayName());
+            // Set AFK prefix
+            Component afkName = Component.text("[AFK] ").color(NamedTextColor.GRAY)
+                    .append(player.displayName().color(NamedTextColor.GRAY));
+            player.displayName(afkName);
             Bukkit.broadcast(Component.text(player.getName() + " is now AFK").color(NamedTextColor.GRAY));
         } else {
-            afkTeam.removeEntry(player.getName());
+            restoreDisplayName(player);
             Bukkit.broadcast(Component.text(player.getName() + " is no longer AFK").color(NamedTextColor.GREEN));
+        }
+    }
+
+    private void restoreDisplayName(Player player) {
+        Component original = originalDisplayNames.remove(player.getUniqueId());
+        if (original != null) {
+            player.displayName(original);
         }
     }
 
@@ -226,7 +229,7 @@ public class PlayerFeatureListener implements Listener {
         UUID uuid = event.getPlayer().getUniqueId();
         lastActivity.remove(uuid);
         afkStatus.remove(uuid);
-        afkTeam.removeEntry(event.getPlayer().getName());
+        originalDisplayNames.remove(uuid);
         dropPet(event.getPlayer());
     }
 
