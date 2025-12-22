@@ -5,7 +5,6 @@ import org.bukkit.block.Block;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -33,8 +32,8 @@ public class PetCarryListener implements Listener {
 
         Entity clickedEntity = event.getRightClicked();
 
-        // Allow carrying Animals and Villagers
-        if (clickedEntity instanceof Animals || clickedEntity instanceof Villager) {
+        // Allow carrying Animals only (villagers temporarily disabled)
+        if (clickedEntity instanceof Animals) {
             // Check if player is already carrying something
             if (!player.getPassengers().isEmpty())
                 return;
