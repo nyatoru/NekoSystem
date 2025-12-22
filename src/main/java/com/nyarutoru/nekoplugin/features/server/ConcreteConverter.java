@@ -9,6 +9,7 @@ import org.bukkit.entity.Item;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
+import java.util.Collection;
 
 /**
  * Converts Concrete Powder dropped in water into solid Concrete after 10
@@ -46,8 +47,8 @@ public class ConcreteConverter {
     }
 
     public void start() {
-        // Use async scheduler to safely iterate over entities in Folia
-        SchedulerUtils.runGlobalTimer(this::checkItems, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
+        // Schedule timer to check all worlds for items
+        SchedulerUtils.runGlobalTimer(this::checkAllWorlds, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
         plugin.getLogger().info("Concrete converter started.");
     }
 
@@ -56,54 +57,13 @@ public class ConcreteConverter {
         itemsInWater.clear();
     }
 
-    private void checkItems() {
+    /**
+     * Called on global region - schedules individual entity checks
+     */
+    private void checkAllWorlds() {
         long now = System.currentTimeMillis();
-        Set<UUID> toRemove = new HashSet<>();
 
-        for (World world : Bukkit.getWorlds()) {
-            for (Item item : world.getEntitiesByClass(Item.class)) {
-                ItemStack stack = item.getItemStack();
-                Material type = stack.getType();
-
-                // Check if it's concrete powder
-                if (!POWDER_TO_CONCRETE.containsKey(type)) {
-                    itemsInWater.remove(item.getUniqueId());
-                    continue;
-                }
-
-                // Check if in water
-                Material blockType = item.getLocation().getBlock().getType();
-                boolean inWater = blockType == Material.WATER;
-
-                if (inWater) {
-                    // Track when it entered water
-                    if (!itemsInWater.containsKey(item.getUniqueId())) {
-                        itemsInWater.put(item.getUniqueId(), now);
-                    } else {
-                        // Check if 10 seconds have passed
-                        long enteredTime = itemsInWater.get(item.getUniqueId());
-                        if (now - enteredTime >= CONVERT_TIME_MS) {
-                            // Convert to solid concrete
-                            Material concrete = POWDER_TO_CONCRETE.get(type);
-                            int amount = stack.getAmount();
-
-                            item.setItemStack(new ItemStack(concrete, amount));
-                            toRemove.add(item.getUniqueId());
-                        }
-                    }
-                } else {
-                    // Not in water anymore, reset timer
-                    itemsInWater.remove(item.getUniqueId());
-                }
-            }
-        }
-
-        // Clean up converted items from tracking
-        for (UUID uuid : toRemove) {
-            itemsInWater.remove(uuid);
-        }
-
-        // Clean up dead items
+        // Clean up dead items first (safe to do on global thread)
         itemsInWater.keySet().removeIf(uuid -> {
             for (World world : Bukkit.getWorlds()) {
                 if (world.getEntity(uuid) != null)
@@ -111,5 +71,61 @@ public class ConcreteConverter {
             }
             return true;
         });
+
+        // For each world, schedule entity checks on their respective regions
+        for (World world : Bukkit.getWorlds()) {
+            // Get all items in the world (this is safe on any thread)
+            Collection<Item> items = world.getEntitiesByClass(Item.class);
+
+            // Schedule a check for each item on its own region
+            for (Item item : items) {
+                SchedulerUtils.runAtEntity(item, () -> checkItem(item, now));
+            }
+        }
+    }
+
+    /**
+     * Check a single item - must be called on the item's owning thread
+     */
+    private void checkItem(Item item, long now) {
+        // Verify item is still valid
+        if (item.isDead() || !item.isValid()) {
+            itemsInWater.remove(item.getUniqueId());
+            return;
+        }
+
+        ItemStack stack = item.getItemStack();
+        Material type = stack.getType();
+
+        // Check if it's concrete powder
+        if (!POWDER_TO_CONCRETE.containsKey(type)) {
+            itemsInWater.remove(item.getUniqueId());
+            return;
+        }
+
+        // Check if in water
+        Material blockType = item.getLocation().getBlock().getType();
+        boolean inWater = blockType == Material.WATER;
+
+        if (inWater) {
+            // Track when it entered water
+            if (!itemsInWater.containsKey(item.getUniqueId())) {
+                itemsInWater.put(item.getUniqueId(), now);
+            } else {
+                // Check if 10 seconds have passed
+                long enteredTime = itemsInWater.get(item.getUniqueId());
+                if (now - enteredTime >= CONVERT_TIME_MS) {
+                    // Convert to solid concrete
+                    Material concrete = POWDER_TO_CONCRETE.get(type);
+                    int amount = stack.getAmount();
+
+                    item.setItemStack(new ItemStack(concrete, amount));
+                    itemsInWater.remove(item.getUniqueId());
+                }
+            }
+        } else {
+            // Not in water anymore, reset timer
+            itemsInWater.remove(item.getUniqueId());
+        }
     }
 }
