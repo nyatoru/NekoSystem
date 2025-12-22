@@ -11,7 +11,7 @@ import org.bukkit.Material;
  */
 public enum DrawerTier {
     // Tier 1: 8 Chests + Barrel = basic storage
-    TIER_1(1, 128, Material.CHEST, "Tier 1", NamedTextColor.GRAY), // 8,192 items
+    TIER_1(1, 256, Material.CHEST, "Tier 1", NamedTextColor.GRAY), // 8,192 items
 
     // Tier 2: 8 Leather (cheap) = moderate increase
     TIER_2(2, 512, Material.LEATHER, "Tier 2", NamedTextColor.GOLD), // 32,768 items

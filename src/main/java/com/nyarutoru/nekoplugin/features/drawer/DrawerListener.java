@@ -46,6 +46,7 @@ public class DrawerListener implements Listener {
             if (storedType != null && storedCount > 0) {
                 drawer.addItems(storedType, storedCount);
                 DrawerManager.getInstance().markDirty();
+                DrawerGUI.updateBarrelInventory(drawer);
             }
         }
     }
@@ -128,6 +129,7 @@ public class DrawerListener implements Listener {
                     DrawerManager.getInstance().markDirty();
                     DrawerGUI.refreshAllViewers(drawer);
                 }
+                DrawerGUI.updateBarrelInventory(drawer);
                 return;
             }
         }
@@ -136,14 +138,16 @@ public class DrawerListener implements Listener {
         if (source.getLocation() != null) {
             Drawer drawer = DrawerManager.getInstance().getDrawer(source.getLocation());
             if (drawer != null) {
-                // Don't cancel yet - only cancel if we can actually extract
+                event.setCancelled(true);
 
-                if (drawer.isEmpty()) {
-                    event.setCancelled(true); // Cancel to prevent hopper from pulling nothing
+                if (drawer.isEmpty())
                     return;
-                }
 
+                // The event.getItem() is the item the hopper is trying to pull from the barrel
+                // We intercept this and remove from our drawer data instead
                 Material itemType = drawer.getItemType();
+
+                // Try to add the drawer's item to destination
                 ItemStack extracted = new ItemStack(itemType, 1);
                 var leftover = destination.addItem(extracted);
 
@@ -152,10 +156,10 @@ public class DrawerListener implements Listener {
                     drawer.removeItems(1);
                     DrawerManager.getInstance().markDirty();
                     DrawerGUI.refreshAllViewers(drawer);
-                }
 
-                // Cancel the event since we handled it (whether success or destination full)
-                event.setCancelled(true);
+                    // Ensure the barrel inventory is updated with a representative item
+                    DrawerGUI.updateBarrelInventory(drawer);
+                }
             }
         }
     }

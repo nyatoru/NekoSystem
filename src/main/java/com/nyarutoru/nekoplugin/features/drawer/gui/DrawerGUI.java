@@ -16,6 +16,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.Inventory;
 
 import java.text.NumberFormat;
 import java.util.*;
@@ -78,6 +79,27 @@ public class DrawerGUI extends BaseGUI {
         if (viewers != null) {
             for (DrawerGUI gui : viewers)
                 gui.refresh();
+        }
+        // Also update the barrel inventory for hopper compatibility
+        updateBarrelInventory(drawer);
+    }
+
+    /**
+     * Updates the barrel's inventory with a single representative item
+     * so hoppers can detect and pull from it
+     */
+    public static void updateBarrelInventory(Drawer drawer) {
+        Location loc = drawer.getLocation();
+        if (loc.getBlock().getType() != Material.BARREL)
+            return;
+
+        org.bukkit.block.Barrel barrel = (org.bukkit.block.Barrel) loc.getBlock().getState();
+        Inventory inv = barrel.getInventory();
+        inv.clear();
+
+        if (!drawer.isEmpty()) {
+            // Keep a single item in the barrel so hoppers can detect it
+            inv.setItem(0, new ItemStack(drawer.getItemType(), 1));
         }
     }
 
