@@ -6,19 +6,18 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
+
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Tameable;
+
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
+
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
 import org.bukkit.event.player.*;
-import org.bukkit.inventory.EquipmentSlot;
+
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
@@ -30,10 +29,6 @@ import java.util.*;
  */
 public class PlayerFeatureListener implements Listener {
 
-    private static final Set<EntityType> CARRIABLE_PETS = Set.of(
-            EntityType.CAT, EntityType.WOLF, EntityType.PARROT, EntityType.FOX,
-            EntityType.RABBIT, EntityType.CHICKEN, EntityType.OCELOT,
-            EntityType.AXOLOTL, EntityType.FROG, EntityType.ALLAY, EntityType.BEE);
     private static final long AFK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
     // ========== Auto Replenish ==========
     private static final Set<Material> FOODS = Set.of(
@@ -47,8 +42,6 @@ public class PlayerFeatureListener implements Listener {
             Material.PUMPKIN_PIE, Material.RABBIT, Material.SALMON, Material.SWEET_BERRIES,
             Material.GLOW_BERRIES);
     private final NekoPlugin plugin;
-    // ========== Pet Carrying ==========
-    private final Map<UUID, Entity> carriedPets = new HashMap<>();
     // ========== AFK System ==========
     private final Map<UUID, Long> lastActivity = new HashMap<>();
     private final Map<UUID, Boolean> afkStatus = new HashMap<>();
@@ -76,80 +69,7 @@ public class PlayerFeatureListener implements Listener {
                 restoreDisplayName(player);
             }
         }
-        // Drop all carried pets
-        for (UUID uuid : new HashSet<>(carriedPets.keySet())) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null)
-                dropPet(player);
-        }
-    }
 
-    // ==================== PET CARRYING ====================
-
-    @EventHandler(priority = EventPriority.HIGH)
-    public void onInteractEntity(PlayerInteractEntityEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND)
-            return;
-
-        Player player = event.getPlayer();
-        Entity entity = event.getRightClicked();
-
-        if (!player.isSneaking())
-            return;
-        if (carriedPets.containsKey(player.getUniqueId())) {
-            player.sendMessage(Component.text("Already carrying a pet!").color(NamedTextColor.RED));
-            return;
-        }
-        if (!CARRIABLE_PETS.contains(entity.getType()))
-            return;
-
-        if (entity instanceof Tameable tameable) {
-            if (!tameable.isTamed() ||
-                    (tameable.getOwner() != null && !tameable.getOwner().getUniqueId().equals(player.getUniqueId()))) {
-                player.sendMessage(Component.text("Not your pet!").color(NamedTextColor.RED));
-                return;
-            }
-        }
-
-        event.setCancelled(true);
-        entity.setInvulnerable(true);
-        player.addPassenger(entity);
-        carriedPets.put(player.getUniqueId(), entity);
-        player.sendMessage(Component.text("✓ Picked up pet").color(NamedTextColor.GREEN));
-    }
-
-    @EventHandler(priority = EventPriority.HIGH)
-    public void onInteract(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND)
-            return;
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK)
-            return;
-
-        Player player = event.getPlayer();
-        if (player.isSneaking())
-            return;
-        if (!carriedPets.containsKey(player.getUniqueId()))
-            return;
-
-        event.setCancelled(true);
-        Entity pet = carriedPets.remove(player.getUniqueId());
-        if (pet != null) {
-            player.removePassenger(pet);
-            pet.teleport(event.getClickedBlock().getRelative(event.getBlockFace()).getLocation().add(0.5, 0, 0.5));
-            pet.setInvulnerable(false);
-            player.sendMessage(Component.text("✓ Placed pet").color(NamedTextColor.GREEN));
-        }
-        // Update activity when interacting
-        updateActivity(player);
-    }
-
-    public void dropPet(Player player) {
-        Entity pet = carriedPets.remove(player.getUniqueId());
-        if (pet != null) {
-            player.removePassenger(pet);
-            pet.teleport(player.getLocation());
-            pet.setInvulnerable(false);
-        }
     }
 
     // ==================== AFK SYSTEM ====================
@@ -230,7 +150,6 @@ public class PlayerFeatureListener implements Listener {
         lastActivity.remove(uuid);
         afkStatus.remove(uuid);
         originalDisplayNames.remove(uuid);
-        dropPet(event.getPlayer());
     }
 
     @EventHandler
