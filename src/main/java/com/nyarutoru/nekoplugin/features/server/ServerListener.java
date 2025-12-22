@@ -1,6 +1,7 @@
 package com.nyarutoru.nekoplugin.features.server;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.utils.ServerPerformanceUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -261,8 +262,8 @@ public class ServerListener implements Listener {
         if (org.bukkit.Bukkit.getOnlinePlayers().size() <= MIN_PLAYERS_FOR_LAG_WARNING)
             return;
 
-        // Condition: TPS < 18
-        double tps = org.bukkit.Bukkit.getTPS()[0]; // 1m average
+        // Condition: TPS < 18 (Folia-compatible)
+        double tps = ServerPerformanceUtils.getTPS();
         if (tps >= LAG_WARNING_TPS_THRESHOLD)
             return;
 
