@@ -16,7 +16,6 @@ public class ServerFeature implements Feature {
     public static final String NAME = "Server Utilities";
 
     private boolean enabled = false;
-    private PillagerManager pillagerManager;
     private ConcreteConverter concreteConverter;
     private CustomCraftingListener customCraftingListener;
     private ServerListener serverListener;
@@ -34,10 +33,6 @@ public class ServerFeature implements Feature {
 
     @Override
     public void onEnable(NekoPlugin plugin) {
-        // Pillager management
-        pillagerManager = new PillagerManager(plugin);
-        pillagerManager.start();
-
         // Concrete conversion
         concreteConverter = new ConcreteConverter(plugin);
         concreteConverter.start();
@@ -65,9 +60,6 @@ public class ServerFeature implements Feature {
 
     @Override
     public void onDisable() {
-        if (pillagerManager != null) {
-            pillagerManager.stop();
-        }
         if (concreteConverter != null) {
             concreteConverter.stop();
         }
