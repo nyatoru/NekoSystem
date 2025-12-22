@@ -85,6 +85,10 @@ public class DrawerListener implements Listener {
             return;
 
         event.setDropItems(false);
+
+        // Close all GUIs viewing this drawer before removing it
+        DrawerGUI.closeAllViewers(drawer);
+
         DrawerManager.getInstance().removeDrawer(location);
 
         ItemStack drawerItem;
@@ -132,20 +136,26 @@ public class DrawerListener implements Listener {
         if (source.getLocation() != null) {
             Drawer drawer = DrawerManager.getInstance().getDrawer(source.getLocation());
             if (drawer != null) {
-                event.setCancelled(true);
+                // Don't cancel yet - only cancel if we can actually extract
 
-                if (drawer.isEmpty())
+                if (drawer.isEmpty()) {
+                    event.setCancelled(true); // Cancel to prevent hopper from pulling nothing
                     return;
+                }
 
                 Material itemType = drawer.getItemType();
                 ItemStack extracted = new ItemStack(itemType, 1);
                 var leftover = destination.addItem(extracted);
 
                 if (leftover.isEmpty()) {
+                    // Successfully added to destination, remove from drawer
                     drawer.removeItems(1);
                     DrawerManager.getInstance().markDirty();
                     DrawerGUI.refreshAllViewers(drawer);
                 }
+
+                // Cancel the event since we handled it (whether success or destination full)
+                event.setCancelled(true);
             }
         }
     }

@@ -15,6 +15,7 @@ import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.PlayerInventory;
 
 import java.text.NumberFormat;
 import java.util.*;
@@ -54,6 +55,23 @@ public class DrawerGUI extends BaseGUI {
         return LocationUtils.getSimpleLocationKey(loc);
     }
 
+    /**
+     * Close all GUIs viewing this drawer (e.g., when block is broken)
+     */
+    public static void closeAllViewers(Drawer drawer) {
+        String key = locationKey(drawer.getLocation());
+        Set<DrawerGUI> viewers = openViewers.get(key);
+        if (viewers != null) {
+            // Create copy to avoid concurrent modification
+            Set<DrawerGUI> viewersCopy = new HashSet<>(viewers);
+            for (DrawerGUI gui : viewersCopy) {
+                gui.forceClose();
+            }
+            viewers.clear();
+            openViewers.remove(key);
+        }
+    }
+
     public static void refreshAllViewers(Drawer drawer) {
         String key = locationKey(drawer.getLocation());
         Set<DrawerGUI> viewers = openViewers.get(key);
@@ -81,6 +99,18 @@ public class DrawerGUI extends BaseGUI {
             viewers.remove(this);
             if (viewers.isEmpty())
                 openViewers.remove(drawerKey);
+        }
+    }
+
+    /**
+     * Force close this GUI for the current viewer
+     */
+    public void forceClose() {
+        // Close for all viewers of this specific GUI instance
+        for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
+            if (player.getOpenInventory().getTopInventory().equals(inventory)) {
+                player.closeInventory();
+            }
         }
     }
 
@@ -207,7 +237,7 @@ public class DrawerGUI extends BaseGUI {
      * Properly updates the item stack in the player's inventory.
      */
     private void depositItemFromInventory(Player player, ItemStack item, org.bukkit.inventory.Inventory sourceInventory,
-                                          int slot) {
+            int slot) {
         if (!Drawer.isAllowedItem(item)) {
             return;
         }
@@ -233,6 +263,13 @@ public class DrawerGUI extends BaseGUI {
     }
 
     private void deposit(Player player, int amount) {
+        // If drawer already has items, scan inventory for matching items
+        if (!drawer.isEmpty()) {
+            depositFromInventory(player, amount);
+            return;
+        }
+
+        // Otherwise, use main hand (original behavior for empty drawers)
         ItemStack mainHand = player.getInventory().getItemInMainHand();
 
         if (mainHand.getType() == Material.AIR) {
@@ -253,6 +290,46 @@ public class DrawerGUI extends BaseGUI {
 
         if (deposited > 0) {
             mainHand.setAmount(mainHand.getAmount() - deposited);
+            DrawerManager.getInstance().markDirty();
+            refreshAllViewers(drawer);
+        }
+    }
+
+    /**
+     * Deposit items from player's entire inventory (when drawer already has items)
+     */
+    private void depositFromInventory(Player player, int amount) {
+        Material targetType = drawer.getItemType();
+        if (targetType == null)
+            return;
+
+        int remaining = amount;
+        PlayerInventory inv = player.getInventory();
+
+        // Scan entire inventory for matching items
+        for (int i = 0; i < inv.getSize() && remaining > 0; i++) {
+            ItemStack item = inv.getItem(i);
+            if (item == null || item.getType() != targetType)
+                continue;
+            if (!Drawer.isAllowedItem(item))
+                continue;
+
+            int toTake = Math.min(remaining, item.getAmount());
+            int overflow = drawer.addItems(targetType, toTake);
+            int deposited = toTake - overflow;
+
+            if (deposited > 0) {
+                item.setAmount(item.getAmount() - deposited);
+                remaining -= deposited;
+            }
+
+            if (overflow > 0) {
+                // Drawer is full
+                break;
+            }
+        }
+
+        if (remaining < amount) {
             DrawerManager.getInstance().markDirty();
             refreshAllViewers(drawer);
         }
@@ -358,10 +435,13 @@ public class DrawerGUI extends BaseGUI {
                     .color(NamedTextColor.GREEN)
                     .decoration(TextDecoration.BOLD, true)
                     .decoration(TextDecoration.ITALIC, false));
+
+            // Change lore based on whether drawer has items
+            String sourceText = drawer.isEmpty() ? "from main hand" : "from inventory";
             meta.lore(List.of(
                     Component.text("Deposit " + amount + " items").color(NamedTextColor.GRAY)
                             .decoration(TextDecoration.ITALIC, false),
-                    Component.text("from main hand").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC,
+                    Component.text(sourceText).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC,
                             false)));
             item.setItemMeta(meta);
         }
