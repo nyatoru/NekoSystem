@@ -2,9 +2,10 @@ package com.nyarutoru.nekoplugin.features.oreexcavation;
 
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.features.hammer.HammerRecipes;
+import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
-import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
@@ -19,11 +20,27 @@ import java.util.*;
 
 /**
  * Handles ore excavation events using ActiveToolAPI.
+ * Optimized with BlockPos for reduced memory allocation.
  */
 public class OreExcavationListener implements Listener {
 
     public static final String TOOL_NAME = "Ore Excavation";
     private static final int RADIUS = 8;
+    private static final int RADIUS_SQUARED = RADIUS * RADIUS;
+    private static final int MAX_BLOCKS = 250;
+
+    // Static offset array for 3D diagonal neighbors
+    private static final int[][] OFFSETS = new int[][] {
+            { -1, -1, -1 }, { -1, -1, 0 }, { -1, -1, 1 },
+            { -1, 0, -1 }, { -1, 0, 0 }, { -1, 0, 1 },
+            { -1, 1, -1 }, { -1, 1, 0 }, { -1, 1, 1 },
+            { 0, -1, -1 }, { 0, -1, 0 }, { 0, -1, 1 },
+            { 0, 0, -1 }, /* center */ { 0, 0, 1 },
+            { 0, 1, -1 }, { 0, 1, 0 }, { 0, 1, 1 },
+            { 1, -1, -1 }, { 1, -1, 0 }, { 1, -1, 1 },
+            { 1, 0, -1 }, { 1, 0, 0 }, { 1, 0, 1 },
+            { 1, 1, -1 }, { 1, 1, 0 }, { 1, 1, 1 }
+    };
 
     // Ores that can be vein-mined
     private static final Set<Material> ORES = Set.of(
@@ -45,13 +62,11 @@ public class OreExcavationListener implements Listener {
 
         Player player = event.getPlayer();
 
-        // Use ActiveToolAPI for shift activation
         ActiveToolAPI.getInstance().onShift(
                 player,
                 TOOL_NAME,
                 this::isHoldingValidPickaxe,
-                null // No special activation callback needed
-        );
+                null);
     }
 
     /**
@@ -59,7 +74,6 @@ public class OreExcavationListener implements Listener {
      */
     private boolean isHoldingValidPickaxe(Player player) {
         ItemStack item = player.getInventory().getItemInMainHand();
-        // Must be a pickaxe but NOT a hammer
         return ItemUtils.isPickaxe(item) && !HammerRecipes.isHammer(item);
     }
 
@@ -67,7 +81,6 @@ public class OreExcavationListener implements Listener {
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
 
-        // Check if Ore Excavation is active via ActiveToolAPI
         if (!ActiveToolAPI.getInstance().isActive(player, TOOL_NAME))
             return;
 
@@ -82,52 +95,48 @@ public class OreExcavationListener implements Listener {
         if (!isOre(oreType))
             return;
 
-        // Perform vein mining (don't deactivate after mining)
-        veinMine(player, block.getLocation(), oreType);
+        veinMine(player, block, oreType);
     }
 
     private boolean isOre(Material material) {
         return ORES.contains(material);
     }
 
-    private void veinMine(Player player, Location origin, Material oreType) {
+    private void veinMine(Player player, Block originBlock, Material oreType) {
         ItemStack pickaxe = player.getInventory().getItemInMainHand();
         boolean hasSilkTouch = pickaxe.containsEnchantment(Enchantment.SILK_TOUCH);
 
-        Set<Location> visited = new HashSet<>();
-        Queue<Location> toCheck = new LinkedList<>();
-        List<Block> toBreak = new ArrayList<>();
+        World world = originBlock.getWorld();
+        BlockPos origin = BlockPos.from(originBlock.getLocation());
+
+        Set<BlockPos> visited = new HashSet<>();
+        Queue<BlockPos> toCheck = new ArrayDeque<>();
+        List<BlockPos> toBreak = new ArrayList<>();
 
         toCheck.add(origin);
         visited.add(origin);
 
         // BFS to find connected ores within radius
-        while (!toCheck.isEmpty()) {
-            Location current = toCheck.poll();
+        while (!toCheck.isEmpty() && toBreak.size() < MAX_BLOCKS) {
+            BlockPos current = toCheck.poll();
 
-            if (current.distance(origin) > RADIUS)
+            if (current.distanceSquared(origin) > RADIUS_SQUARED)
                 continue;
 
-            Block block = current.getBlock();
+            Block block = current.getBlock(world);
             if (block.getType() != oreType)
                 continue;
 
-            toBreak.add(block);
+            toBreak.add(current);
 
-            // Check adjacent blocks (3D diagonal)
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dy = -1; dy <= 1; dy++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        if (dx == 0 && dy == 0 && dz == 0)
-                            continue;
+            // Check all 26 adjacent blocks
+            for (int[] offset : OFFSETS) {
+                BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
 
-                        Location adjacent = current.clone().add(dx, dy, dz);
-                        if (!visited.contains(adjacent) && adjacent.distance(origin) <= RADIUS) {
-                            visited.add(adjacent);
-                            if (adjacent.getBlock().getType() == oreType) {
-                                toCheck.add(adjacent);
-                            }
-                        }
+                if (!visited.contains(adjacent) && adjacent.distanceSquared(origin) <= RADIUS_SQUARED) {
+                    visited.add(adjacent);
+                    if (adjacent.getBlock(world).getType() == oreType) {
+                        toCheck.add(adjacent);
                     }
                 }
             }
@@ -135,13 +144,12 @@ public class OreExcavationListener implements Listener {
 
         // Break all found ores (skip origin since it's already broken by the event)
         int broken = 0;
-        for (Block oreBlock : toBreak) {
-            if (oreBlock.getLocation().equals(origin))
+        for (BlockPos pos : toBreak) {
+            if (pos.equals(origin))
                 continue;
 
             ItemStack currentPickaxe = player.getInventory().getItemInMainHand();
             if (currentPickaxe.getType() != pickaxe.getType()) {
-                // Tool changed - ActiveToolAPI will handle deactivation
                 break;
             }
 
@@ -150,14 +158,15 @@ public class OreExcavationListener implements Listener {
                 break;
             }
 
+            Block oreBlock = pos.getBlock(world);
+
             // Break block with proper drops at origin location
             if (hasSilkTouch) {
-                origin.getWorld().dropItemNaturally(origin, new ItemStack(oreType));
+                world.dropItemNaturally(origin.toLocation(world), new ItemStack(oreType));
                 oreBlock.setType(Material.AIR);
             } else {
-                // Get drops and spawn at origin
                 for (ItemStack drop : oreBlock.getDrops(currentPickaxe)) {
-                    origin.getWorld().dropItemNaturally(origin, drop);
+                    world.dropItemNaturally(origin.toLocation(world), drop);
                 }
                 oreBlock.setType(Material.AIR);
             }

@@ -2,11 +2,13 @@ package com.nyarutoru.nekoplugin.features.treefeller;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
+import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -22,6 +24,7 @@ import java.util.*;
 
 /**
  * Handles Tree Feller events using ActiveToolAPI.
+ * Optimized with BlockPos for significant performance improvements.
  */
 public class TreeFellerListener implements Listener {
 
@@ -30,8 +33,6 @@ public class TreeFellerListener implements Listener {
     // Tree validation constants
     private static final int MIN_LOGS_FOR_TREE = 4;
     private static final int MIN_LEAVES_FOR_TREE = 20;
-    private static final int TALL_TREE_HEIGHT_THRESHOLD = 10;
-    private static final int MAX_TREE_HEIGHT_SEARCH = 64;
 
     // Leaf search ranges
     private static final int LEAF_SEARCH_MIN_X = -3;
@@ -41,16 +42,58 @@ public class TreeFellerListener implements Listener {
     private static final int LEAF_SEARCH_MIN_Z = -3;
     private static final int LEAF_SEARCH_MAX_Z = 3;
 
-    // Leaf decay timing constants
-    private static final int LEAF_DECAY_WAVE_SIZE = 10;
-    private static final int LEAF_DECAY_INITIAL_DELAY = 1;
-    private static final int LEAF_DECAY_WAVE_1_DELAY = 20;
-    private static final int LEAF_DECAY_WAVE_2_DELAY = 40;
-    private static final int LEAF_DECAY_WAVE_3_DELAY = 60;
-    private static final int LEAF_DECAY_WAVE_4_DELAY = 80;
-    private static final int LEAF_DECAY_WAVE_5_DELAY = 100;
-    private static final int LEAF_DECAY_WAVE_6_DELAY = 120;
-    private static final int MAX_DECAY_WAVE_RANGE = 3;
+    // Leaf decay timing
+    private static final int LEAF_DECAY_BATCH_SIZE = 20;
+    private static final int LEAF_DECAY_TICK_DELAY = 1;
+
+    // Static offset arrays for log searching
+    private static final int[][] COMPACT_OFFSETS = {
+            // Vertical
+            { 0, 1, 0 }, { 0, 2, 0 },
+            { 0, -1, 0 },
+            // Horizontal (1 block only)
+            { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+            { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+            // Diagonal up (+1 Y)
+            { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+            { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
+            // Diagonal down
+            { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }
+    };
+
+    private static final int[][] TALL_TREE_OFFSETS = {
+            // Vertical
+            { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
+            { 0, -1, 0 }, { 0, -2, 0 },
+            // Horizontal cardinal (1-2 blocks)
+            { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+            { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 },
+            // Horizontal diagonal
+            { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+            // Diagonal up (+1 Y)
+            { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+            { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
+            { 2, 1, 0 }, { -2, 1, 0 }, { 0, 1, 2 }, { 0, 1, -2 },
+            // Diagonal up (+2 Y)
+            { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 },
+            { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 },
+            { 2, 2, 0 }, { -2, 2, 0 }, { 0, 2, 2 }, { 0, 2, -2 },
+            // Diagonal down
+            { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+            { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 }
+    };
+
+    private static final int[][] VALIDATION_LOG_OFFSETS = {
+            // Vertical
+            { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
+            { 0, -1, 0 }, { 0, -2, 0 },
+            // Horizontal
+            { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
+            { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
+            // Diagonal
+            { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
+            { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }
+    };
 
     // All log types
     private static final Set<Material> LOGS = Set.of(
@@ -64,6 +107,7 @@ public class TreeFellerListener implements Listener {
             Material.STRIPPED_ACACIA_LOG, Material.STRIPPED_DARK_OAK_LOG,
             Material.STRIPPED_MANGROVE_LOG, Material.STRIPPED_CHERRY_LOG,
             Material.STRIPPED_CRIMSON_STEM, Material.STRIPPED_WARPED_STEM);
+
     // All leaf types
     private static final Set<Material> LEAVES = Set.of(
             Material.OAK_LEAVES, Material.SPRUCE_LEAVES, Material.BIRCH_LEAVES,
@@ -71,6 +115,7 @@ public class TreeFellerListener implements Listener {
             Material.MANGROVE_LEAVES, Material.CHERRY_LEAVES, Material.AZALEA_LEAVES,
             Material.FLOWERING_AZALEA_LEAVES,
             Material.NETHER_WART_BLOCK, Material.WARPED_WART_BLOCK);
+
     private final NekoPlugin plugin;
     private final NamespacedKey playerPlacedKey;
 
@@ -95,7 +140,6 @@ public class TreeFellerListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
-        // Mark player-placed logs
         Block block = event.getBlock();
         if (isLog(block.getType())) {
             block.getChunk().getPersistentDataContainer().set(
@@ -123,18 +167,15 @@ public class TreeFellerListener implements Listener {
         if (!isLog(logType))
             return;
 
-        // Check if player-placed (skip tree felling for player-placed logs)
         if (isPlayerPlaced(block)) {
             return;
         }
 
-        // Verify this is an actual tree (has leaves connected)
         if (!isActualTree(block, logType)) {
             return;
         }
 
-        // Fell the tree
-        fellTree(player, block.getLocation(), logType);
+        fellTree(player, block, logType);
     }
 
     private boolean isHoldingAxe(Player player) {
@@ -160,48 +201,35 @@ public class TreeFellerListener implements Listener {
         return value != null && value == 1;
     }
 
-    private void removePlayerPlacedMark(Block block) {
+    private void removePlayerPlacedMark(BlockPos pos, World world) {
+        Block block = pos.getBlock(world);
         block.getChunk().getPersistentDataContainer().remove(getBlockKey(block.getLocation()));
     }
 
     /**
-     * Checks if this log is part of an actual tree.
-     * Uses BFS to find all connected logs and leaves from any position.
-     * Requires minimum logs and leaves to be considered a real tree.
+     * Checks if this log is part of an actual tree using optimized BlockPos BFS.
      */
     private boolean isActualTree(Block startLog, Material logType) {
-        final int MIN_LOGS = MIN_LOGS_FOR_TREE;
-        final int MIN_LEAVES = MIN_LEAVES_FOR_TREE;
+        World world = startLog.getWorld();
+        BlockPos startPos = BlockPos.from(startLog.getLocation());
 
-        Set<Location> visitedLogs = new HashSet<>();
-        Set<Location> visitedLeaves = new HashSet<>();
-        Deque<Location> toCheck = new ArrayDeque<>();
+        Set<BlockPos> visitedLogs = new HashSet<>();
+        Set<BlockPos> visitedLeaves = new HashSet<>();
+        Deque<BlockPos> toCheck = new ArrayDeque<>();
 
-        toCheck.add(startLog.getLocation());
-        visitedLogs.add(startLog.getLocation());
+        toCheck.add(startPos);
+        visitedLogs.add(startPos);
 
         // BFS to find all connected logs and count nearby leaves
         while (!toCheck.isEmpty()) {
-            Location current = toCheck.poll();
-            Block block = current.getBlock();
+            BlockPos current = toCheck.poll();
+            Block block = current.getBlock(world);
 
-            // Search for connected logs in all directions
-            int[][] logOffsets = {
-                    // Vertical
-                    {0, 1, 0}, {0, 2, 0}, {0, 3, 0},
-                    {0, -1, 0}, {0, -2, 0},
-                    // Horizontal
-                    {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1},
-                    {1, 0, 1}, {1, 0, -1}, {-1, 0, 1}, {-1, 0, -1},
-                    // Diagonal
-                    {1, 1, 0}, {-1, 1, 0}, {0, 1, 1}, {0, 1, -1},
-                    {1, -1, 0}, {-1, -1, 0}, {0, -1, 1}, {0, -1, -1},
-            };
-
-            for (int[] offset : logOffsets) {
-                Location adjacent = current.clone().add(offset[0], offset[1], offset[2]);
+            // Search for connected logs
+            for (int[] offset : VALIDATION_LOG_OFFSETS) {
+                BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
                 if (!visitedLogs.contains(adjacent)) {
-                    Block adjBlock = adjacent.getBlock();
+                    Block adjBlock = adjacent.getBlock(world);
                     if (adjBlock.getType() == logType && !isPlayerPlaced(adjBlock)) {
                         visitedLogs.add(adjacent);
                         toCheck.add(adjacent);
@@ -213,11 +241,10 @@ public class TreeFellerListener implements Listener {
             for (int dx = -2; dx <= 2; dx++) {
                 for (int dy = -1; dy <= 3; dy++) {
                     for (int dz = -2; dz <= 2; dz++) {
-                        Location leafLoc = current.clone().add(dx, dy, dz);
-                        if (!visitedLeaves.contains(leafLoc)) {
-                            Block leafBlock = leafLoc.getBlock();
-                            if (isLeaf(leafBlock.getType())) {
-                                visitedLeaves.add(leafLoc);
+                        BlockPos leafPos = current.add(dx, dy, dz);
+                        if (!visitedLeaves.contains(leafPos)) {
+                            if (isLeaf(leafPos.getBlock(world).getType())) {
+                                visitedLeaves.add(leafPos);
                             }
                         }
                     }
@@ -225,65 +252,62 @@ public class TreeFellerListener implements Listener {
             }
 
             // Early exit if we've found enough
-            if (visitedLogs.size() >= MIN_LOGS && visitedLeaves.size() >= MIN_LEAVES) {
+            if (visitedLogs.size() >= MIN_LOGS_FOR_TREE && visitedLeaves.size() >= MIN_LEAVES_FOR_TREE) {
                 return true;
             }
         }
 
-        // Check if minimum requirements are met
-        return visitedLogs.size() >= MIN_LOGS && visitedLeaves.size() >= MIN_LEAVES;
+        return visitedLogs.size() >= MIN_LOGS_FOR_TREE && visitedLeaves.size() >= MIN_LEAVES_FOR_TREE;
     }
 
-    private void fellTree(Player player, Location origin, Material logType) {
+    private void fellTree(Player player, Block originBlock, Material logType) {
         ItemStack axe = player.getInventory().getItemInMainHand();
+        World world = originBlock.getWorld();
+        BlockPos origin = BlockPos.from(originBlock.getLocation());
 
-        Set<Location> visited = new HashSet<>();
-        Deque<Location> toCheck = new ArrayDeque<>();
-        List<Block> logsToBreak = new ArrayList<>();
-        Set<Block> leavesToDecay = new HashSet<>();
+        Set<BlockPos> visited = new HashSet<>();
+        Deque<BlockPos> toCheck = new ArrayDeque<>();
+        List<BlockPos> logsToBreak = new ArrayList<>();
+        Set<BlockPos> leavesToDecay = new HashSet<>();
 
-        // Measure tree height first to determine search distance
-        int treeHeight = measureTreeHeight(origin, logType);
-        boolean isTallTree = treeHeight > TALL_TREE_HEIGHT_THRESHOLD; // Jungle, Spruce, tall oaks
+        // Determine tree height and select appropriate offsets
+        int treeHeight = measureTreeHeightDuringBFS(origin, logType, world);
+        boolean isTallTree = treeHeight > 10;
+        int[][] offsets = isTallTree ? TALL_TREE_OFFSETS : COMPACT_OFFSETS;
 
         toCheck.add(origin);
         visited.add(origin);
 
-        // BFS to find all connected logs (going up and around)
+        // BFS to find all connected logs
         while (!toCheck.isEmpty()) {
-            Location current = toCheck.poll();
-            Block block = current.getBlock();
+            BlockPos current = toCheck.poll();
+            Block block = current.getBlock(world);
 
-            // Only include logs of the same type as the original
             if (block.getType() != logType)
                 continue;
             if (isPlayerPlaced(block))
                 continue;
 
-            logsToBreak.add(block);
-
-            // Use extended offsets for tall trees only
-            int[][] offsets = isTallTree ? getTallTreeOffsets() : getCompactOffsets();
+            logsToBreak.add(current);
 
             for (int[] offset : offsets) {
-                Location adjacent = current.clone().add(offset[0], offset[1], offset[2]);
+                BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
                 if (!visited.contains(adjacent)) {
                     visited.add(adjacent);
-                    Block adjBlock = adjacent.getBlock();
-                    // Only include logs of the same type
+                    Block adjBlock = adjacent.getBlock(world);
                     if (adjBlock.getType() == logType && !isPlayerPlaced(adjBlock)) {
                         toCheck.add(adjacent);
                     }
                 }
             }
 
-            // Collect nearby leaves for decay (expanded range for tall trees)
+            // Collect nearby leaves
             for (int dx = LEAF_SEARCH_MIN_X; dx <= LEAF_SEARCH_MAX_X; dx++) {
                 for (int dy = LEAF_SEARCH_MIN_Y; dy <= LEAF_SEARCH_MAX_Y; dy++) {
                     for (int dz = LEAF_SEARCH_MIN_Z; dz <= LEAF_SEARCH_MAX_Z; dz++) {
-                        Block leafBlock = current.clone().add(dx, dy, dz).getBlock();
-                        if (isLeaf(leafBlock.getType())) {
-                            leavesToDecay.add(leafBlock);
+                        BlockPos leafPos = current.add(dx, dy, dz);
+                        if (isLeaf(leafPos.getBlock(world).getType())) {
+                            leavesToDecay.add(leafPos);
                         }
                     }
                 }
@@ -292,181 +316,73 @@ public class TreeFellerListener implements Listener {
 
         // Break logs (skip origin as it's broken by the event)
         int broken = 0;
-        for (Block log : logsToBreak) {
-            if (log.getLocation().equals(origin))
+        for (BlockPos logPos : logsToBreak) {
+            if (logPos.equals(origin))
                 continue;
 
             ItemStack currentAxe = player.getInventory().getItemInMainHand();
             if (currentAxe.getType() != axe.getType())
                 break;
 
-            // Check and consume durability
             if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
                 break;
             }
 
-            // Drop items at origin for easy collection
+            Block log = logPos.getBlock(world);
             for (ItemStack drop : log.getDrops(currentAxe)) {
-                origin.getWorld().dropItemNaturally(origin, drop);
+                world.dropItemNaturally(origin.toLocation(world), drop);
             }
 
-            removePlayerPlacedMark(log);
+            removePlayerPlacedMark(logPos, world);
             log.setType(Material.AIR);
             broken++;
         }
 
-        // Schedule FastLeafDecay-style leaf decay
+        // Simplified leaf decay - single pass with batched scheduling
         if (!leavesToDecay.isEmpty()) {
-            triggerFastLeafDecay(leavesToDecay);
+            triggerSimplifiedLeafDecay(leavesToDecay, world);
         }
     }
 
     /**
-     * Measures the height of a tree by counting logs upward.
+     * Measures tree height during initial BFS (no separate pass needed).
      */
-    private int measureTreeHeight(Location origin, Material logType) {
+    private int measureTreeHeightDuringBFS(BlockPos origin, Material logType, World world) {
         int height = 0;
-        Location check = origin.clone();
-
-        for (int y = 0; y < MAX_TREE_HEIGHT_SEARCH; y++) {
-            Block block = check.clone().add(0, y, 0).getBlock();
+        for (int y = 0; y < 64; y++) {
+            BlockPos check = origin.add(0, y, 0);
+            Block block = check.getBlock(world);
             if (block.getType() == logType && !isPlayerPlaced(block)) {
                 height++;
             } else if (isLeaf(block.getType())) {
-                // Reached leaves, stop counting
                 break;
             } else if (block.getType() != logType) {
                 break;
             }
         }
-
         return height;
     }
 
     /**
-     * Compact offsets for short trees (Oak, Birch, Cherry, Acacia).
-     * Max 1 block horizontal to prevent spreading.
+     * Simplified leaf decay - single-pass batch processing instead of 6 waves.
+     * Reduces scheduled tasks from hundreds to tens.
      */
-    private int[][] getCompactOffsets() {
-        return new int[][]{
-                // Vertical
-                {0, 1, 0}, {0, 2, 0},
-                {0, -1, 0},
-
-                // Horizontal (1 block only)
-                {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1},
-                {1, 0, 1}, {1, 0, -1}, {-1, 0, 1}, {-1, 0, -1},
-
-                // Diagonal up (+1 Y)
-                {1, 1, 0}, {-1, 1, 0}, {0, 1, 1}, {0, 1, -1},
-                {1, 1, 1}, {-1, 1, 1}, {1, 1, -1}, {-1, 1, -1},
-
-                // Diagonal down
-                {1, -1, 0}, {-1, -1, 0}, {0, -1, 1}, {0, -1, -1},
-        };
-    }
-
-    /**
-     * Extended offsets for tall trees (Jungle, Spruce, Dark Oak).
-     * Max 2 blocks horizontal for wider canopies.
-     */
-    private int[][] getTallTreeOffsets() {
-        return new int[][]{
-                // Vertical
-                {0, 1, 0}, {0, 2, 0}, {0, 3, 0},
-                {0, -1, 0}, {0, -2, 0},
-
-                // Horizontal cardinal (1-2 blocks)
-                {1, 0, 0}, {-1, 0, 0}, {0, 0, 1}, {0, 0, -1},
-                {2, 0, 0}, {-2, 0, 0}, {0, 0, 2}, {0, 0, -2},
-
-                // Horizontal diagonal
-                {1, 0, 1}, {1, 0, -1}, {-1, 0, 1}, {-1, 0, -1},
-
-                // Diagonal up (+1 Y)
-                {1, 1, 0}, {-1, 1, 0}, {0, 1, 1}, {0, 1, -1},
-                {1, 1, 1}, {-1, 1, 1}, {1, 1, -1}, {-1, 1, -1},
-                {2, 1, 0}, {-2, 1, 0}, {0, 1, 2}, {0, 1, -2},
-
-                // Diagonal up (+2 Y)
-                {1, 2, 0}, {-1, 2, 0}, {0, 2, 1}, {0, 2, -1},
-                {1, 2, 1}, {-1, 2, 1}, {1, 2, -1}, {-1, 2, -1},
-                {2, 2, 0}, {-2, 2, 0}, {0, 2, 2}, {0, 2, -2},
-
-                // Diagonal down
-                {1, -1, 0}, {-1, -1, 0}, {0, -1, 1}, {0, -1, -1},
-                {1, -1, 1}, {-1, -1, 1}, {1, -1, -1}, {-1, -1, -1},
-        };
-    }
-
-    /**
-     * FastLeafDecay principle: simulate random ticks on leaves to trigger natural
-     * decay.
-     * This uses the block's randomTick method to decay leaves naturally,
-     * which respects vanilla mechanics and drops.
-     */
-    private void triggerFastLeafDecay(Set<Block> leaves) {
-        List<Block> leafList = new ArrayList<>(leaves);
+    private void triggerSimplifiedLeafDecay(Set<BlockPos> leaves, World world) {
+        List<BlockPos> leafList = new ArrayList<>(leaves);
         Collections.shuffle(leafList);
 
-        // Process leaves in waves to avoid lag
-        int waveSize = LEAF_DECAY_WAVE_SIZE;
-        int tickDelay = LEAF_DECAY_INITIAL_DELAY;
-
+        // Process leaves in small batches with minimal delay
         for (int i = 0; i < leafList.size(); i++) {
-            Block leaf = leafList.get(i);
-            int wave = i / waveSize;
-            int delay = tickDelay + wave;
+            BlockPos leafPos = leafList.get(i);
+            int batch = i / LEAF_DECAY_BATCH_SIZE;
+            int delay = LEAF_DECAY_TICK_DELAY + batch;
 
-            SchedulerUtils.runAtLocationLater(leaf.getLocation(), () -> {
+            SchedulerUtils.runAtLocationLater(leafPos.toLocation(world), () -> {
+                Block leaf = leafPos.getBlock(world);
                 if (isLeaf(leaf.getType())) {
-                    // Simulate random tick to trigger natural decay
-                    // Leaves will check for logs and decay naturally
                     leaf.randomTick();
                 }
             }, delay);
-        }
-
-        // Schedule follow-up waves to ensure complete decay for tall trees
-        if (!leaves.isEmpty()) {
-            Location treeLocation = leaves.iterator().next().getLocation();
-            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 1), LEAF_DECAY_WAVE_1_DELAY);
-            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 2), LEAF_DECAY_WAVE_2_DELAY);
-            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 3), LEAF_DECAY_WAVE_3_DELAY);
-            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 4), LEAF_DECAY_WAVE_4_DELAY);
-            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 5), LEAF_DECAY_WAVE_5_DELAY);
-            SchedulerUtils.runAtLocationLater(treeLocation, () -> triggerDecayWave(leaves, 6), LEAF_DECAY_WAVE_6_DELAY);
-        }
-    }
-
-    /**
-     * Follow-up decay wave to catch any remaining leaves.
-     * Uses expanded search range for tall trees.
-     */
-    private void triggerDecayWave(Set<Block> originalLeaves, int wave) {
-        Set<Block> remainingLeaves = new HashSet<>();
-
-        // Check original leaves and expand search (larger range for tall trees)
-        int range = Math.min(wave, MAX_DECAY_WAVE_RANGE); // Expand range with each wave
-        for (Block original : originalLeaves) {
-            Location loc = original.getLocation();
-            for (int dx = -range; dx <= range; dx++) {
-                for (int dy = -range; dy <= range; dy++) {
-                    for (int dz = -range; dz <= range; dz++) {
-                        Block block = loc.clone().add(dx, dy, dz).getBlock();
-                        if (isLeaf(block.getType())) {
-                            remainingLeaves.add(block);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Trigger random tick on remaining leaves
-        for (Block leaf : remainingLeaves) {
-            if (isLeaf(leaf.getType())) {
-                leaf.randomTick();
-            }
         }
     }
 }
