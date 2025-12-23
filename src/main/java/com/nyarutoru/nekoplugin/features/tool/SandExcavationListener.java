@@ -1,9 +1,10 @@
 package com.nyarutoru.nekoplugin.features.tool;
 
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
+import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
-import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -18,11 +19,19 @@ import java.util.*;
 /**
  * Handles Sand Excavation events using ActiveToolAPI.
  * Allows mass mining of sand and gravel with shovels.
+ * Optimized with BlockPos for reduced memory allocation.
  */
 public class SandExcavationListener implements Listener {
 
     public static final String TOOL_NAME = "Sand Excavation";
     private static final int MAX_BLOCKS = 250;
+
+    // Static offset array for 6 cardinal directions
+    private static final int[][] OFFSETS = {
+            { 0, 1, 0 }, { 0, -1, 0 }, // up, down
+            { 1, 0, 0 }, { -1, 0, 0 }, // east, west
+            { 0, 0, 1 }, { 0, 0, -1 } // south, north
+    };
 
     // Excavatable materials
     private static final Set<Material> EXCAVATABLE = Set.of(
@@ -62,8 +71,7 @@ public class SandExcavationListener implements Listener {
         if (!isExcavatable(blockType))
             return;
 
-        // Excavate connected blocks
-        excavate(player, block.getLocation(), blockType);
+        excavate(player, block, blockType);
     }
 
     private boolean isHoldingShovel(Player player) {
@@ -74,40 +82,34 @@ public class SandExcavationListener implements Listener {
         return EXCAVATABLE.contains(material);
     }
 
-    private void excavate(Player player, Location origin, Material blockType) {
+    private void excavate(Player player, Block originBlock, Material blockType) {
         ItemStack shovel = player.getInventory().getItemInMainHand();
+        World world = originBlock.getWorld();
+        BlockPos origin = BlockPos.from(originBlock.getLocation());
 
-        Set<Location> visited = new HashSet<>();
-        Deque<Location> toCheck = new ArrayDeque<>();
-        List<Block> blocksToBreak = new ArrayList<>();
+        Set<BlockPos> visited = new HashSet<>();
+        Deque<BlockPos> toCheck = new ArrayDeque<>();
+        List<BlockPos> blocksToBreak = new ArrayList<>();
 
         toCheck.add(origin);
         visited.add(origin);
 
         // BFS to find all connected blocks of the same type
         while (!toCheck.isEmpty() && blocksToBreak.size() < MAX_BLOCKS) {
-            Location current = toCheck.poll();
-            Block block = current.getBlock();
+            BlockPos current = toCheck.poll();
+            Block block = current.getBlock(world);
 
-            // Only include blocks of the same type as the original
             if (block.getType() != blockType)
                 continue;
 
-            blocksToBreak.add(block);
+            blocksToBreak.add(current);
 
-            // Check 6 adjacent directions (up, down, north, south, east, west)
-            int[][] offsets = {
-                    { 0, 1, 0 }, { 0, -1, 0 }, // up, down
-                    { 1, 0, 0 }, { -1, 0, 0 }, // east, west
-                    { 0, 0, 1 }, { 0, 0, -1 } // south, north
-            };
-
-            for (int[] offset : offsets) {
-                Location adjacent = current.clone().add(offset[0], offset[1], offset[2]);
+            // Check 6 adjacent directions
+            for (int[] offset : OFFSETS) {
+                BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
                 if (!visited.contains(adjacent)) {
                     visited.add(adjacent);
-                    Block adjBlock = adjacent.getBlock();
-                    if (adjBlock.getType() == blockType) {
+                    if (adjacent.getBlock(world).getType() == blockType) {
                         toCheck.add(adjacent);
                     }
                 }
@@ -115,8 +117,8 @@ public class SandExcavationListener implements Listener {
         }
 
         // Break blocks (skip origin as it's broken by the event)
-        for (Block block : blocksToBreak) {
-            if (block.getLocation().equals(origin))
+        for (BlockPos pos : blocksToBreak) {
+            if (pos.equals(origin))
                 continue;
 
             ItemStack currentShovel = player.getInventory().getItemInMainHand();
@@ -128,9 +130,11 @@ public class SandExcavationListener implements Listener {
                 break;
             }
 
+            Block block = pos.getBlock(world);
+
             // Drop items at origin for easy collection
             for (ItemStack drop : block.getDrops(currentShovel)) {
-                origin.getWorld().dropItemNaturally(origin, drop);
+                world.dropItemNaturally(origin.toLocation(world), drop);
             }
 
             block.setType(Material.AIR);
