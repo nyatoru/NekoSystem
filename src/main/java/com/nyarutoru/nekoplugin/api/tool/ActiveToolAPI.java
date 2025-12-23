@@ -1,6 +1,5 @@
 package com.nyarutoru.nekoplugin.api.tool;
 
-import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.utils.ComponentUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Sound;
@@ -128,8 +127,6 @@ public class ActiveToolAPI {
 
         player.sendActionBar(ComponentUtils.activeStatus(toolName));
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 2.0f);
-
-        NekoPlugin.getInstance().getLogger().info(player.getName() + " activated " + toolName);
 
         if (onActivate != null) {
             onActivate.run();
