@@ -364,9 +364,8 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Fast leaf decay - uses vanilla decay mechanics but with guaranteed fallback.
-     * Sets persistent=false, triggers randomTick for vanilla decay, then breaks if
-     * still present.
+     * Fast leaf decay - uses vanilla decay mechanics.
+     * Sets persistent=false and triggers randomTick for vanilla decay.
      */
     private void triggerSimplifiedLeafDecay(Set<BlockPos> leaves, World world) {
         List<BlockPos> leafList = new ArrayList<>(leaves);
@@ -390,16 +389,8 @@ public class TreeFellerListener implements Listener {
                         leaf.setBlockData(leafData, false); // false = no physics update
                     }
 
-                    // Try vanilla decay first
+                    // Trigger vanilla decay
                     leaf.randomTick();
-
-                    // Guaranteed fallback - break leaf after short delay if randomTick didn't work
-                    // This ensures ALL leaves decay, even distant ones
-                    SchedulerUtils.runAtLocationLater(leaf.getLocation(), () -> {
-                        if (isLeaf(leaf.getType())) {
-                            leaf.breakNaturally();
-                        }
-                    }, 20); // 1 second delay - gives randomTick time to work first
                 }
             }, delay);
         }
