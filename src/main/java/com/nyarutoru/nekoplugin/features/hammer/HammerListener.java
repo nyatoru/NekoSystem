@@ -264,14 +264,16 @@ public class HammerListener implements Listener {
     }
 
     /**
-     * Prevent anvil upgrades for hammers.
+     * Prevent combining two hammers in anvil.
+     * Allow enchanting with enchanted books and renaming.
      */
     @EventHandler
     public void onAnvilPrepare(PrepareAnvilEvent event) {
         ItemStack first = event.getInventory().getItem(0);
         ItemStack second = event.getInventory().getItem(1);
 
-        if (HammerRecipes.isHammer(first) || HammerRecipes.isHammer(second)) {
+        // Only block if BOTH items are hammers (combining hammers)
+        if (HammerRecipes.isHammer(first) && HammerRecipes.isHammer(second)) {
             event.setResult(null);
         }
     }
