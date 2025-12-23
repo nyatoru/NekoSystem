@@ -1,6 +1,6 @@
 package com.nyarutoru.nekoplugin.features.treefeller;
 
-import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -64,14 +64,13 @@ public class FastLeafDecayListener implements Listener {
                 continue;
             }
             SCHEDULED.add(b);
-            Bukkit.getRegionScheduler().runDelayed(NekoPlugin.getInstance(), b.getLocation(), scheduledTask -> {
+            SchedulerUtils.runAtLocationLater(b.getLocation(), () -> {
                 final LeavesDecayEvent decayEvent = new LeavesDecayEvent(b);
                 Bukkit.getPluginManager().callEvent(decayEvent);
                 if (decayEvent.isCancelled())
                     return;
                 b.breakNaturally();
                 SCHEDULED.remove(b);
-                scheduledTask.cancel();
             }, ThreadLocalRandom.current().nextLong(2, 10));
         }
     }
