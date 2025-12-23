@@ -364,23 +364,42 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Simplified leaf decay - single-pass batch processing instead of 6 waves.
-     * Reduces scheduled tasks from hundreds to tens.
+     * Fast leaf decay - uses vanilla decay mechanics but with guaranteed fallback.
+     * Sets persistent=false, triggers randomTick for vanilla decay, then breaks if
+     * still present.
      */
     private void triggerSimplifiedLeafDecay(Set<BlockPos> leaves, World world) {
         List<BlockPos> leafList = new ArrayList<>(leaves);
         Collections.shuffle(leafList);
 
-        // Process leaves in small batches with minimal delay
+        // Process leaves in small batches with staggered timing for visual effect
         for (int i = 0; i < leafList.size(); i++) {
             BlockPos leafPos = leafList.get(i);
             int batch = i / LEAF_DECAY_BATCH_SIZE;
-            int delay = LEAF_DECAY_TICK_DELAY + batch;
+            int delay = LEAF_DECAY_TICK_DELAY + (batch * 2); // Stagger by 2 ticks per batch
 
             SchedulerUtils.runAtLocationLater(leafPos.toLocation(world), () -> {
                 Block leaf = leafPos.getBlock(world);
                 if (isLeaf(leaf.getType())) {
+                    // Set persistent flag to false - tells vanilla decay system these leaves should
+                    // decay
+                    org.bukkit.block.data.BlockData data = leaf.getBlockData();
+                    if (data instanceof org.bukkit.block.data.type.Leaves) {
+                        org.bukkit.block.data.type.Leaves leafData = (org.bukkit.block.data.type.Leaves) data;
+                        leafData.setPersistent(false);
+                        leaf.setBlockData(leafData, false); // false = no physics update
+                    }
+
+                    // Try vanilla decay first
                     leaf.randomTick();
+
+                    // Guaranteed fallback - break leaf after short delay if randomTick didn't work
+                    // This ensures ALL leaves decay, even distant ones
+                    SchedulerUtils.runAtLocationLater(leaf.getLocation(), () -> {
+                        if (isLeaf(leaf.getType())) {
+                            leaf.breakNaturally();
+                        }
+                    }, 20); // 1 second delay - gives randomTick time to work first
                 }
             }, delay);
         }
