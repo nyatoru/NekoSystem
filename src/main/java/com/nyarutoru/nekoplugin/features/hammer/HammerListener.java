@@ -1,13 +1,14 @@
 package com.nyarutoru.nekoplugin.features.hammer;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
+import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.attribute.AttributeModifier;
@@ -31,6 +32,7 @@ import java.util.Set;
 
 /**
  * Handles Hammer 3x3 mining, anvil restriction, and mining speed reduction.
+ * Optimized with BlockPos for better performance.
  */
 public class HammerListener implements Listener {
 
@@ -38,6 +40,26 @@ public class HammerListener implements Listener {
     private static final NamespacedKey HAMMER_SPEED_MODIFIER_KEY = new NamespacedKey("nekoplugin",
             "hammer_mining_speed");
     private static final double MINING_SPEED_REDUCTION = -0.35; // 35% reduction
+
+    // Static 3x3 offset patterns
+    private static final int[][] OFFSETS_HORIZONTAL = {
+            { -1, 0, -1 }, { 0, 0, -1 }, { 1, 0, -1 },
+            { -1, 0, 0 }, { 0, 0, 0 }, { 1, 0, 0 },
+            { -1, 0, 1 }, { 0, 0, 1 }, { 1, 0, 1 }
+    };
+
+    private static final int[][] OFFSETS_VERTICAL_NS = {
+            { -1, -1, 0 }, { 0, -1, 0 }, { 1, -1, 0 },
+            { -1, 0, 0 }, { 0, 0, 0 }, { 1, 0, 0 },
+            { -1, 1, 0 }, { 0, 1, 0 }, { 1, 1, 0 }
+    };
+
+    private static final int[][] OFFSETS_VERTICAL_EW = {
+            { 0, -1, -1 }, { 0, -1, 0 }, { 0, -1, 1 },
+            { 0, 0, -1 }, { 0, 0, 0 }, { 0, 0, 1 },
+            { 0, 1, -1 }, { 0, 1, 0 }, { 0, 1, 1 }
+    };
+
     // Blocks that can be mined with a pickaxe
     private static final Set<Material> MINEABLE = Set.of(
             // Stone types
@@ -108,9 +130,10 @@ public class HammerListener implements Listener {
             // Misc
             Material.GLOWSTONE, Material.MAGMA_BLOCK, Material.BONE_BLOCK,
             Material.LODESTONE, Material.RESPAWN_ANCHOR);
+
     private final NekoPlugin plugin;
-    // Track blocks being broken to prevent recursion
-    private final Set<Location> breakingBlocks = new HashSet<>();
+    // Track blocks being broken to prevent recursion using BlockPos
+    private final Set<BlockPos> breakingBlocks = new HashSet<>();
 
     public HammerListener(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -124,15 +147,16 @@ public class HammerListener implements Listener {
         Player player = event.getPlayer();
         if (player.isSneaking())
             return;
-        ItemStack tool = player.getInventory().getItemInMainHand();
 
+        ItemStack tool = player.getInventory().getItemInMainHand();
         if (!HammerRecipes.isHammer(tool))
             return;
 
         Block center = event.getBlock();
+        BlockPos centerPos = BlockPos.from(center.getLocation());
 
         // Prevent recursion
-        if (breakingBlocks.contains(center.getLocation()))
+        if (breakingBlocks.contains(centerPos))
             return;
 
         // Check if block is mineable
@@ -142,24 +166,24 @@ public class HammerListener implements Listener {
         // Get the face the player is looking at to determine 3x3 plane
         BlockFace face = getTargetBlockFace(player);
 
-        breakingBlocks.add(center.getLocation());
+        breakingBlocks.add(centerPos);
 
         try {
-            // Mine 3x3 area
             mine3x3(player, center, face, tool);
         } finally {
-            breakingBlocks.remove(center.getLocation());
+            breakingBlocks.remove(centerPos);
         }
     }
 
     private void mine3x3(Player player, Block center, BlockFace face, ItemStack hammer) {
         int[][] offsets = get3x3Offsets(face);
-        Location centerLoc = center.getLocation();
+        BlockPos centerPos = BlockPos.from(center.getLocation());
+        World world = center.getWorld();
         boolean hasSilkTouch = hammer.containsEnchantment(Enchantment.SILK_TOUCH);
 
-        // Check durability once at the start - hammer uses 1 durability per 3x3 swing
+        // Check durability once at the start
         if (!ItemUtils.isUnbreakable(hammer) && ItemUtils.wouldBreakFromDamage(hammer, 1)) {
-            return; // Don't break any extra blocks if hammer would break
+            return;
         }
 
         boolean brokeAnyBlock = false;
@@ -169,36 +193,35 @@ public class HammerListener implements Listener {
             if (offset[0] == 0 && offset[1] == 0 && offset[2] == 0)
                 continue;
 
-            Block target = centerLoc.clone().add(offset[0], offset[1], offset[2]).getBlock();
-
-            // Skip if not mineable or air
-            if (target.getType() == Material.AIR || !isMineable(target.getType()))
-                continue;
+            BlockPos targetPos = centerPos.add(offset[0], offset[1], offset[2]);
 
             // Skip if already being broken
-            if (breakingBlocks.contains(target.getLocation()))
+            if (breakingBlocks.contains(targetPos))
+                continue;
+
+            Block target = targetPos.getBlock(world);
+            Material type = target.getType();
+
+            // Skip if not mineable or air
+            if (type == Material.AIR || !isMineable(type))
                 continue;
 
             // Break block with appropriate drops
-            breakingBlocks.add(target.getLocation());
+            breakingBlocks.add(targetPos);
 
             if (hasSilkTouch) {
-                // Silk touch: drop the block itself
-                Material blockType = target.getType();
                 target.setType(Material.AIR);
-                target.getWorld().dropItemNaturally(target.getLocation().add(0.5, 0.5, 0.5),
-                        new ItemStack(blockType));
+                world.dropItemNaturally(targetPos.toLocation(world).add(0.5, 0.5, 0.5),
+                        new ItemStack(type));
             } else {
-                // Normal: use breakNaturally for proper drops (respects Fortune)
                 target.breakNaturally(hammer);
             }
 
-            breakingBlocks.remove(target.getLocation());
+            breakingBlocks.remove(targetPos);
             brokeAnyBlock = true;
         }
 
-        // Apply only 1 durability for the entire 3x3 operation (if any blocks were
-        // broken)
+        // Apply only 1 durability for the entire 3x3 operation
         if (brokeAnyBlock) {
             ItemUtils.applyDurabilityDamage(hammer, 1);
         }
@@ -206,31 +229,18 @@ public class HammerListener implements Listener {
 
     private int[][] get3x3Offsets(BlockFace face) {
         return switch (face) {
-            case UP, DOWN -> new int[][]{
-                    {-1, 0, -1}, {0, 0, -1}, {1, 0, -1},
-                    {-1, 0, 0}, {0, 0, 0}, {1, 0, 0},
-                    {-1, 0, 1}, {0, 0, 1}, {1, 0, 1}
-            };
-            case NORTH, SOUTH -> new int[][]{
-                    {-1, -1, 0}, {0, -1, 0}, {1, -1, 0},
-                    {-1, 0, 0}, {0, 0, 0}, {1, 0, 0},
-                    {-1, 1, 0}, {0, 1, 0}, {1, 1, 0}
-            };
-            case EAST, WEST -> new int[][]{
-                    {0, -1, -1}, {0, -1, 0}, {0, -1, 1},
-                    {0, 0, -1}, {0, 0, 0}, {0, 0, 1},
-                    {0, 1, -1}, {0, 1, 0}, {0, 1, 1}
-            };
-            default -> new int[][]{{0, 0, 0}};
+            case UP, DOWN -> OFFSETS_HORIZONTAL;
+            case NORTH, SOUTH -> OFFSETS_VERTICAL_NS;
+            case EAST, WEST -> OFFSETS_VERTICAL_EW;
+            default -> new int[][] { { 0, 0, 0 } };
         };
     }
 
     private BlockFace getTargetBlockFace(Player player) {
-        // Get the direction the player is facing
         float pitch = player.getLocation().getPitch();
         float yaw = player.getLocation().getYaw();
 
-        // Looking up/down (mining floor/ceiling)
+        // Looking up/down
         if (pitch < -45)
             return BlockFace.UP;
         if (pitch > 45)
@@ -261,7 +271,6 @@ public class HammerListener implements Listener {
         ItemStack first = event.getInventory().getItem(0);
         ItemStack second = event.getInventory().getItem(1);
 
-        // If either item is a hammer, cancel the result
         if (HammerRecipes.isHammer(first) || HammerRecipes.isHammer(second)) {
             event.setResult(null);
         }
@@ -269,9 +278,6 @@ public class HammerListener implements Listener {
 
     // ========== Mining Speed Reduction ==========
 
-    /**
-     * Apply/remove mining speed modifier when player switches held item.
-     */
     @EventHandler
     public void onItemHeld(PlayerItemHeldEvent event) {
         Player player = event.getPlayer();
@@ -279,20 +285,13 @@ public class HammerListener implements Listener {
         updateMiningSpeedModifier(player, newItem);
     }
 
-    /**
-     * Apply/remove mining speed modifier when player swaps items to off-hand.
-     */
     @EventHandler
     public void onSwapHand(PlayerSwapHandItemsEvent event) {
         Player player = event.getPlayer();
-        // Main hand item is the one swapped to (from off-hand)
         ItemStack newMainHand = event.getOffHandItem();
         updateMiningSpeedModifier(player, newMainHand);
     }
 
-    /**
-     * Check held item on join and apply modifier if needed.
-     */
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -300,18 +299,11 @@ public class HammerListener implements Listener {
         updateMiningSpeedModifier(player, mainHand);
     }
 
-    /**
-     * Remove modifier on quit to clean up.
-     */
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         removeMiningSpeedModifier(event.getPlayer());
     }
 
-    /**
-     * Updates the mining speed modifier based on whether the player is holding a
-     * hammer.
-     */
     private void updateMiningSpeedModifier(Player player, ItemStack item) {
         if (HammerRecipes.isHammer(item)) {
             applyMiningSpeedModifier(player);
@@ -320,18 +312,12 @@ public class HammerListener implements Listener {
         }
     }
 
-    /**
-     * Gets the PLAYER_BLOCK_BREAK_SPEED attribute from the Paper registry.
-     */
     private Attribute getBlockBreakSpeedAttribute() {
         Registry<Attribute> registry = RegistryAccess.registryAccess().getRegistry(RegistryKey.ATTRIBUTE);
         NamespacedKey key = NamespacedKey.minecraft("player.block_break_speed");
         return registry.get(key);
     }
 
-    /**
-     * Applies the mining speed reduction modifier to the player.
-     */
     private void applyMiningSpeedModifier(Player player) {
         Attribute blockBreakSpeed = getBlockBreakSpeedAttribute();
         if (blockBreakSpeed == null)
@@ -341,13 +327,11 @@ public class HammerListener implements Listener {
         if (attribute == null)
             return;
 
-        // Remove existing modifier first to prevent stacking
-        AttributeModifier existingModifier = attribute.getModifier(HAMMER_SPEED_MODIFIER_KEY);
-        if (existingModifier != null) {
-            return; // Already applied
-        }
+        // Check if already applied
+        if (attribute.getModifier(HAMMER_SPEED_MODIFIER_KEY) != null)
+            return;
 
-        // Create and apply modifier (35% reduction using MULTIPLY_SCALAR_1)
+        // Create and apply modifier
         AttributeModifier modifier = new AttributeModifier(
                 HAMMER_SPEED_MODIFIER_KEY,
                 MINING_SPEED_REDUCTION,
@@ -355,9 +339,6 @@ public class HammerListener implements Listener {
         attribute.addModifier(modifier);
     }
 
-    /**
-     * Removes the mining speed reduction modifier from the player.
-     */
     private void removeMiningSpeedModifier(Player player) {
         Attribute blockBreakSpeed = getBlockBreakSpeedAttribute();
         if (blockBreakSpeed == null)
