@@ -236,7 +236,20 @@ public class PlayerFeatureListener implements Listener {
         updateActivity(player);
 
         if (placed.getAmount() <= 1) {
-            replenishItem(player, placed.getType());
+            Material type = placed.getType();
+            // Determine which hand was used for placing
+            boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
+
+            SchedulerUtils.runAtEntityLater(player, () -> {
+                // Only replenish if the hand is now empty
+                ItemStack handItem = isOffhand
+                        ? player.getInventory().getItemInOffHand()
+                        : player.getInventory().getItemInMainHand();
+
+                if (handItem.getType() == Material.AIR) {
+                    replenishItem(player, type, isOffhand);
+                }
+            }, 1);
         }
     }
 
