@@ -257,9 +257,19 @@ public class PlayerFeatureListener implements Listener {
 
         if (consumed.getAmount() <= 1) {
             Material type = consumed.getType();
+            // Determine which hand the item was consumed from
+            boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
+
             SchedulerUtils.runAtEntityLater(player, () -> {
-                if (!replenishItem(player, type) && FOODS.contains(type)) {
-                    replenishAnyFood(player);
+                // Only replenish if the hand is now empty
+                ItemStack handItem = isOffhand
+                        ? player.getInventory().getItemInOffHand()
+                        : player.getInventory().getItemInMainHand();
+
+                if (handItem.getType() == Material.AIR) {
+                    if (!replenishItem(player, type, isOffhand) && FOODS.contains(type)) {
+                        replenishAnyFood(player, isOffhand);
+                    }
                 }
             }, 1);
         }
@@ -289,11 +299,19 @@ public class PlayerFeatureListener implements Listener {
     }
 
     private boolean replenishItem(Player player, Material type) {
+        return replenishItem(player, type, false);
+    }
+
+    private boolean replenishItem(Player player, Material type, boolean toOffhand) {
         PlayerInventory inv = player.getInventory();
         for (int i = 9; i < 36; i++) {
             ItemStack item = inv.getItem(i);
             if (item != null && item.getType() == type) {
-                inv.setItem(inv.getHeldItemSlot(), item.clone());
+                if (toOffhand) {
+                    inv.setItemInOffHand(item.clone());
+                } else {
+                    inv.setItem(inv.getHeldItemSlot(), item.clone());
+                }
                 inv.setItem(i, null);
                 return true;
             }
@@ -301,12 +319,16 @@ public class PlayerFeatureListener implements Listener {
         return false;
     }
 
-    private void replenishAnyFood(Player player) {
+    private void replenishAnyFood(Player player, boolean toOffhand) {
         PlayerInventory inv = player.getInventory();
         for (int i = 9; i < 36; i++) {
             ItemStack item = inv.getItem(i);
             if (item != null && FOODS.contains(item.getType())) {
-                inv.setItem(inv.getHeldItemSlot(), item.clone());
+                if (toOffhand) {
+                    inv.setItemInOffHand(item.clone());
+                } else {
+                    inv.setItem(inv.getHeldItemSlot(), item.clone());
+                }
                 inv.setItem(i, null);
                 return;
             }
