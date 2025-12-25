@@ -35,6 +35,11 @@ public class HammerFeature implements Feature {
         listener = new HammerListener(plugin);
         plugin.getServer().getPluginManager().registerEvents(listener, plugin);
 
+        // Register command
+        HammerCommand hammerCommand = new HammerCommand();
+        plugin.getCommand("givehammer").setExecutor(hammerCommand);
+        plugin.getCommand("givehammer").setTabCompleter(hammerCommand);
+
         this.enabled = true;
         plugin.getLogger().info("Hammer feature enabled.");
     }
