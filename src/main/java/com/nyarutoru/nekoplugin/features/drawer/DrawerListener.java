@@ -8,19 +8,22 @@ import com.nyarutoru.nekoplugin.features.drawer.gui.DrawerGUI;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.*;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Handles drawer block placement, interaction, breaking, and hopper
@@ -167,5 +170,138 @@ public class DrawerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onHopperPickup(InventoryPickupItemEvent event) {
         // Handles hoppers picking up dropped items - not needed for drawer interaction
+    }
+
+    // ==================== PISTON HANDLING ====================
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        BlockFace direction = event.getDirection();
+        List<Block> movedBlocks = event.getBlocks();
+
+        // Process in reverse order to avoid overwriting
+        List<Drawer> drawersToMove = new ArrayList<>();
+        List<Location> newLocations = new ArrayList<>();
+
+        for (Block block : movedBlocks) {
+            Drawer drawer = DrawerManager.getInstance().getDrawer(block.getLocation());
+            if (drawer != null) {
+                drawersToMove.add(drawer);
+                newLocations.add(block.getLocation().add(
+                        direction.getModX(),
+                        direction.getModY(),
+                        direction.getModZ()));
+            }
+        }
+
+        // Move drawers to new positions
+        for (int i = 0; i < drawersToMove.size(); i++) {
+            Drawer drawer = drawersToMove.get(i);
+            Location oldLocation = drawer.getLocation();
+            Location newLocation = newLocations.get(i);
+
+            // Close viewers before moving
+            DrawerGUI.closeAllViewers(drawer);
+
+            // Remove from old location and create at new location
+            DrawerManager.getInstance().removeDrawer(oldLocation);
+            Drawer newDrawer = DrawerManager.getInstance().createDrawer(newLocation, drawer.getTier());
+            if (newDrawer != null && drawer.getItemType() != null) {
+                newDrawer.addItems(drawer.getItemType(), drawer.getItemCount());
+            }
+        }
+
+        if (!drawersToMove.isEmpty()) {
+            DrawerManager.getInstance().markDirty();
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        if (!event.isSticky())
+            return;
+
+        BlockFace direction = event.getDirection();
+        List<Block> movedBlocks = event.getBlocks();
+
+        List<Drawer> drawersToMove = new ArrayList<>();
+        List<Location> newLocations = new ArrayList<>();
+
+        for (Block block : movedBlocks) {
+            Drawer drawer = DrawerManager.getInstance().getDrawer(block.getLocation());
+            if (drawer != null) {
+                drawersToMove.add(drawer);
+                newLocations.add(block.getLocation().add(
+                        direction.getModX(),
+                        direction.getModY(),
+                        direction.getModZ()));
+            }
+        }
+
+        // Move drawers to new positions
+        for (int i = 0; i < drawersToMove.size(); i++) {
+            Drawer drawer = drawersToMove.get(i);
+            Location oldLocation = drawer.getLocation();
+            Location newLocation = newLocations.get(i);
+
+            // Close viewers before moving
+            DrawerGUI.closeAllViewers(drawer);
+
+            // Remove from old location and create at new location
+            DrawerManager.getInstance().removeDrawer(oldLocation);
+            Drawer newDrawer = DrawerManager.getInstance().createDrawer(newLocation, drawer.getTier());
+            if (newDrawer != null && drawer.getItemType() != null) {
+                newDrawer.addItems(drawer.getItemType(), drawer.getItemCount());
+            }
+        }
+
+        if (!drawersToMove.isEmpty()) {
+            DrawerManager.getInstance().markDirty();
+        }
+    }
+
+    // ==================== EXPLOSION HANDLING ====================
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        handleExplosion(event.blockList());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        handleExplosion(event.blockList());
+    }
+
+    private void handleExplosion(List<Block> affectedBlocks) {
+        List<Block> drawersToRemove = new ArrayList<>();
+
+        for (Block block : affectedBlocks) {
+            Drawer drawer = DrawerManager.getInstance().getDrawer(block.getLocation());
+            if (drawer != null) {
+                drawersToRemove.add(block);
+
+                // Close all GUIs viewing this drawer
+                DrawerGUI.closeAllViewers(drawer);
+
+                // Drop the drawer item
+                Location dropLoc = block.getLocation().add(0.5, 0.5, 0.5);
+                ItemStack drawerItem;
+                if (!drawer.isEmpty()) {
+                    drawerItem = DrawerRecipes.createDrawerItemWithContents(
+                            drawer.getTier(),
+                            drawer.getItemType(),
+                            drawer.getItemCount());
+                } else {
+                    drawerItem = DrawerRecipes.createDrawerItem(drawer.getTier());
+                }
+                block.getWorld().dropItemNaturally(dropLoc, drawerItem);
+
+                // Remove drawer data
+                DrawerManager.getInstance().removeDrawer(block.getLocation());
+            }
+        }
+
+        // Remove drawer blocks from explosion list so they don't drop as barrels
+        affectedBlocks.removeAll(drawersToRemove);
     }
 }
