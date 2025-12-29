@@ -8,10 +8,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
+import org.bukkit.block.Block;
+import org.bukkit.block.data.Ageable;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
@@ -42,6 +46,15 @@ public class PlayerFeatureListener implements Listener {
             Material.MELON_SLICE, Material.MUTTON, Material.PORKCHOP, Material.POTATO,
             Material.PUMPKIN_PIE, Material.RABBIT, Material.SALMON, Material.SWEET_BERRIES,
             Material.GLOW_BERRIES);
+
+    // ========== Crop Harvest ==========
+    private static final Set<Material> CROPS = Set.of(
+            Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
+            Material.NETHER_WART);
+
+    private static final Set<Material> HOES = Set.of(
+            Material.WOODEN_HOE, Material.STONE_HOE, Material.IRON_HOE,
+            Material.GOLDEN_HOE, Material.DIAMOND_HOE, Material.NETHERITE_HOE);
 
     private final NekoPlugin plugin;
 
@@ -191,6 +204,72 @@ public class PlayerFeatureListener implements Listener {
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
         updateActivity(event.getPlayer());
+
+        // Right-click crop harvest
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
+            handleCropHarvest(event);
+        }
+    }
+
+    // ==================== CROP HARVEST ====================
+
+    private void handleCropHarvest(PlayerInteractEvent event) {
+        Block block = event.getClickedBlock();
+        if (block == null)
+            return;
+
+        Material cropType = block.getType();
+        if (!CROPS.contains(cropType))
+            return;
+
+        // Check if using hoe or empty hand
+        Player player = event.getPlayer();
+        ItemStack handItem = player.getInventory().getItemInMainHand();
+        Material handMaterial = handItem.getType();
+
+        if (handMaterial != Material.AIR && !HOES.contains(handMaterial)) {
+            return;
+        }
+
+        // Check if crop is fully grown
+        if (!(block.getBlockData() instanceof Ageable ageable))
+            return;
+
+        if (ageable.getAge() < ageable.getMaximumAge()) {
+            return; // Not fully grown
+        }
+
+        // Get seed material for replanting
+        Material seedMaterial = getSeedMaterial(cropType);
+        if (seedMaterial == null)
+            return;
+
+        // Harvest: drop items at block location
+        Location dropLoc = block.getLocation().add(0.5, 0.5, 0.5);
+        for (ItemStack drop : block.getDrops(handItem, player)) {
+            block.getWorld().dropItemNaturally(dropLoc, drop);
+        }
+
+        // Replant: reset crop age to 0
+        ageable.setAge(0);
+        block.setBlockData(ageable);
+
+        // Play harvest sound
+        block.getWorld().playSound(block.getLocation(), Sound.BLOCK_CROP_BREAK, 1.0f, 1.0f);
+
+        // Cancel event to prevent other interactions
+        event.setCancelled(true);
+    }
+
+    private Material getSeedMaterial(Material cropType) {
+        return switch (cropType) {
+            case WHEAT -> Material.WHEAT_SEEDS;
+            case CARROTS -> Material.CARROT;
+            case POTATOES -> Material.POTATO;
+            case BEETROOTS -> Material.BEETROOT_SEEDS;
+            case NETHER_WART -> Material.NETHER_WART;
+            default -> null;
+        };
     }
 
     @EventHandler
@@ -259,7 +338,20 @@ public class PlayerFeatureListener implements Listener {
         Material bucket = event.getBucket();
         updateActivity(player);
 
-        SchedulerUtils.runAtEntityLater(player, () -> replenishItem(player, bucket), 1);
+        // Determine which hand held the bucket
+        boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
+
+        SchedulerUtils.runAtEntityLater(player, () -> {
+            // Only replenish if the hand now has an empty bucket
+            ItemStack handItem = isOffhand
+                    ? player.getInventory().getItemInOffHand()
+                    : player.getInventory().getItemInMainHand();
+
+            // After emptying bucket, the hand will have BUCKET (empty bucket)
+            if (handItem.getType() == Material.BUCKET) {
+                replenishItem(player, bucket, isOffhand);
+            }
+        }, 1);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -303,16 +395,22 @@ public class PlayerFeatureListener implements Listener {
 
         if (type != null) {
             Material finalType = type;
+
+            // Determine which hand held the projectile by checking which one had it
+            ItemStack mainHand = player.getInventory().getItemInMainHand();
+            ItemStack offHand = player.getInventory().getItemInOffHand();
+            boolean isOffhand = offHand.getType() == type && mainHand.getType() != type;
+
             SchedulerUtils.runAtEntityLater(player, () -> {
-                if (player.getInventory().getItemInMainHand().getType() == Material.AIR) {
-                    replenishItem(player, finalType);
+                ItemStack handItem = isOffhand
+                        ? player.getInventory().getItemInOffHand()
+                        : player.getInventory().getItemInMainHand();
+
+                if (handItem.getType() == Material.AIR) {
+                    replenishItem(player, finalType, isOffhand);
                 }
             }, 1);
         }
-    }
-
-    private boolean replenishItem(Player player, Material type) {
-        return replenishItem(player, type, false);
     }
 
     private boolean replenishItem(Player player, Material type, boolean toOffhand) {
