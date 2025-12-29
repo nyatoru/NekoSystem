@@ -72,16 +72,6 @@ public class DrawerRecipes {
                         .decoration(TextDecoration.ITALIC, false));
             }
 
-            DrawerTier nextTier = tier.getNextTier();
-            if (nextTier != null && storedCount == 0) {
-                lore.add(Component.text("Upgrade with: ")
-                        .color(NamedTextColor.GRAY)
-                        .decoration(TextDecoration.ITALIC, false)
-                        .append(Component.text(formatMaterial(nextTier.getUpgradeMaterial()))
-                                .color(NamedTextColor.YELLOW)
-                                .decoration(TextDecoration.ITALIC, false)));
-            }
-
             meta.lore(lore);
 
             meta.getPersistentDataContainer().set(
