@@ -1,6 +1,6 @@
 package com.nyarutoru.nekoplugin.features.oreexcavation;
 
-import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
+import com.nyarutoru.nekoplugin.api.tool.AbstractVeinMiner;
 import com.nyarutoru.nekoplugin.features.hammer.HammerRecipes;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
@@ -9,38 +9,22 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.*;
+import java.util.List;
+import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Handles ore excavation events using ActiveToolAPI.
- * Optimized with BlockPos for reduced memory allocation.
+ * Extends AbstractVeinMiner for optimized BFS mining.
  */
-public class OreExcavationListener implements Listener {
+public class OreExcavationListener extends AbstractVeinMiner {
 
     public static final String TOOL_NAME = "Ore Excavation";
     private static final int RADIUS = 8;
     private static final int RADIUS_SQUARED = RADIUS * RADIUS;
     private static final int MAX_BLOCKS = 250;
-
-    // Static offset array for 3D diagonal neighbors
-    private static final int[][] OFFSETS = new int[][] {
-            { -1, -1, -1 }, { -1, -1, 0 }, { -1, -1, 1 },
-            { -1, 0, -1 }, { -1, 0, 0 }, { -1, 0, 1 },
-            { -1, 1, -1 }, { -1, 1, 0 }, { -1, 1, 1 },
-            { 0, -1, -1 }, { 0, -1, 0 }, { 0, -1, 1 },
-            { 0, 0, -1 }, /* center */ { 0, 0, 1 },
-            { 0, 1, -1 }, { 0, 1, 0 }, { 0, 1, 1 },
-            { 1, -1, -1 }, { 1, -1, 0 }, { 1, -1, 1 },
-            { 1, 0, -1 }, { 1, 0, 0 }, { 1, 0, 1 },
-            { 1, 1, -1 }, { 1, 1, 0 }, { 1, 1, 1 }
-    };
 
     // Ores that can be vein-mined
     private static final Set<Material> ORES = Set.of(
@@ -55,18 +39,36 @@ public class OreExcavationListener implements Listener {
             Material.NETHER_GOLD_ORE, Material.NETHER_QUARTZ_ORE,
             Material.ANCIENT_DEBRIS);
 
-    @EventHandler
-    public void onPlayerSneak(PlayerToggleSneakEvent event) {
-        if (!event.isSneaking())
-            return;
+    private final Predicate<Player> toolPredicate = this::isHoldingValidPickaxe;
 
-        Player player = event.getPlayer();
+    @Override
+    protected String getToolName() {
+        return TOOL_NAME;
+    }
 
-        ActiveToolAPI.getInstance().onShift(
-                player,
-                TOOL_NAME,
-                this::isHoldingValidPickaxe,
-                null);
+    @Override
+    protected int getMaxBlocks() {
+        return MAX_BLOCKS;
+    }
+
+    @Override
+    protected int[][] getSearchOffsets() {
+        return FULL_OFFSETS; // Use 26-directional for ores
+    }
+
+    @Override
+    protected Set<Material> getTargetMaterials() {
+        return ORES;
+    }
+
+    @Override
+    protected Predicate<Player> getToolPredicate() {
+        return toolPredicate;
+    }
+
+    @Override
+    protected int getRadiusSquared() {
+        return RADIUS_SQUARED;
     }
 
     /**
@@ -77,101 +79,37 @@ public class OreExcavationListener implements Listener {
         return ItemUtils.isPickaxe(item) && !HammerRecipes.isHammer(item);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockBreak(BlockBreakEvent event) {
-        Player player = event.getPlayer();
+    @Override
+    protected void breakBlocks(Player player, ItemStack tool, World world,
+            BlockPos origin, List<BlockPos> blocksToBreak) {
+        Material originalToolType = tool.getType();
+        boolean hasSilkTouch = tool.containsEnchantment(Enchantment.SILK_TOUCH);
 
-        if (!ActiveToolAPI.getInstance().isActive(player, TOOL_NAME))
-            return;
-
-        if (!isHoldingValidPickaxe(player)) {
-            ActiveToolAPI.getInstance().deactivate(player, "no pickaxe");
-            return;
-        }
-
-        Block block = event.getBlock();
-        Material oreType = block.getType();
-
-        if (!isOre(oreType))
-            return;
-
-        veinMine(player, block, oreType);
-    }
-
-    private boolean isOre(Material material) {
-        return ORES.contains(material);
-    }
-
-    private void veinMine(Player player, Block originBlock, Material oreType) {
-        ItemStack pickaxe = player.getInventory().getItemInMainHand();
-        boolean hasSilkTouch = pickaxe.containsEnchantment(Enchantment.SILK_TOUCH);
-
-        World world = originBlock.getWorld();
-        BlockPos origin = BlockPos.from(originBlock.getLocation());
-
-        Set<BlockPos> visited = new HashSet<>();
-        Queue<BlockPos> toCheck = new ArrayDeque<>();
-        List<BlockPos> toBreak = new ArrayList<>();
-
-        toCheck.add(origin);
-        visited.add(origin);
-
-        // BFS to find connected ores within radius
-        while (!toCheck.isEmpty() && toBreak.size() < MAX_BLOCKS) {
-            BlockPos current = toCheck.poll();
-
-            if (current.distanceSquared(origin) > RADIUS_SQUARED)
-                continue;
-
-            Block block = current.getBlock(world);
-            if (block.getType() != oreType)
-                continue;
-
-            toBreak.add(current);
-
-            // Check all 26 adjacent blocks
-            for (int[] offset : OFFSETS) {
-                BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
-
-                if (!visited.contains(adjacent) && adjacent.distanceSquared(origin) <= RADIUS_SQUARED) {
-                    visited.add(adjacent);
-                    if (adjacent.getBlock(world).getType() == oreType) {
-                        toCheck.add(adjacent);
-                    }
-                }
-            }
-        }
-
-        // Break all found ores (skip origin since it's already broken by the event)
-        int broken = 0;
-        for (BlockPos pos : toBreak) {
+        for (BlockPos pos : blocksToBreak) {
             if (pos.equals(origin))
                 continue;
 
-            ItemStack currentPickaxe = player.getInventory().getItemInMainHand();
-            if (currentPickaxe.getType() != pickaxe.getType()) {
+            ItemStack currentTool = player.getInventory().getItemInMainHand();
+            if (currentTool.getType() != originalToolType)
+                break;
+
+            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentTool, 1, getToolName())) {
                 break;
             }
 
-            // Check and consume durability
-            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentPickaxe, 1, TOOL_NAME)) {
-                break;
-            }
+            Block block = pos.getBlock(world);
+            Material oreType = block.getType();
 
-            Block oreBlock = pos.getBlock(world);
-
-            // Break block with proper drops at origin location
+            // Handle silk touch for ore blocks
             if (hasSilkTouch) {
                 world.dropItemNaturally(origin.toLocation(world), new ItemStack(oreType));
-                oreBlock.setType(Material.AIR);
             } else {
-                for (ItemStack drop : oreBlock.getDrops(currentPickaxe)) {
+                for (ItemStack drop : block.getDrops(currentTool)) {
                     world.dropItemNaturally(origin.toLocation(world), drop);
                 }
-                oreBlock.setType(Material.AIR);
             }
 
-            broken++;
+            block.setType(Material.AIR);
         }
     }
 }

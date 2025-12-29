@@ -21,6 +21,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.*;
+import java.util.EnumSet;
 
 /**
  * Handles Tree Feller events using ActiveToolAPI.
@@ -124,7 +125,8 @@ public class TreeFellerListener implements Listener {
             Material.MANGROVE_ROOTS, Material.MUDDY_MANGROVE_ROOTS);
 
     // Structure blocks - indicates player-built structures (not natural trees)
-    private static final Set<Material> STRUCTURE_BLOCKS = new HashSet<>();
+    // Using EnumSet for O(1) lookups
+    private static final Set<Material> STRUCTURE_BLOCKS = EnumSet.noneOf(Material.class);
 
     static {
         // Fences and gates
@@ -203,11 +205,9 @@ public class TreeFellerListener implements Listener {
     }
 
     private final NekoPlugin plugin;
-    private final NamespacedKey playerPlacedKey;
 
     public TreeFellerListener(NekoPlugin plugin) {
         this.plugin = plugin;
-        this.playerPlacedKey = new NamespacedKey(plugin, "player_placed");
     }
 
     @EventHandler
@@ -361,7 +361,6 @@ public class TreeFellerListener implements Listener {
         Set<BlockPos> visitedLogs = new HashSet<>();
         Set<BlockPos> visitedLeaves = new HashSet<>();
         Deque<BlockPos> toCheck = new ArrayDeque<>();
-        int trunkCount = 0;
 
         toCheck.add(startPos);
         visitedLogs.add(startPos);
@@ -369,12 +368,6 @@ public class TreeFellerListener implements Listener {
         // BFS to find all connected logs and count nearby leaves
         while (!toCheck.isEmpty()) {
             BlockPos current = toCheck.poll();
-            Block block = current.getBlock(world);
-
-            // Count separate trunk bases (for multi-trunk detection)
-            if (current.y() <= startPos.y() + 1) {
-                trunkCount++;
-            }
 
             // Search for connected logs (including horizontal for multi-trunk)
             for (int[] offset : VALIDATION_LOG_OFFSETS) {
@@ -492,7 +485,6 @@ public class TreeFellerListener implements Listener {
         }
 
         // Break logs (skip origin as it's broken by the event)
-        int broken = 0;
         for (BlockPos logPos : logsToBreak) {
             if (logPos.equals(origin))
                 continue;
@@ -512,7 +504,6 @@ public class TreeFellerListener implements Listener {
 
             removePlayerPlacedMark(logPos, world);
             log.setType(Material.AIR);
-            broken++;
         }
 
         // Break mangrove roots
