@@ -24,7 +24,7 @@ import java.util.*;
 
 /**
  * Handles Tree Feller events using ActiveToolAPI.
- * Optimized with BlockPos for significant performance improvements.
+ * Features advanced structure detection to prevent felling player builds.
  */
 public class TreeFellerListener implements Listener {
 
@@ -33,6 +33,8 @@ public class TreeFellerListener implements Listener {
     // Tree validation constants
     private static final int MIN_LOGS_FOR_TREE = 4;
     private static final int MIN_LEAVES_FOR_TREE = 20;
+    private static final int STRUCTURE_CHECK_RADIUS = 2;
+    private static final int MAX_STRUCTURE_BLOCKS_ALLOWED = 2;
 
     // Leaf search ranges
     private static final int LEAF_SEARCH_MIN_X = -3;
@@ -46,29 +48,30 @@ public class TreeFellerListener implements Listener {
     private static final int LEAF_DECAY_BATCH_SIZE = 20;
     private static final int LEAF_DECAY_TICK_DELAY = 1;
 
-    // Static offset arrays for log searching
+    // Static offset arrays for log searching (includes multi-trunk support)
     private static final int[][] COMPACT_OFFSETS = {
             // Vertical
             { 0, 1, 0 }, { 0, 2, 0 },
             { 0, -1, 0 },
-            // Horizontal (1 block only)
+            // Horizontal (1 block - for multi-trunk trees)
             { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
             { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
             // Diagonal up (+1 Y)
             { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
             { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
-            // Diagonal down
-            { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }
+            // Diagonal down (for forking trees)
+            { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
+            { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 }
     };
 
     private static final int[][] TALL_TREE_OFFSETS = {
-            // Vertical
+            // Vertical (extended range)
             { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
             { 0, -1, 0 }, { 0, -2, 0 },
-            // Horizontal cardinal (1-2 blocks)
+            // Horizontal cardinal (1-2 blocks for 2x2 trees)
             { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
             { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 },
-            // Horizontal diagonal
+            // Horizontal diagonal (for multi-trunk)
             { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
             // Diagonal up (+1 Y)
             { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
@@ -78,7 +81,7 @@ public class TreeFellerListener implements Listener {
             { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 },
             { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 },
             { 2, 2, 0 }, { -2, 2, 0 }, { 0, 2, 2 }, { 0, 2, -2 },
-            // Diagonal down
+            // Diagonal down (for forking)
             { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
             { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 }
     };
@@ -87,10 +90,10 @@ public class TreeFellerListener implements Listener {
             // Vertical
             { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
             { 0, -1, 0 }, { 0, -2, 0 },
-            // Horizontal
+            // Horizontal (multi-trunk support)
             { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
             { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
-            // Diagonal
+            // Diagonal vertical
             { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
             { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 }
     };
@@ -115,6 +118,89 @@ public class TreeFellerListener implements Listener {
             Material.MANGROVE_LEAVES, Material.CHERRY_LEAVES, Material.AZALEA_LEAVES,
             Material.FLOWERING_AZALEA_LEAVES,
             Material.NETHER_WART_BLOCK, Material.WARPED_WART_BLOCK);
+
+    // Mangrove roots (for mangrove tree handling)
+    private static final Set<Material> MANGROVE_ROOTS = Set.of(
+            Material.MANGROVE_ROOTS, Material.MUDDY_MANGROVE_ROOTS);
+
+    // Structure blocks - indicates player-built structures (not natural trees)
+    private static final Set<Material> STRUCTURE_BLOCKS = new HashSet<>();
+
+    static {
+        // Fences and gates
+        for (Material m : Material.values()) {
+            String name = m.name();
+            if (name.endsWith("_FENCE") || name.endsWith("_FENCE_GATE")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Doors and trapdoors
+            if (name.endsWith("_DOOR") || name.endsWith("_TRAPDOOR")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Stairs and slabs
+            if (name.endsWith("_STAIRS") || name.endsWith("_SLAB")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Signs
+            if (name.contains("SIGN")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Walls
+            if (name.endsWith("_WALL")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Pressure plates
+            if (name.endsWith("_PRESSURE_PLATE")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Buttons
+            if (name.endsWith("_BUTTON")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Carpets
+            if (name.endsWith("_CARPET")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Beds
+            if (name.endsWith("_BED")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+            // Banners
+            if (name.contains("BANNER")) {
+                STRUCTURE_BLOCKS.add(m);
+            }
+        }
+        // Additional structure indicators
+        STRUCTURE_BLOCKS.add(Material.CHEST);
+        STRUCTURE_BLOCKS.add(Material.TRAPPED_CHEST);
+        STRUCTURE_BLOCKS.add(Material.BARREL);
+        STRUCTURE_BLOCKS.add(Material.FURNACE);
+        STRUCTURE_BLOCKS.add(Material.BLAST_FURNACE);
+        STRUCTURE_BLOCKS.add(Material.SMOKER);
+        STRUCTURE_BLOCKS.add(Material.CRAFTING_TABLE);
+        STRUCTURE_BLOCKS.add(Material.CARTOGRAPHY_TABLE);
+        STRUCTURE_BLOCKS.add(Material.SMITHING_TABLE);
+        STRUCTURE_BLOCKS.add(Material.FLETCHING_TABLE);
+        STRUCTURE_BLOCKS.add(Material.LECTERN);
+        STRUCTURE_BLOCKS.add(Material.ENCHANTING_TABLE);
+        STRUCTURE_BLOCKS.add(Material.ANVIL);
+        STRUCTURE_BLOCKS.add(Material.CHIPPED_ANVIL);
+        STRUCTURE_BLOCKS.add(Material.DAMAGED_ANVIL);
+        STRUCTURE_BLOCKS.add(Material.BREWING_STAND);
+        STRUCTURE_BLOCKS.add(Material.LADDER);
+        STRUCTURE_BLOCKS.add(Material.TORCH);
+        STRUCTURE_BLOCKS.add(Material.WALL_TORCH);
+        STRUCTURE_BLOCKS.add(Material.LANTERN);
+        STRUCTURE_BLOCKS.add(Material.SOUL_LANTERN);
+        STRUCTURE_BLOCKS.add(Material.ITEM_FRAME);
+        STRUCTURE_BLOCKS.add(Material.GLOW_ITEM_FRAME);
+        STRUCTURE_BLOCKS.add(Material.PAINTING);
+        STRUCTURE_BLOCKS.add(Material.FLOWER_POT);
+        STRUCTURE_BLOCKS.add(Material.ARMOR_STAND);
+        STRUCTURE_BLOCKS.add(Material.BOOKSHELF);
+        STRUCTURE_BLOCKS.add(Material.GLASS);
+        STRUCTURE_BLOCKS.add(Material.GLASS_PANE);
+    }
 
     private final NekoPlugin plugin;
     private final NamespacedKey playerPlacedKey;
@@ -171,6 +257,11 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
+        // Advanced structure detection
+        if (isPartOfStructure(block)) {
+            return;
+        }
+
         if (!isActualTree(block, logType)) {
             return;
         }
@@ -190,6 +281,14 @@ public class TreeFellerListener implements Listener {
         return LEAVES.contains(material);
     }
 
+    private boolean isMangroveRoot(Material material) {
+        return MANGROVE_ROOTS.contains(material);
+    }
+
+    private boolean isStructureBlock(Material material) {
+        return STRUCTURE_BLOCKS.contains(material);
+    }
+
     private NamespacedKey getBlockKey(Location loc) {
         return new NamespacedKey(plugin, "pp_" + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ());
     }
@@ -207,7 +306,53 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
+     * Advanced structure detection - checks if log is part of a player-built
+     * structure.
+     * Looks for structural elements like fences, stairs, slabs, doors, etc. nearby.
+     */
+    private boolean isPartOfStructure(Block startLog) {
+        World world = startLog.getWorld();
+        BlockPos startPos = BlockPos.from(startLog.getLocation());
+        int structureBlockCount = 0;
+
+        // Check surrounding area for structure blocks
+        for (int dx = -STRUCTURE_CHECK_RADIUS; dx <= STRUCTURE_CHECK_RADIUS; dx++) {
+            for (int dy = -STRUCTURE_CHECK_RADIUS; dy <= STRUCTURE_CHECK_RADIUS; dy++) {
+                for (int dz = -STRUCTURE_CHECK_RADIUS; dz <= STRUCTURE_CHECK_RADIUS; dz++) {
+                    BlockPos checkPos = startPos.add(dx, dy, dz);
+                    Block checkBlock = checkPos.getBlock(world);
+
+                    if (isStructureBlock(checkBlock.getType())) {
+                        structureBlockCount++;
+                        if (structureBlockCount > MAX_STRUCTURE_BLOCKS_ALLOWED) {
+                            return true; // Too many structure blocks nearby - likely a building
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also check if log is directly adjacent to multiple planks (floor/wall
+        // indicator)
+        int adjacentPlanks = 0;
+        int[][] directNeighbors = {
+                { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, 1, 0 }, { 0, -1, 0 }
+        };
+        for (int[] offset : directNeighbors) {
+            BlockPos neighbor = startPos.add(offset[0], offset[1], offset[2]);
+            Material mat = neighbor.getBlock(world).getType();
+            if (mat.name().endsWith("_PLANKS")) {
+                adjacentPlanks++;
+            }
+        }
+
+        // If 3+ sides have planks, this is likely part of a structure
+        return adjacentPlanks >= 3;
+    }
+
+    /**
      * Checks if this log is part of an actual tree using optimized BlockPos BFS.
+     * Includes multi-trunk detection for forked and branching trees.
      */
     private boolean isActualTree(Block startLog, Material logType) {
         World world = startLog.getWorld();
@@ -216,6 +361,7 @@ public class TreeFellerListener implements Listener {
         Set<BlockPos> visitedLogs = new HashSet<>();
         Set<BlockPos> visitedLeaves = new HashSet<>();
         Deque<BlockPos> toCheck = new ArrayDeque<>();
+        int trunkCount = 0;
 
         toCheck.add(startPos);
         visitedLogs.add(startPos);
@@ -225,7 +371,12 @@ public class TreeFellerListener implements Listener {
             BlockPos current = toCheck.poll();
             Block block = current.getBlock(world);
 
-            // Search for connected logs
+            // Count separate trunk bases (for multi-trunk detection)
+            if (current.y() <= startPos.y() + 1) {
+                trunkCount++;
+            }
+
+            // Search for connected logs (including horizontal for multi-trunk)
             for (int[] offset : VALIDATION_LOG_OFFSETS) {
                 BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
                 if (!visitedLogs.contains(adjacent)) {
@@ -269,10 +420,12 @@ public class TreeFellerListener implements Listener {
         Deque<BlockPos> toCheck = new ArrayDeque<>();
         List<BlockPos> logsToBreak = new ArrayList<>();
         Set<BlockPos> leavesToDecay = new HashSet<>();
+        Set<BlockPos> rootsToBreak = new HashSet<>();
 
         // Determine tree height and select appropriate offsets
         int treeHeight = measureTreeHeightDuringBFS(origin, logType, world);
         boolean isTallTree = treeHeight > 10;
+        boolean isMangrove = logType == Material.MANGROVE_LOG || logType == Material.STRIPPED_MANGROVE_LOG;
         int[][] offsets = isTallTree ? TALL_TREE_OFFSETS : COMPACT_OFFSETS;
 
         toCheck.add(origin);
@@ -283,19 +436,28 @@ public class TreeFellerListener implements Listener {
             BlockPos current = toCheck.poll();
             Block block = current.getBlock(world);
 
-            if (block.getType() != logType)
-                continue;
-            if (isPlayerPlaced(block))
-                continue;
+            Material currentType = block.getType();
 
-            logsToBreak.add(current);
+            // Handle logs
+            if (currentType == logType && !isPlayerPlaced(block)) {
+                logsToBreak.add(current);
+            }
 
             for (int[] offset : offsets) {
                 BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
                 if (!visited.contains(adjacent)) {
                     visited.add(adjacent);
                     Block adjBlock = adjacent.getBlock(world);
-                    if (adjBlock.getType() == logType && !isPlayerPlaced(adjBlock)) {
+                    Material adjType = adjBlock.getType();
+
+                    if (adjType == logType && !isPlayerPlaced(adjBlock)) {
+                        toCheck.add(adjacent);
+                    }
+
+                    // Mangrove roots handling
+                    if (isMangrove && isMangroveRoot(adjType)) {
+                        rootsToBreak.add(adjacent);
+                        // Also check for logs connected through roots
                         toCheck.add(adjacent);
                     }
                 }
@@ -308,6 +470,21 @@ public class TreeFellerListener implements Listener {
                         BlockPos leafPos = current.add(dx, dy, dz);
                         if (isLeaf(leafPos.getBlock(world).getType())) {
                             leavesToDecay.add(leafPos);
+                        }
+                    }
+                }
+            }
+
+            // For mangrove trees, also search for roots below
+            if (isMangrove) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    for (int dy = -3; dy <= 0; dy++) {
+                        for (int dz = -2; dz <= 2; dz++) {
+                            BlockPos rootPos = current.add(dx, dy, dz);
+                            if (!visited.contains(rootPos) && isMangroveRoot(rootPos.getBlock(world).getType())) {
+                                rootsToBreak.add(rootPos);
+                                visited.add(rootPos);
+                            }
                         }
                     }
                 }
@@ -336,6 +513,23 @@ public class TreeFellerListener implements Listener {
             removePlayerPlacedMark(logPos, world);
             log.setType(Material.AIR);
             broken++;
+        }
+
+        // Break mangrove roots
+        for (BlockPos rootPos : rootsToBreak) {
+            ItemStack currentAxe = player.getInventory().getItemInMainHand();
+            if (currentAxe.getType() != axe.getType())
+                break;
+
+            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
+                break;
+            }
+
+            Block root = rootPos.getBlock(world);
+            for (ItemStack drop : root.getDrops(currentAxe)) {
+                world.dropItemNaturally(origin.toLocation(world), drop);
+            }
+            root.setType(Material.AIR);
         }
 
         // Simplified leaf decay - single pass with batched scheduling
