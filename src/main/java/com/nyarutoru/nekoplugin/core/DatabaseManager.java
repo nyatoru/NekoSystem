@@ -70,8 +70,14 @@ public class DatabaseManager {
             // Load SQLite JDBC driver
             Class.forName("org.sqlite.JDBC");
 
-            // Connect to feature-specific database
-            File dbFile = new File(databaseFolder, featureName + ".db");
+            // Create feature-specific folder: database/feature-name/
+            File featureFolder = new File(databaseFolder, featureName);
+            if (!featureFolder.exists()) {
+                featureFolder.mkdirs();
+            }
+
+            // Connect to feature-specific database: database/feature-name/feature.db
+            File dbFile = new File(featureFolder, featureName + ".db");
             String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
             Connection connection = DriverManager.getConnection(url);
 
@@ -82,7 +88,7 @@ public class DatabaseManager {
                 stmt.execute("PRAGMA cache_size=10000");
             }
 
-            plugin.getLogger().info("SQLite database connected: " + dbFile.getName());
+            plugin.getLogger().info("SQLite database connected: " + featureName + "/" + dbFile.getName());
             return connection;
         } catch (ClassNotFoundException e) {
             plugin.getLogger().log(Level.SEVERE, "SQLite JDBC driver not found!", e);
