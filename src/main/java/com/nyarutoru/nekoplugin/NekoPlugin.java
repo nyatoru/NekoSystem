@@ -2,6 +2,7 @@ package com.nyarutoru.nekoplugin;
 
 import com.nyarutoru.nekoplugin.api.gui.GUIManager;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolListener;
+import com.nyarutoru.nekoplugin.core.DatabaseManager;
 import com.nyarutoru.nekoplugin.core.FeatureManager;
 import com.nyarutoru.nekoplugin.core.PluginManager;
 import com.nyarutoru.nekoplugin.features.drawer.DrawerFeature;
@@ -28,6 +29,7 @@ public class NekoPlugin extends JavaPlugin {
 
         // Initialize core managers
         PluginManager.getInstance().initialize();
+        DatabaseManager.getInstance().initialize(this);
         FeatureManager.getInstance().initialize(this);
         GUIManager.getInstance().initialize(this);
 
@@ -55,6 +57,9 @@ public class NekoPlugin extends JavaPlugin {
     public void onDisable() {
         // Disable all features
         FeatureManager.getInstance().disableAll();
+
+        // Close database connection
+        DatabaseManager.getInstance().shutdown();
 
         getLogger().info("NekoPlugin has been disabled!");
     }

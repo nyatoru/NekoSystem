@@ -5,15 +5,19 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.core.DatabaseManager;
 import com.nyarutoru.nekoplugin.utils.LocationUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Server;
+import org.bukkit.World;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,17 +25,16 @@ import java.util.logging.Level;
 
 /**
  * Manages all drawer instances in the world.
- * Uses JSON for storage with RAM caching and auto-save every 5 minutes.
+ * Uses SQLite for storage with RAM caching and auto-save every 5 minutes.
+ * Automatically migrates from legacy JSON format if found.
  */
 public class DrawerManager {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final long AUTO_SAVE_TICKS = 20L * 60 * 5; // 5 minutes
-    private static final int MAX_SAVE_RETRIES = 3;
     private static volatile DrawerManager instance;
+
     private final Map<String, Drawer> drawers = new ConcurrentHashMap<>();
-    private File dataFile;
-    private File backupFile;
     private NekoPlugin plugin;
     private BukkitTask autoSaveTask;
     private boolean dirty = false;
@@ -52,10 +55,112 @@ public class DrawerManager {
 
     public void initialize(NekoPlugin plugin) {
         this.plugin = plugin;
-        this.dataFile = new File(plugin.getDataFolder(), "drawers.json");
-        this.backupFile = new File(plugin.getDataFolder(), "drawers.json.backup");
+
+        // Initialize database table
+        initializeDatabase();
+
+        // Check for legacy JSON and migrate if needed
+        migrateFromJson();
+
+        // Load all drawers from database
         loadAll();
+
+        // Start auto-save
         startAutoSave();
+    }
+
+    private void initializeDatabase() {
+        String createTableSQL = """
+                CREATE TABLE IF NOT EXISTS drawers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    world TEXT NOT NULL,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    z INTEGER NOT NULL,
+                    item_type TEXT,
+                    item_count INTEGER DEFAULT 0,
+                    tier TEXT NOT NULL DEFAULT 'TIER_1',
+                    UNIQUE(world, x, y, z)
+                )
+                """;
+
+        DatabaseManager.getInstance().createTable(createTableSQL);
+
+        // Create index for faster lookups
+        String createIndexSQL = "CREATE INDEX IF NOT EXISTS idx_drawers_location ON drawers(world, x, y, z)";
+        try (Statement stmt = DatabaseManager.getInstance().getConnection().createStatement()) {
+            stmt.execute(createIndexSQL);
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to create index", e);
+        }
+    }
+
+    /**
+     * Migrate from legacy JSON format to SQLite.
+     */
+    private void migrateFromJson() {
+        File jsonFile = new File(plugin.getDataFolder(), "drawers.json");
+        if (!jsonFile.exists()) {
+            return;
+        }
+
+        plugin.getLogger().info("Found legacy drawers.json, migrating to SQLite...");
+
+        try (Reader reader = new InputStreamReader(new FileInputStream(jsonFile), StandardCharsets.UTF_8)) {
+            Type type = new TypeToken<Map<String, LegacyDrawerData>>() {
+            }.getType();
+            Map<String, LegacyDrawerData> dataMap = GSON.fromJson(reader, type);
+
+            if (dataMap == null || dataMap.isEmpty()) {
+                plugin.getLogger().info("No data in legacy JSON file, skipping migration.");
+                renameJsonFile(jsonFile);
+                return;
+            }
+
+            int migrated = 0;
+            Connection conn = DatabaseManager.getInstance().getConnection();
+            String insertSQL = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+            try (PreparedStatement stmt = conn.prepareStatement(insertSQL)) {
+                conn.setAutoCommit(false);
+
+                for (LegacyDrawerData data : dataMap.values()) {
+                    stmt.setString(1, data.world);
+                    stmt.setInt(2, data.x);
+                    stmt.setInt(3, data.y);
+                    stmt.setInt(4, data.z);
+                    stmt.setString(5, data.itemType);
+                    stmt.setInt(6, data.itemCount);
+                    stmt.setString(7, data.tier != null ? data.tier : "TIER_1");
+                    stmt.addBatch();
+                    migrated++;
+                }
+
+                stmt.executeBatch();
+                conn.commit();
+                conn.setAutoCommit(true);
+            }
+
+            plugin.getLogger().info("Successfully migrated " + migrated + " drawers from JSON to SQLite.");
+            renameJsonFile(jsonFile);
+
+        } catch (IOException | JsonSyntaxException | SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to migrate from JSON", e);
+        }
+    }
+
+    private void renameJsonFile(File jsonFile) {
+        File migratedFile = new File(jsonFile.getParentFile(), "drawers.json.migrated");
+        if (jsonFile.renameTo(migratedFile)) {
+            plugin.getLogger().info("Renamed legacy JSON file to drawers.json.migrated");
+        }
+
+        // Also rename backup if exists
+        File backupFile = new File(plugin.getDataFolder(), "drawers.json.backup");
+        if (backupFile.exists()) {
+            File migratedBackup = new File(backupFile.getParentFile(), "drawers.json.backup.migrated");
+            backupFile.renameTo(migratedBackup);
+        }
     }
 
     private void startAutoSave() {
@@ -79,7 +184,10 @@ public class DrawerManager {
         Drawer drawer = new Drawer(location);
         drawer.setTier(tier);
         drawers.put(key, drawer);
-        markDirty();
+
+        // Insert into database
+        insertDrawer(drawer);
+
         return drawer;
     }
 
@@ -97,8 +205,9 @@ public class DrawerManager {
 
     public Drawer removeDrawer(Location location) {
         Drawer removed = drawers.remove(locationKey(location));
-        if (removed != null)
-            markDirty();
+        if (removed != null) {
+            deleteDrawer(removed);
+        }
         return removed;
     }
 
@@ -114,113 +223,116 @@ public class DrawerManager {
         this.dirty = true;
     }
 
-    public synchronized void saveAll() {
-        if (plugin == null)
-            return;
+    // ==================== DATABASE OPERATIONS ====================
 
-        for (int attempt = 1; attempt <= MAX_SAVE_RETRIES; attempt++) {
-            try {
-                if (!plugin.getDataFolder().exists()) {
-                    plugin.getDataFolder().mkdirs();
-                }
+    private void insertDrawer(Drawer drawer) {
+        String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-                // Create backup of existing file before saving
-                if (dataFile.exists() && dataFile.length() > 0) {
-                    copyFile(dataFile, backupFile);
-                }
-
-                Map<String, DrawerData> dataMap = new HashMap<>();
-                for (Map.Entry<String, Drawer> entry : drawers.entrySet()) {
-                    dataMap.put(entry.getKey(), DrawerData.fromDrawer(entry.getValue()));
-                }
-
-                // Write to temporary file first
-                File tempFile = new File(dataFile.getParentFile(), dataFile.getName() + ".tmp");
-                try (Writer writer = new OutputStreamWriter(new FileOutputStream(tempFile), StandardCharsets.UTF_8)) {
-                    GSON.toJson(dataMap, writer);
-                }
-
-                // Atomic rename to actual file
-                if (dataFile.exists()) {
-                    dataFile.delete();
-                }
-                tempFile.renameTo(dataFile);
-
-                dirty = false;
-                return; // Success
-            } catch (IOException e) {
-                plugin.getLogger().log(Level.WARNING, "Failed to save drawers (attempt " + attempt + "/" + MAX_SAVE_RETRIES + ")", e);
-                if (attempt == MAX_SAVE_RETRIES) {
-                    plugin.getLogger().log(Level.SEVERE, "All save attempts failed! Data may be lost.", e);
-                } else {
-                    try {
-                        Thread.sleep(100 * attempt); // Exponential backoff
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
-                }
-            }
+        try (PreparedStatement stmt = DatabaseManager.getInstance().getConnection().prepareStatement(sql)) {
+            Location loc = drawer.getLocation();
+            stmt.setString(1, loc.getWorld().getName());
+            stmt.setInt(2, loc.getBlockX());
+            stmt.setInt(3, loc.getBlockY());
+            stmt.setInt(4, loc.getBlockZ());
+            stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
+            stmt.setInt(6, drawer.getItemCount());
+            stmt.setString(7, drawer.getTier().name());
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to insert drawer", e);
         }
     }
 
-    private void copyFile(File source, File dest) throws IOException {
-        try (InputStream in = new FileInputStream(source);
-             OutputStream out = new FileOutputStream(dest)) {
-            byte[] buffer = new byte[8192];
-            int length;
-            while ((length = in.read(buffer)) > 0) {
-                out.write(buffer, 0, length);
+    private void deleteDrawer(Drawer drawer) {
+        String sql = "DELETE FROM drawers WHERE world = ? AND x = ? AND y = ? AND z = ?";
+
+        try (PreparedStatement stmt = DatabaseManager.getInstance().getConnection().prepareStatement(sql)) {
+            Location loc = drawer.getLocation();
+            stmt.setString(1, loc.getWorld().getName());
+            stmt.setInt(2, loc.getBlockX());
+            stmt.setInt(3, loc.getBlockY());
+            stmt.setInt(4, loc.getBlockZ());
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to delete drawer", e);
+        }
+    }
+
+    public synchronized void saveAll() {
+        if (plugin == null || !DatabaseManager.getInstance().isConnected())
+            return;
+
+        Connection conn = DatabaseManager.getInstance().getConnection();
+        String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            conn.setAutoCommit(false);
+
+            for (Drawer drawer : drawers.values()) {
+                Location loc = drawer.getLocation();
+                stmt.setString(1, loc.getWorld().getName());
+                stmt.setInt(2, loc.getBlockX());
+                stmt.setInt(3, loc.getBlockY());
+                stmt.setInt(4, loc.getBlockZ());
+                stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
+                stmt.setInt(6, drawer.getItemCount());
+                stmt.setString(7, drawer.getTier().name());
+                stmt.addBatch();
+            }
+
+            stmt.executeBatch();
+            conn.commit();
+            conn.setAutoCommit(true);
+            dirty = false;
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to save drawers", e);
+            try {
+                conn.rollback();
+            } catch (SQLException ex) {
+                plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", ex);
             }
         }
     }
 
     public void loadAll() {
-        if (plugin == null)
+        if (plugin == null || !DatabaseManager.getInstance().isConnected())
             return;
 
         drawers.clear();
 
-        // Try to load from main file first
-        if (dataFile.exists()) {
-            if (loadFromFile(dataFile)) {
-                plugin.getLogger().info("Loaded " + drawers.size() + " drawers.");
-                return;
-            }
-        }
+        String sql = "SELECT world, x, y, z, item_type, item_count, tier FROM drawers";
+        Server server = plugin.getServer();
 
-        // If main file failed, try backup
-        if (backupFile.exists()) {
-            plugin.getLogger().warning("Main drawer file corrupted or missing, attempting to load from backup...");
-            if (loadFromFile(backupFile)) {
-                plugin.getLogger().info("Successfully loaded " + drawers.size() + " drawers from backup.");
-                // Save to main file to restore it
-                saveAll();
-                return;
-            }
-        }
+        try (Statement stmt = DatabaseManager.getInstance().getConnection().createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
 
-        plugin.getLogger().info("No drawer data found or all files corrupted. Starting fresh.");
-    }
+            while (rs.next()) {
+                String worldName = rs.getString("world");
+                World world = server.getWorld(worldName);
 
-    private boolean loadFromFile(File file) {
-        try (Reader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
-            Type type = new TypeToken<Map<String, DrawerData>>() {
-            }.getType();
-            Map<String, DrawerData> dataMap = GSON.fromJson(reader, type);
-
-            if (dataMap != null) {
-                for (Map.Entry<String, DrawerData> entry : dataMap.entrySet()) {
-                    Drawer drawer = entry.getValue().toDrawer(plugin.getServer());
-                    if (drawer != null) {
-                        drawers.put(entry.getKey(), drawer);
-                    }
+                if (world == null) {
+                    continue; // World not loaded
                 }
-                return true;
+
+                int x = rs.getInt("x");
+                int y = rs.getInt("y");
+                int z = rs.getInt("z");
+                String itemTypeName = rs.getString("item_type");
+                int itemCount = rs.getInt("item_count");
+                String tierName = rs.getString("tier");
+
+                Location location = new Location(world, x, y, z);
+                Material itemType = itemTypeName != null ? Material.getMaterial(itemTypeName) : null;
+                DrawerTier tier = DrawerTier.getByName(tierName);
+
+                Drawer drawer = new Drawer(location, itemType, itemCount, tier);
+                drawers.put(locationKey(location), drawer);
             }
-        } catch (IOException | JsonSyntaxException e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to load from " + file.getName(), e);
+
+            plugin.getLogger().info("Loaded " + drawers.size() + " drawers from database.");
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to load drawers", e);
         }
-        return false;
     }
 
     public void shutdown() {
@@ -231,35 +343,14 @@ public class DrawerManager {
         drawers.clear();
     }
 
-    private static class DrawerData {
+    /**
+     * Legacy drawer data structure for JSON migration.
+     */
+    private static class LegacyDrawerData {
         String world;
         int x, y, z;
         String itemType;
         int itemCount;
         String tier;
-
-        static DrawerData fromDrawer(Drawer drawer) {
-            DrawerData data = new DrawerData();
-            data.world = drawer.getLocation().getWorld().getName();
-            data.x = drawer.getLocation().getBlockX();
-            data.y = drawer.getLocation().getBlockY();
-            data.z = drawer.getLocation().getBlockZ();
-            data.itemType = drawer.getItemType() != null ? drawer.getItemType().name() : null;
-            data.itemCount = drawer.getItemCount();
-            data.tier = drawer.getTier().name();
-            return data;
-        }
-
-        Drawer toDrawer(org.bukkit.Server server) {
-            org.bukkit.World world = server.getWorld(this.world);
-            if (world == null)
-                return null;
-
-            Location location = new Location(world, x, y, z);
-            Material itemType = this.itemType != null ? Material.getMaterial(this.itemType) : null;
-            DrawerTier tier = DrawerTier.getByName(this.tier);
-
-            return new Drawer(location, itemType, itemCount, tier);
-        }
     }
 }
