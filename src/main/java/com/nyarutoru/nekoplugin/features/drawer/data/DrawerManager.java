@@ -30,6 +30,7 @@ import java.util.logging.Level;
  */
 public class DrawerManager {
 
+    private static final String DATABASE_NAME = "drawers";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final long AUTO_SAVE_TICKS = 20L * 60 * 5; // 5 minutes
     private static volatile DrawerManager instance;
@@ -84,15 +85,26 @@ public class DrawerManager {
                 )
                 """;
 
-        DatabaseManager.getInstance().createTable(createTableSQL);
+        DatabaseManager.getInstance().createTable(DATABASE_NAME, createTableSQL);
 
         // Create index for faster lookups
         String createIndexSQL = "CREATE INDEX IF NOT EXISTS idx_drawers_location ON drawers(world, x, y, z)";
-        try (Statement stmt = DatabaseManager.getInstance().getConnection().createStatement()) {
+        Connection conn = getConnection();
+        if (conn == null)
+            return;
+
+        try (Statement stmt = conn.createStatement()) {
             stmt.execute(createIndexSQL);
         } catch (SQLException e) {
             plugin.getLogger().log(Level.WARNING, "Failed to create index", e);
         }
+    }
+
+    /**
+     * Get the database connection for drawers.
+     */
+    private Connection getConnection() {
+        return DatabaseManager.getInstance().getConnection(DATABASE_NAME);
     }
 
     /**
@@ -118,7 +130,10 @@ public class DrawerManager {
             }
 
             int migrated = 0;
-            Connection conn = DatabaseManager.getInstance().getConnection();
+            Connection conn = getConnection();
+            if (conn == null)
+                return;
+
             String insertSQL = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
             try (PreparedStatement stmt = conn.prepareStatement(insertSQL)) {
@@ -227,8 +242,11 @@ public class DrawerManager {
 
     private void insertDrawer(Drawer drawer) {
         String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        Connection conn = getConnection();
+        if (conn == null)
+            return;
 
-        try (PreparedStatement stmt = DatabaseManager.getInstance().getConnection().prepareStatement(sql)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             Location loc = drawer.getLocation();
             stmt.setString(1, loc.getWorld().getName());
             stmt.setInt(2, loc.getBlockX());
@@ -245,8 +263,11 @@ public class DrawerManager {
 
     private void deleteDrawer(Drawer drawer) {
         String sql = "DELETE FROM drawers WHERE world = ? AND x = ? AND y = ? AND z = ?";
+        Connection conn = getConnection();
+        if (conn == null)
+            return;
 
-        try (PreparedStatement stmt = DatabaseManager.getInstance().getConnection().prepareStatement(sql)) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             Location loc = drawer.getLocation();
             stmt.setString(1, loc.getWorld().getName());
             stmt.setInt(2, loc.getBlockX());
@@ -259,10 +280,13 @@ public class DrawerManager {
     }
 
     public synchronized void saveAll() {
-        if (plugin == null || !DatabaseManager.getInstance().isConnected())
+        if (plugin == null || !DatabaseManager.getInstance().isConnected(DATABASE_NAME))
             return;
 
-        Connection conn = DatabaseManager.getInstance().getConnection();
+        Connection conn = getConnection();
+        if (conn == null)
+            return;
+
         String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -295,15 +319,18 @@ public class DrawerManager {
     }
 
     public void loadAll() {
-        if (plugin == null || !DatabaseManager.getInstance().isConnected())
+        if (plugin == null || !DatabaseManager.getInstance().isConnected(DATABASE_NAME))
             return;
 
         drawers.clear();
 
         String sql = "SELECT world, x, y, z, item_type, item_count, tier FROM drawers";
         Server server = plugin.getServer();
+        Connection conn = getConnection();
+        if (conn == null)
+            return;
 
-        try (Statement stmt = DatabaseManager.getInstance().getConnection().createStatement();
+        try (Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
 
             while (rs.next()) {
@@ -341,6 +368,9 @@ public class DrawerManager {
         }
         saveAll();
         drawers.clear();
+
+        // Close database connection
+        DatabaseManager.getInstance().closeConnection(DATABASE_NAME);
     }
 
     /**
