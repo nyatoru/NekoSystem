@@ -4,6 +4,7 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.utils.ServerPerformanceUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -16,6 +17,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
@@ -23,13 +26,16 @@ import org.bukkit.potion.PotionEffectType;
 import java.util.Set;
 
 /**
- * Consolidated Server Listener for all server-side block interactions.
+ * Consolidated Server Events Listener.
+ * Handles:
+ * - Player join/quit messages
  * - Deepslate instant break with Netherite Pickaxe + Efficiency 5 + Haste
  * - Glass instant break with Netherite Pickaxe
  * - Ladder auto-placement up/down
  * - Anvil repair with Iron Block
+ * - Lag notifications on chunk generation
  */
-public class ServerListener implements Listener {
+public class ServerEventsListener implements Listener {
 
     // Instant mining requirements
     private static final int MIN_EFFICIENCY_LEVEL = 5;
@@ -67,31 +73,43 @@ public class ServerListener implements Listener {
             Material.DEEPSLATE_TILE_WALL,
             Material.COBBLED_DEEPSLATE_WALL,
             Material.POLISHED_DEEPSLATE_WALL);
-    // Glass blocks that can be instant-mined
-    private static final Set<Material> GLASS_BLOCKS = Set.of(
-            Material.GLASS,
-            Material.GLASS_PANE,
-            Material.WHITE_STAINED_GLASS, Material.WHITE_STAINED_GLASS_PANE,
-            Material.ORANGE_STAINED_GLASS, Material.ORANGE_STAINED_GLASS_PANE,
-            Material.MAGENTA_STAINED_GLASS, Material.MAGENTA_STAINED_GLASS_PANE,
-            Material.LIGHT_BLUE_STAINED_GLASS, Material.LIGHT_BLUE_STAINED_GLASS_PANE,
-            Material.YELLOW_STAINED_GLASS, Material.YELLOW_STAINED_GLASS_PANE,
-            Material.LIME_STAINED_GLASS, Material.LIME_STAINED_GLASS_PANE,
-            Material.PINK_STAINED_GLASS, Material.PINK_STAINED_GLASS_PANE,
-            Material.GRAY_STAINED_GLASS, Material.GRAY_STAINED_GLASS_PANE,
-            Material.LIGHT_GRAY_STAINED_GLASS, Material.LIGHT_GRAY_STAINED_GLASS_PANE,
-            Material.CYAN_STAINED_GLASS, Material.CYAN_STAINED_GLASS_PANE,
-            Material.PURPLE_STAINED_GLASS, Material.PURPLE_STAINED_GLASS_PANE,
-            Material.BLUE_STAINED_GLASS, Material.BLUE_STAINED_GLASS_PANE,
-            Material.BROWN_STAINED_GLASS, Material.BROWN_STAINED_GLASS_PANE,
-            Material.GREEN_STAINED_GLASS, Material.GREEN_STAINED_GLASS_PANE,
-            Material.RED_STAINED_GLASS, Material.RED_STAINED_GLASS_PANE,
-            Material.BLACK_STAINED_GLASS, Material.BLACK_STAINED_GLASS_PANE,
-            Material.TINTED_GLASS);
-    private final NekoPlugin plugin;
 
-    public ServerListener(NekoPlugin plugin) {
+    // Glass blocks that can be instant-mined
+    private static final Set<Material> GLASS_BLOCKS = Set.of(Material.GLASS, Material.GLASS_PANE,
+            Material.WHITE_STAINED_GLASS, Material.WHITE_STAINED_GLASS_PANE, Material.ORANGE_STAINED_GLASS,
+            Material.ORANGE_STAINED_GLASS_PANE, Material.MAGENTA_STAINED_GLASS, Material.MAGENTA_STAINED_GLASS_PANE,
+            Material.LIGHT_BLUE_STAINED_GLASS, Material.LIGHT_BLUE_STAINED_GLASS_PANE, Material.YELLOW_STAINED_GLASS,
+            Material.YELLOW_STAINED_GLASS_PANE, Material.LIME_STAINED_GLASS, Material.LIME_STAINED_GLASS_PANE,
+            Material.PINK_STAINED_GLASS, Material.PINK_STAINED_GLASS_PANE, Material.GRAY_STAINED_GLASS,
+            Material.GRAY_STAINED_GLASS_PANE, Material.LIGHT_GRAY_STAINED_GLASS, Material.LIGHT_GRAY_STAINED_GLASS_PANE,
+            Material.CYAN_STAINED_GLASS, Material.CYAN_STAINED_GLASS_PANE, Material.PURPLE_STAINED_GLASS,
+            Material.PURPLE_STAINED_GLASS_PANE,
+            Material.BLUE_STAINED_GLASS, Material.BLUE_STAINED_GLASS_PANE, Material.BROWN_STAINED_GLASS,
+            Material.BROWN_STAINED_GLASS_PANE, Material.GREEN_STAINED_GLASS, Material.GREEN_STAINED_GLASS_PANE,
+            Material.RED_STAINED_GLASS, Material.RED_STAINED_GLASS_PANE, Material.BLACK_STAINED_GLASS,
+            Material.BLACK_STAINED_GLASS_PANE, Material.TINTED_GLASS);
+
+    private final NekoPlugin plugin;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
+
+    public ServerEventsListener(NekoPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    // ========== Player Join/Quit Messages ==========
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        String processedMessage = "<green><bold>+</bold> <gray>" + event.getPlayer().getName() + " joined the server.";
+        Component message = miniMessage.deserialize(processedMessage);
+        event.joinMessage(message);
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        String processedMessage = "<red><bold>-</bold> <gray>" + event.getPlayer().getName() + " left the server.";
+        Component message = miniMessage.deserialize(processedMessage);
+        event.quitMessage(message);
     }
 
     // ========== Instant Break ==========
@@ -172,7 +190,8 @@ public class ServerListener implements Listener {
             return;
 
         // Determine direction based on player pitch
-        BlockFace direction = player.getLocation().getPitch() > DOWNWARD_PITCH_THRESHOLD ? BlockFace.DOWN : BlockFace.UP;
+        BlockFace direction = player.getLocation().getPitch() > DOWNWARD_PITCH_THRESHOLD ? BlockFace.DOWN
+                : BlockFace.UP;
         Block target = clicked.getRelative(direction);
 
         // Find the end of the ladder chain
@@ -271,11 +290,13 @@ public class ServerListener implements Listener {
 
         // Find the player responsible (nearest player)
         Player nearestPlayer = chunk.getWorld().getPlayers().stream()
-                .filter(p -> p.getLocation().distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y, LAG_WARNING_CHUNK_CENTER_XZ).getLocation()) < LAG_WARNING_DISTANCE_SQUARED) // Within
-                // render
-                // distance-ish
+                .filter(p -> p.getLocation()
+                        .distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y,
+                                LAG_WARNING_CHUNK_CENTER_XZ).getLocation()) < LAG_WARNING_DISTANCE_SQUARED)
                 .min(java.util.Comparator
-                        .comparingDouble(p -> p.getLocation().distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y, LAG_WARNING_CHUNK_CENTER_XZ).getLocation())))
+                        .comparingDouble(p -> p.getLocation()
+                                .distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y,
+                                        LAG_WARNING_CHUNK_CENTER_XZ).getLocation())))
                 .orElse(null);
 
         if (nearestPlayer != null) {

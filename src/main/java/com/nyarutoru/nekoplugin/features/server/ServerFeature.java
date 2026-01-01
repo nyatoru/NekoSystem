@@ -18,7 +18,7 @@ public class ServerFeature implements Feature {
     private boolean enabled = false;
     private ConcreteConverter concreteConverter;
     private CustomCraftingListener customCraftingListener;
-    private ServerListener serverListener;
+    private ServerEventsListener serverEventsListener;
     private TPSBossBarTask tpsTask;
 
     @Override
@@ -43,9 +43,10 @@ public class ServerFeature implements Feature {
         plugin.getServer().getPluginManager().registerEvents(customCraftingListener.getRecipeBookGUI(), plugin);
         // RecipePreviewGUI now uses GuiAPI so no separate listener registration needed
 
-        // Server Listener (instant break, ladder, anvil repair, lag notification)
-        serverListener = new ServerListener(plugin);
-        plugin.getServer().getPluginManager().registerEvents(serverListener, plugin);
+        // Server Events (join/quit, instant break, ladders, anvil repair, lag
+        // notification)
+        serverEventsListener = new ServerEventsListener(plugin);
+        plugin.getServer().getPluginManager().registerEvents(serverEventsListener, plugin);
 
         // TPS BossBar - run every second (20 ticks)
         tpsTask = new TPSBossBarTask();
@@ -66,8 +67,8 @@ public class ServerFeature implements Feature {
             HandlerList.unregisterAll(customCraftingListener);
             HandlerList.unregisterAll(customCraftingListener.getRecipeBookGUI());
         }
-        if (serverListener != null) {
-            HandlerList.unregisterAll(serverListener);
+        if (serverEventsListener != null) {
+            HandlerList.unregisterAll(serverEventsListener);
         }
         if (tpsTask != null) {
             tpsTask.cleanup();
