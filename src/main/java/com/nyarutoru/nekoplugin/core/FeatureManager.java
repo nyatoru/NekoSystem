@@ -4,6 +4,7 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
@@ -13,7 +14,7 @@ import java.util.logging.Level;
 public class FeatureManager {
 
     private static volatile FeatureManager instance;
-    private final Map<String, Feature> features = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Feature> features = new ConcurrentHashMap<>();
     private NekoPlugin plugin;
 
     private FeatureManager() {

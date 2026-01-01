@@ -8,7 +8,7 @@ import org.bukkit.entity.Item;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
-import java.util.Collection;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Converts Concrete Powder dropped in water into solid Concrete after 10
@@ -38,7 +38,7 @@ public class ConcreteConverter {
             Map.entry(Material.RED_CONCRETE_POWDER, Material.RED_CONCRETE),
             Map.entry(Material.BLACK_CONCRETE_POWDER, Material.BLACK_CONCRETE));
     // Track items in water: Item UUID -> time entered water
-    private final Map<UUID, Long> itemsInWater = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Long> itemsInWater = new ConcurrentHashMap<>();
 
     public void start() {
         // Schedule timer to check all worlds for items

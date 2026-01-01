@@ -9,6 +9,7 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
 /**
@@ -28,11 +29,11 @@ public class ActiveToolAPI {
     private static final long ACTION_BAR_REFRESH_TICKS = 20L;
     private static ActiveToolAPI instance;
     // Player activation state (keyed by UUID:toolName for tool-specific tracking)
-    private final Map<String, Integer> shiftCount = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<String, Long> lastShiftTime = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<String, BukkitTask> shiftTimeoutTasks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Integer> shiftCount = new ConcurrentHashMap<>();
+    private final Map<String, Long> lastShiftTime = new ConcurrentHashMap<>();
+    private final Map<String, BukkitTask> shiftTimeoutTasks = new ConcurrentHashMap<>();
     // Active tool state
-    private final Map<UUID, ActiveToolState> activeTools = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, ActiveToolState> activeTools = new ConcurrentHashMap<>();
 
     private ActiveToolAPI() {
     }

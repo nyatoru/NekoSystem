@@ -25,6 +25,7 @@ import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Unified Player Feature Listener.
@@ -59,14 +60,14 @@ public class PlayerFeatureListener implements Listener {
     private final NekoPlugin plugin;
 
     // ========== AFK System ==========
-    private final Map<UUID, Long> lastActivity = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<UUID, Boolean> afkStatus = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastActivity = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> afkStatus = new ConcurrentHashMap<>();
     // Store original display names and player list names to restore when player
     // returns from AFK
-    private final Map<UUID, Component> originalDisplayNames = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Map<UUID, Component> originalPlayerListNames = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Component> originalDisplayNames = new ConcurrentHashMap<>();
+    private final Map<UUID, Component> originalPlayerListNames = new ConcurrentHashMap<>();
     // Store last known location for head rotation tracking
-    private final Map<UUID, Location> lastKnownLocation = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Location> lastKnownLocation = new ConcurrentHashMap<>();
     private NamespacedKey afkKey;
 
     public PlayerFeatureListener(NekoPlugin plugin) {

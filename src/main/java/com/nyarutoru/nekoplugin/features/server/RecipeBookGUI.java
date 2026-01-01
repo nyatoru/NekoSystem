@@ -18,6 +18,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Recipe Book GUI for browsing custom recipes.
@@ -36,14 +37,9 @@ public class RecipeBookGUI implements Listener {
     private static final Component BOOK_TITLE = Component.text("✦ Recipe Book ✦")
             .color(NamedTextColor.LIGHT_PURPLE)
             .decoration(TextDecoration.BOLD, true);
-    private final NekoPlugin plugin;
     // Track which GUI players have open
-    private final Map<UUID, GUIState> playerStates = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, GUIState> playerStates = new ConcurrentHashMap<>();
     private RecipePreviewGUI recipePreviewGUI;
-
-    public RecipeBookGUI(NekoPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     public RecipePreviewGUI getRecipePreviewGUI() {
         return recipePreviewGUI;

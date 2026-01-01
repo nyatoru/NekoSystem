@@ -18,6 +18,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.Inventory;
 
+import org.bukkit.Bukkit;
 import java.text.NumberFormat;
 import java.util.*;
 
@@ -129,7 +130,7 @@ public class DrawerGUI extends BaseGUI {
      */
     public void forceClose() {
         // Close for all viewers of this specific GUI instance
-        for (Player player : org.bukkit.Bukkit.getOnlinePlayers()) {
+        for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getOpenInventory().getTopInventory().equals(inventory)) {
                 player.closeInventory();
             }

@@ -31,7 +31,7 @@ import java.util.UUID;
  */
 public class CustomCraftingListener implements Listener {
 
-    private static final int[] CRAFTING_SLOTS = {10, 11, 12, 19, 20, 21, 28, 29, 30};
+    private static final int[] CRAFTING_SLOTS = { 10, 11, 12, 19, 20, 21, 28, 29, 30 };
     private static final int RESULT_SLOT = 24;
     private static final int CRAFT_BUTTON_SLOT = 23;
 
@@ -54,7 +54,7 @@ public class CustomCraftingListener implements Listener {
 
     public CustomCraftingListener(NekoPlugin plugin) {
         this.plugin = plugin;
-        this.recipeBookGUI = new RecipeBookGUI(plugin);
+        this.recipeBookGUI = new RecipeBookGUI();
         // Create and wire up RecipePreviewGUI
         RecipePreviewGUI recipePreviewGUI = new RecipePreviewGUI(plugin, recipeBookGUI);
         this.recipeBookGUI.setRecipePreviewGUI(recipePreviewGUI);
@@ -122,7 +122,7 @@ public class CustomCraftingListener implements Listener {
         }
 
         // Additional unused slots - black glass pane
-        int[] unusedSlots = {13, 14, 15, 16, 22, 25, 31, 32, 33, 34};
+        int[] unusedSlots = { 13, 14, 15, 16, 22, 25, 31, 32, 33, 34 };
         for (int slot : unusedSlots) {
             gui.setItem(slot, blackGlass);
         }

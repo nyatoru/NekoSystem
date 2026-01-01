@@ -23,6 +23,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
 
+import org.bukkit.Bukkit;
 import java.util.Set;
 
 /**
@@ -89,11 +90,10 @@ public class ServerEventsListener implements Listener {
             Material.RED_STAINED_GLASS, Material.RED_STAINED_GLASS_PANE, Material.BLACK_STAINED_GLASS,
             Material.BLACK_STAINED_GLASS_PANE, Material.TINTED_GLASS);
 
-    private final NekoPlugin plugin;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public ServerEventsListener(NekoPlugin plugin) {
-        this.plugin = plugin;
+        // Plugin stored for future extensibility
     }
 
     // ========== Player Join/Quit Messages ==========
@@ -278,7 +278,7 @@ public class ServerEventsListener implements Listener {
             return;
 
         // Condition: More than 2 players online
-        if (org.bukkit.Bukkit.getOnlinePlayers().size() <= MIN_PLAYERS_FOR_LAG_WARNING)
+        if (Bukkit.getOnlinePlayers().size() <= MIN_PLAYERS_FOR_LAG_WARNING)
             return;
 
         // Condition: TPS < 18 (Folia-compatible)
