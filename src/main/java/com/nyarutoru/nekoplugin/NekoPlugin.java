@@ -7,6 +7,7 @@ import com.nyarutoru.nekoplugin.core.FeatureManager;
 import com.nyarutoru.nekoplugin.core.PluginManager;
 import com.nyarutoru.nekoplugin.features.drawer.DrawerFeature;
 import com.nyarutoru.nekoplugin.features.hammer.HammerFeature;
+import com.nyarutoru.nekoplugin.features.itemstack.ItemStackFeature;
 import com.nyarutoru.nekoplugin.features.oreexcavation.OreExcavationFeature;
 import com.nyarutoru.nekoplugin.features.player.PlayerFeature;
 import com.nyarutoru.nekoplugin.features.server.ServerFeature;
@@ -41,6 +42,7 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(new PlayerFeature());
         FeatureManager.getInstance().registerFeature(new ServerFeature());
         FeatureManager.getInstance().registerFeature(new com.nyarutoru.nekoplugin.features.petcarry.PetCarryFeature());
+        FeatureManager.getInstance().registerFeature(new ItemStackFeature());
 
         // Enable all features
         FeatureManager.getInstance().enableAll();
