@@ -1,0 +1,6 @@
+name: NekoPlugin
+version: 1.0.0-SNAPSHOT
+main: com.nyarutoru.nekoplugin.NekoPlugin
+description: A plugin for PaperMC server
+api-version: '1.21.11'
+folia-supported: true
