@@ -34,7 +34,7 @@ public class ServerFeature implements Feature {
     @Override
     public void onEnable(NekoPlugin plugin) {
         // Concrete conversion
-        concreteConverter = new ConcreteConverter(plugin);
+        concreteConverter = new ConcreteConverter();
         concreteConverter.start();
 
         // Custom Crafting Table
@@ -55,7 +55,6 @@ public class ServerFeature implements Feature {
         new ServerRecipes(plugin).registerAll();
 
         this.enabled = true;
-        plugin.getLogger().info("Server feature enabled.");
     }
 
     @Override

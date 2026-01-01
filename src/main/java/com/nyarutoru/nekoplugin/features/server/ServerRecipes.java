@@ -23,7 +23,6 @@ public class ServerRecipes {
      */
     public void registerAll() {
         registerRottenFleshToLeather();
-        plugin.getLogger().info("Registered server recipes.");
     }
 
     /**

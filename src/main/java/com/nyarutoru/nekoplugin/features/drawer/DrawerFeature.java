@@ -35,7 +35,7 @@ public class DrawerFeature implements Feature {
         drawerListener = new DrawerListener();
         plugin.getServer().getPluginManager().registerEvents(drawerListener, plugin);
 
-        new DrawerRecipes(plugin).registerAll();
+        new DrawerRecipes().registerAll();
 
         this.enabled = true;
     }

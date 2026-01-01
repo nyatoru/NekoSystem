@@ -27,7 +27,6 @@ public class PetCarryFeature implements Feature {
         listener = new PetCarryListener();
         plugin.getServer().getPluginManager().registerEvents(listener, plugin);
         this.enabled = true;
-        plugin.getLogger().info("Pet Carry feature enabled.");
     }
 
     @Override

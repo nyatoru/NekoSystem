@@ -1,6 +1,5 @@
 package com.nyarutoru.nekoplugin.features.server;
 
-import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -38,18 +37,12 @@ public class ConcreteConverter {
             Map.entry(Material.GREEN_CONCRETE_POWDER, Material.GREEN_CONCRETE),
             Map.entry(Material.RED_CONCRETE_POWDER, Material.RED_CONCRETE),
             Map.entry(Material.BLACK_CONCRETE_POWDER, Material.BLACK_CONCRETE));
-    private final NekoPlugin plugin;
     // Track items in water: Item UUID -> time entered water
     private final Map<UUID, Long> itemsInWater = new HashMap<>();
-
-    public ConcreteConverter(NekoPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     public void start() {
         // Schedule timer to check all worlds for items
         SchedulerUtils.runGlobalTimer(this::checkAllWorlds, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
-        plugin.getLogger().info("Concrete converter started.");
     }
 
     public void stop() {

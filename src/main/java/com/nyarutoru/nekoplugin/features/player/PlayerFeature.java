@@ -33,7 +33,6 @@ public class PlayerFeature implements Feature {
         plugin.getServer().getPluginManager().registerEvents(listener, plugin);
 
         this.enabled = true;
-        plugin.getLogger().info("Player feature enabled (Pet Carry, AFK, Auto-Replenish).");
     }
 
     @Override

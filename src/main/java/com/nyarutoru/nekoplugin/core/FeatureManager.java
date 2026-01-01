@@ -46,20 +46,30 @@ public class FeatureManager {
             return;
         }
         features.put(feature.getId(), feature);
-        plugin.getLogger().info("Registered feature: " + feature.getName());
     }
 
     /**
      * Enables all registered features.
      */
     public void enableAll() {
+        int enabled = 0;
+        int failed = 0;
+
         for (Feature feature : features.values()) {
             try {
                 feature.onEnable(plugin);
-                plugin.getLogger().info("Enabled feature: " + feature.getName());
+                enabled++;
             } catch (Exception e) {
                 plugin.getLogger().log(Level.SEVERE, "Failed to enable feature: " + feature.getName(), e);
+                failed++;
             }
+        }
+
+        // Summary log
+        if (failed == 0) {
+            plugin.getLogger().info(String.format("✓ Enabled %d features successfully", enabled));
+        } else {
+            plugin.getLogger().warning(String.format("Enabled %d features (%d failed)", enabled, failed));
         }
     }
 
@@ -67,13 +77,24 @@ public class FeatureManager {
      * Disables all registered features.
      */
     public void disableAll() {
+        int disabled = 0;
+        int failed = 0;
+
         for (Feature feature : features.values()) {
             try {
                 feature.onDisable();
-                plugin.getLogger().info("Disabled feature: " + feature.getName());
+                disabled++;
             } catch (Exception e) {
                 plugin.getLogger().log(Level.SEVERE, "Failed to disable feature: " + feature.getName(), e);
+                failed++;
             }
+        }
+
+        // Summary log
+        if (failed == 0) {
+            plugin.getLogger().info(String.format("✓ Disabled %d features successfully", disabled));
+        } else {
+            plugin.getLogger().warning(String.format("Disabled %d features (%d failed)", disabled, failed));
         }
     }
 

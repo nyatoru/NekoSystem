@@ -37,7 +37,6 @@ public class TreeFellerFeature implements Feature {
         plugin.getServer().getPluginManager().registerEvents(leafDecayListener, plugin);
 
         this.enabled = true;
-        plugin.getLogger().info("Tree Feller feature enabled with fast leaf decay.");
     }
 
     @Override

@@ -30,7 +30,6 @@ public class SandExcavationFeature implements Feature {
         listener = new SandExcavationListener();
         plugin.getServer().getPluginManager().registerEvents(listener, plugin);
         this.enabled = true;
-        plugin.getLogger().info("Sand Excavation feature enabled.");
     }
 
     @Override

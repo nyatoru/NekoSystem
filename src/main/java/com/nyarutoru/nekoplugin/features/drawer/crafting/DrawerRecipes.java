@@ -1,6 +1,5 @@
 package com.nyarutoru.nekoplugin.features.drawer.crafting;
 
-import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
 import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
@@ -23,12 +22,6 @@ import java.util.Map;
  * Handles creation and registration of drawer crafting recipes.
  */
 public class DrawerRecipes {
-
-    private final NekoPlugin plugin;
-
-    public DrawerRecipes(NekoPlugin plugin) {
-        this.plugin = plugin;
-    }
 
     public static ItemStack createDrawerItem(DrawerTier tier) {
         return createDrawerItemWithContents(tier, null, 0);
@@ -174,8 +167,6 @@ public class DrawerRecipes {
                 continue;
             registerUpgradeCustomRecipe(tier);
         }
-
-        plugin.getLogger().info("Registered drawer crafting recipes.");
     }
 
     private void registerBaseCustomRecipe() {

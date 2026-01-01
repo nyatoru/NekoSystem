@@ -41,7 +41,6 @@ public class HammerFeature implements Feature {
         plugin.getCommand("givehammer").setTabCompleter(hammerCommand);
 
         this.enabled = true;
-        plugin.getLogger().info("Hammer feature enabled.");
     }
 
     @Override

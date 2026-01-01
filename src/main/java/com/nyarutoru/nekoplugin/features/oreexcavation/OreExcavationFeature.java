@@ -32,7 +32,6 @@ public class OreExcavationFeature implements Feature {
         plugin.getServer().getPluginManager().registerEvents(listener, plugin);
 
         this.enabled = true;
-        plugin.getLogger().info("Ore Excavation feature enabled.");
     }
 
     @Override

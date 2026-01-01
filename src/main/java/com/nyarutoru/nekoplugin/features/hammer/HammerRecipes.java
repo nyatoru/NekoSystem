@@ -89,7 +89,6 @@ public class HammerRecipes {
             registerHammerRecipe(entry.getKey(), entry.getValue());
             registerCustomRecipe(entry.getKey(), entry.getValue());
         }
-        plugin.getLogger().info("Registered hammer crafting recipes (Bukkit + RecipeAPI).");
     }
 
     private void registerHammerRecipe(String tierName, HammerTier tier) {
