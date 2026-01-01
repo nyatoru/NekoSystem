@@ -38,7 +38,7 @@ public class RecipeBookGUI implements Listener {
             .decoration(TextDecoration.BOLD, true);
     private final NekoPlugin plugin;
     // Track which GUI players have open
-    private final Map<UUID, GUIState> playerStates = new HashMap<>();
+    private final Map<UUID, GUIState> playerStates = new java.util.concurrent.ConcurrentHashMap<>();
     private RecipePreviewGUI recipePreviewGUI;
 
     public RecipeBookGUI(NekoPlugin plugin) {

@@ -12,7 +12,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Server;
 import org.bukkit.World;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.io.*;
 import java.lang.reflect.Type;
@@ -37,7 +36,6 @@ public class DrawerManager {
 
     private final Map<String, Drawer> drawers = new ConcurrentHashMap<>();
     private NekoPlugin plugin;
-    private BukkitTask autoSaveTask;
     private boolean dirty = false;
 
     private DrawerManager() {
@@ -179,10 +177,10 @@ public class DrawerManager {
     }
 
     private void startAutoSave() {
-        autoSaveTask = SchedulerUtils.runAsyncTimer(() -> {
+        // Run on global timer - saveAll() is fully async so no blocking
+        SchedulerUtils.runGlobalTimer(() -> {
             if (dirty) {
-                saveAll();
-                plugin.getLogger().info("Auto-saved " + drawers.size() + " drawers.");
+                saveAll(); // Fully async, won't block
             }
         }, AUTO_SAVE_TICKS, AUTO_SAVE_TICKS);
     }
@@ -279,43 +277,77 @@ public class DrawerManager {
         }
     }
 
-    public synchronized void saveAll() {
+    /**
+     * Saves all drawers to database asynchronously.
+     * This method is FULLY ASYNC - it does not block the server thread at all.
+     * Database operations are batched for performance.
+     */
+    public void saveAll() {
         if (plugin == null || !DatabaseManager.getInstance().isConnected(DATABASE_NAME))
             return;
 
-        Connection conn = getConnection();
-        if (conn == null)
-            return;
-
-        String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
-
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            conn.setAutoCommit(false);
-
-            for (Drawer drawer : drawers.values()) {
-                Location loc = drawer.getLocation();
-                stmt.setString(1, loc.getWorld().getName());
-                stmt.setInt(2, loc.getBlockX());
-                stmt.setInt(3, loc.getBlockY());
-                stmt.setInt(4, loc.getBlockZ());
-                stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
-                stmt.setInt(6, drawer.getItemCount());
-                stmt.setString(7, drawer.getTier().name());
-                stmt.addBatch();
-            }
-
-            stmt.executeBatch();
-            conn.commit();
-            conn.setAutoCommit(true);
-            dirty = false;
-        } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to save drawers", e);
-            try {
-                conn.rollback();
-            } catch (SQLException ex) {
-                plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", ex);
-            }
+        if (!dirty) {
+            return; // Nothing to save
         }
+
+        // Create snapshot of current drawer state (thread-safe copy)
+        // This is fast and doesn't block much
+        final Map<String, Drawer> snapshot = new HashMap<>(drawers);
+        dirty = false; // Reset dirty flag immediately
+
+        // Execute all database work async to prevent blocking
+        SchedulerUtils.runAsync(() -> {
+            Connection conn = getConnection();
+            if (conn == null) {
+                plugin.getLogger().warning("Failed to get database connection for drawer auto-save");
+                return;
+            }
+
+            String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                conn.setAutoCommit(false);
+
+                int batchSize = 0;
+                for (Drawer drawer : snapshot.values()) {
+                    Location loc = drawer.getLocation();
+                    stmt.setString(1, loc.getWorld().getName());
+                    stmt.setInt(2, loc.getBlockX());
+                    stmt.setInt(3, loc.getBlockY());
+                    stmt.setInt(4, loc.getBlockZ());
+                    stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
+                    stmt.setInt(6, drawer.getItemCount());
+                    stmt.setString(7, drawer.getTier().name());
+                    stmt.addBatch();
+                    batchSize++;
+
+                    // Execute batch every 100 items to prevent memory issues
+                    if (batchSize >= 100) {
+                        stmt.executeBatch();
+                        batchSize = 0;
+                    }
+                }
+
+                // Execute remaining items
+                if (batchSize > 0) {
+                    stmt.executeBatch();
+                }
+
+                conn.commit();
+                conn.setAutoCommit(true);
+
+                // Log success (async, won't spam console)
+                plugin.getLogger().info("Auto-saved " + snapshot.size() + " drawers asynchronously.");
+
+            } catch (SQLException e) {
+                plugin.getLogger().log(Level.WARNING, "Failed to save drawers asynchronously", e);
+                try {
+                    conn.rollback();
+                } catch (SQLException ex) {
+                    plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", ex);
+                }
+            }
+        });
     }
 
     public void loadAll() {
@@ -363,14 +395,56 @@ public class DrawerManager {
     }
 
     public void shutdown() {
-        if (autoSaveTask != null) {
-            autoSaveTask.cancel();
-        }
-        saveAll();
+        // On shutdown, save synchronously to ensure all data is saved
+        saveAllSync();
         drawers.clear();
 
         // Close database connection
         DatabaseManager.getInstance().closeConnection(DATABASE_NAME);
+    }
+
+    /**
+     * Synchronous save for shutdown - blocks until complete.
+     * Only used during plugin disable to ensure data integrity.
+     */
+    private void saveAllSync() {
+        if (plugin == null || !DatabaseManager.getInstance().isConnected(DATABASE_NAME))
+            return;
+
+        Connection conn = getConnection();
+        if (conn == null)
+            return;
+
+        String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            conn.setAutoCommit(false);
+
+            for (Drawer drawer : drawers.values()) {
+                Location loc = drawer.getLocation();
+                stmt.setString(1, loc.getWorld().getName());
+                stmt.setInt(2, loc.getBlockX());
+                stmt.setInt(3, loc.getBlockY());
+                stmt.setInt(4, loc.getBlockZ());
+                stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
+                stmt.setInt(6, drawer.getItemCount());
+                stmt.setString(7, drawer.getTier().name());
+                stmt.addBatch();
+            }
+
+            stmt.executeBatch();
+            conn.commit();
+            conn.setAutoCommit(true);
+
+            plugin.getLogger().info("Saved " + drawers.size() + " drawers on shutdown.");
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.SEVERE, "Failed to save drawers on shutdown", e);
+            try {
+                conn.rollback();
+            } catch (SQLException ex) {
+                plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", ex);
+            }
+        }
     }
 
     /**

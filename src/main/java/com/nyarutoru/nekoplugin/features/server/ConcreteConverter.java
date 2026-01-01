@@ -38,7 +38,7 @@ public class ConcreteConverter {
             Map.entry(Material.RED_CONCRETE_POWDER, Material.RED_CONCRETE),
             Map.entry(Material.BLACK_CONCRETE_POWDER, Material.BLACK_CONCRETE));
     // Track items in water: Item UUID -> time entered water
-    private final Map<UUID, Long> itemsInWater = new HashMap<>();
+    private final Map<UUID, Long> itemsInWater = new java.util.concurrent.ConcurrentHashMap<>();
 
     public void start() {
         // Schedule timer to check all worlds for items

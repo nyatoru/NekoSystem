@@ -59,14 +59,14 @@ public class PlayerFeatureListener implements Listener {
     private final NekoPlugin plugin;
 
     // ========== AFK System ==========
-    private final Map<UUID, Long> lastActivity = new HashMap<>();
-    private final Map<UUID, Boolean> afkStatus = new HashMap<>();
+    private final Map<UUID, Long> lastActivity = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> afkStatus = new java.util.concurrent.ConcurrentHashMap<>();
     // Store original display names and player list names to restore when player
     // returns from AFK
-    private final Map<UUID, Component> originalDisplayNames = new HashMap<>();
-    private final Map<UUID, Component> originalPlayerListNames = new HashMap<>();
+    private final Map<UUID, Component> originalDisplayNames = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<UUID, Component> originalPlayerListNames = new java.util.concurrent.ConcurrentHashMap<>();
     // Store last known location for head rotation tracking
-    private final Map<UUID, Location> lastKnownLocation = new HashMap<>();
+    private final Map<UUID, Location> lastKnownLocation = new java.util.concurrent.ConcurrentHashMap<>();
     private NamespacedKey afkKey;
 
     public PlayerFeatureListener(NekoPlugin plugin) {
