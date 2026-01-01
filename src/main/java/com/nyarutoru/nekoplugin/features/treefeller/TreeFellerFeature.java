@@ -15,7 +15,6 @@ public class TreeFellerFeature implements Feature {
 
     private boolean enabled = false;
     private TreeFellerListener listener;
-    private FastLeafDecayListener leafDecayListener;
 
     @Override
     public String getId() {
@@ -32,21 +31,14 @@ public class TreeFellerFeature implements Feature {
         listener = new TreeFellerListener(plugin);
         plugin.getServer().getPluginManager().registerEvents(listener, plugin);
 
-        // Register fast leaf decay for ALL trees
-        leafDecayListener = new FastLeafDecayListener();
-        plugin.getServer().getPluginManager().registerEvents(leafDecayListener, plugin);
-
         this.enabled = true;
-        plugin.getLogger().info("Tree Feller feature enabled with fast leaf decay.");
+        plugin.getLogger().info("Tree Feller feature enabled.");
     }
 
     @Override
     public void onDisable() {
         if (listener != null) {
             HandlerList.unregisterAll(listener);
-        }
-        if (leafDecayListener != null) {
-            HandlerList.unregisterAll(leafDecayListener);
         }
         this.enabled = false;
     }

@@ -4,7 +4,6 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
-import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -36,18 +35,6 @@ public class TreeFellerListener implements Listener {
     private static final int MIN_LEAVES_FOR_TREE = 20;
     private static final int STRUCTURE_CHECK_RADIUS = 2;
     private static final int MAX_STRUCTURE_BLOCKS_ALLOWED = 2;
-
-    // Leaf search ranges
-    private static final int LEAF_SEARCH_MIN_X = -3;
-    private static final int LEAF_SEARCH_MAX_X = 3;
-    private static final int LEAF_SEARCH_MIN_Y = -2;
-    private static final int LEAF_SEARCH_MAX_Y = 4;
-    private static final int LEAF_SEARCH_MIN_Z = -3;
-    private static final int LEAF_SEARCH_MAX_Z = 3;
-
-    // Leaf decay timing
-    private static final int LEAF_DECAY_BATCH_SIZE = 20;
-    private static final int LEAF_DECAY_TICK_DELAY = 1;
 
     // Static offset arrays for log searching (includes multi-trunk support)
     private static final int[][] COMPACT_OFFSETS = {
@@ -412,7 +399,6 @@ public class TreeFellerListener implements Listener {
         Set<BlockPos> visited = new HashSet<>();
         Deque<BlockPos> toCheck = new ArrayDeque<>();
         List<BlockPos> logsToBreak = new ArrayList<>();
-        Set<BlockPos> leavesToDecay = new HashSet<>();
         Set<BlockPos> rootsToBreak = new HashSet<>();
 
         // Determine tree height and select appropriate offsets
@@ -452,18 +438,6 @@ public class TreeFellerListener implements Listener {
                         rootsToBreak.add(adjacent);
                         // Also check for logs connected through roots
                         toCheck.add(adjacent);
-                    }
-                }
-            }
-
-            // Collect nearby leaves
-            for (int dx = LEAF_SEARCH_MIN_X; dx <= LEAF_SEARCH_MAX_X; dx++) {
-                for (int dy = LEAF_SEARCH_MIN_Y; dy <= LEAF_SEARCH_MAX_Y; dy++) {
-                    for (int dz = LEAF_SEARCH_MIN_Z; dz <= LEAF_SEARCH_MAX_Z; dz++) {
-                        BlockPos leafPos = current.add(dx, dy, dz);
-                        if (isLeaf(leafPos.getBlock(world).getType())) {
-                            leavesToDecay.add(leafPos);
-                        }
                     }
                 }
             }
@@ -522,11 +496,6 @@ public class TreeFellerListener implements Listener {
             }
             root.setType(Material.AIR);
         }
-
-        // Simplified leaf decay - single pass with batched scheduling
-        if (!leavesToDecay.isEmpty()) {
-            triggerSimplifiedLeafDecay(leavesToDecay, world);
-        }
     }
 
     /**
@@ -546,38 +515,5 @@ public class TreeFellerListener implements Listener {
             }
         }
         return height;
-    }
-
-    /**
-     * Fast leaf decay - uses vanilla decay mechanics.
-     * Sets persistent=false and triggers randomTick for vanilla decay.
-     */
-    private void triggerSimplifiedLeafDecay(Set<BlockPos> leaves, World world) {
-        List<BlockPos> leafList = new ArrayList<>(leaves);
-        Collections.shuffle(leafList);
-
-        // Process leaves in small batches with staggered timing for visual effect
-        for (int i = 0; i < leafList.size(); i++) {
-            BlockPos leafPos = leafList.get(i);
-            int batch = i / LEAF_DECAY_BATCH_SIZE;
-            int delay = LEAF_DECAY_TICK_DELAY + (batch * 2); // Stagger by 2 ticks per batch
-
-            SchedulerUtils.runAtLocationLater(leafPos.toLocation(world), () -> {
-                Block leaf = leafPos.getBlock(world);
-                if (isLeaf(leaf.getType())) {
-                    // Set persistent flag to false - tells vanilla decay system these leaves should
-                    // decay
-                    org.bukkit.block.data.BlockData data = leaf.getBlockData();
-                    if (data instanceof org.bukkit.block.data.type.Leaves) {
-                        org.bukkit.block.data.type.Leaves leafData = (org.bukkit.block.data.type.Leaves) data;
-                        leafData.setPersistent(false);
-                        leaf.setBlockData(leafData, false); // false = no physics update
-                    }
-
-                    // Trigger vanilla decay
-                    leaf.randomTick();
-                }
-            }, delay);
-        }
     }
 }
