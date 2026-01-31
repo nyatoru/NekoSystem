@@ -29,9 +29,11 @@ jobs:
     - name: Build with Gradle Wrapper
       run: ./gradlew build
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
       with:
-        name: build-libs
-        path: build/libs/
-        retention-days: 30
+        tag_name: v${{ github.run_number }}
+        files: build/libs/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
