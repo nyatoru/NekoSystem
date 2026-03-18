@@ -22,6 +22,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -272,9 +273,13 @@ public class DrawerListener implements Listener {
     }
 
     private void handleExplosion(List<Block> affectedBlocks) {
+        List<Block> drawersToDestroy = new ArrayList<>();
+
         for (Block block : affectedBlocks) {
             Drawer drawer = DrawerManager.getInstance().getDrawer(block.getLocation());
             if (drawer != null) {
+                drawersToDestroy.add(block);
+
                 // Close all GUIs viewing this drawer
                 DrawerGUI.closeAllViewers(drawer);
 
@@ -291,10 +296,16 @@ public class DrawerListener implements Listener {
                 }
                 block.getWorld().dropItemNaturally(dropLoc, drawerItem);
 
-                // Remove drawer data (block will be destroyed by explosion naturally)
+                // Remove drawer data
                 DrawerManager.getInstance().removeDrawer(block.getLocation());
             }
         }
-        // Don't remove drawers from explosion list - let them be destroyed naturally
+
+        // Remove drawers from explosion list and manually destroy them
+        // This prevents vanilla barrel drop while still destroying the block
+        affectedBlocks.removeAll(drawersToDestroy);
+        for (Block block : drawersToDestroy) {
+            block.setType(Material.AIR);
+        }
     }
 }
