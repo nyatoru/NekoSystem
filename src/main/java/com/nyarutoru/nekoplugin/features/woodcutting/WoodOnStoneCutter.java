@@ -4,13 +4,13 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.StonecuttingRecipe;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Creates stonecutter recipes for wood processing.
@@ -19,7 +19,6 @@ import java.util.List;
 public class WoodOnStoneCutter {
 
     private final NekoPlugin plugin;
-    private final FileConfiguration config;
     private final List<NamespacedKey> recipeKeys = new ArrayList<>();
 
     // Wood items that can be crafted from logs
@@ -37,9 +36,23 @@ public class WoodOnStoneCutter {
             "HANGING_SIGN"
     };
 
+    // Hardcoded output amounts per item type
+    private static final Map<String, Integer> OUTPUT_AMOUNTS = new HashMap<>() {{
+        put("PLANKS", 4);
+        put("STAIRS", 4);
+        put("SLAB", 2);
+        put("FENCE", 4);
+        put("FENCE_GATE", 1);
+        put("DOOR", 1);
+        put("TRAPDOOR", 2);
+        put("PRESSURE_PLATE", 2);
+        put("BUTTON", 4);
+        put("SIGN", 2);
+        put("HANGING_SIGN", 2);
+    }};
+
     public WoodOnStoneCutter(NekoPlugin plugin) {
         this.plugin = plugin;
-        this.config = plugin.getConfig();
     }
 
     /**
@@ -47,9 +60,6 @@ public class WoodOnStoneCutter {
      */
     public void registerRecipes() {
         int recipeCount = 0;
-
-        // Get output config section
-        ConfigurationSection outputSection = config.getConfigurationSection("woodcutting.output");
 
         for (Material log : Tag.LOGS.getValues()) {
             // Skip stripped logs as input
@@ -65,12 +75,7 @@ public class WoodOnStoneCutter {
 
             // Create recipes for each wood item type
             for (String itemType : WOOD_ITEMS) {
-                // Get output amount from config
-                int outputAmount = 1;
-                if (outputSection != null) {
-                    outputAmount = outputSection.getInt(itemType.toLowerCase(), 1);
-                }
-
+                int outputAmount = OUTPUT_AMOUNTS.getOrDefault(itemType, 1);
                 Material outputMaterial = getMaterial(woodType, itemType);
 
                 if (outputMaterial != null && outputMaterial.isItem()) {

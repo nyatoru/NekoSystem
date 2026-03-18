@@ -6,8 +6,6 @@ import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -22,30 +20,14 @@ import java.util.Random;
  */
 public class WoodPlacingListener implements Listener {
 
-    private final NekoPlugin plugin;
     private final Random random = new Random();
 
-    // Min and max planks dropped
-    private final int minDrop;
-    private final int maxDrop;
-    private final boolean requireSneak;
+    // Hardcoded values
+    private static final int MIN_DROP = 4;
+    private static final int MAX_DROP = 8;
 
     public WoodPlacingListener(NekoPlugin plugin) {
-        this.plugin = plugin;
-        
-        // Load config from woodcutting section
-        FileConfiguration config = plugin.getConfig();
-        ConfigurationSection logSection = config.getConfigurationSection("woodcutting.log_conversion");
-        
-        if (logSection != null) {
-            this.minDrop = logSection.getInt("min_drop", 4);
-            this.maxDrop = logSection.getInt("max_drop", 8);
-            this.requireSneak = logSection.getBoolean("require_sneak", false);
-        } else {
-            this.minDrop = 4;
-            this.maxDrop = 8;
-            this.requireSneak = false;
-        }
+        // No config needed - values are hardcoded
     }
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
@@ -61,11 +43,6 @@ public class WoodPlacingListener implements Listener {
 
         // Check if placed block is a log
         if (!isLog(block.getType())) {
-            return;
-        }
-
-        // Check if player is sneaking (optional - can be configured)
-        if (requireSneak && !event.getPlayer().isSneaking()) {
             return;
         }
 
@@ -143,9 +120,6 @@ public class WoodPlacingListener implements Listener {
      * Get random drop amount between min and max.
      */
     private int getRandomDropAmount() {
-        if (minDrop >= maxDrop) {
-            return minDrop;
-        }
-        return random.nextInt(maxDrop - minDrop + 1) + minDrop;
+        return random.nextInt(MAX_DROP - MIN_DROP + 1) + MIN_DROP;
     }
 }

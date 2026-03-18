@@ -31,12 +31,6 @@ public class WoodcuttingFeature implements Feature {
 
     @Override
     public void onEnable(NekoPlugin plugin) {
-        // Save default config if not exists
-        plugin.saveResource("woodcutting.yml", false);
-        
-        // Reload config to load woodcutting.yml values
-        plugin.reloadConfig();
-
         // Register stonecutter recipes
         woodOnStoneCutter = new WoodOnStoneCutter(plugin);
         woodOnStoneCutter.registerRecipes();
