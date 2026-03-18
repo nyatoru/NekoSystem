@@ -1,0 +1,27 @@
+# Woodcutting Feature Configuration
+# Allows processing wood using stonecutter and placing logs on stonecutter
+
+# Stonecutter recipe output amounts
+# How many items you get per log in the stonecutter
+output:
+  planks: 4
+  stairs: 4
+  slab: 2
+  fence: 4
+  fence_gate: 1
+  door: 1
+  trapdoor: 2
+  pressure_plate: 2
+  button: 4
+  sign: 2
+  hanging_sign: 2
+
+# Log placement conversion settings
+# When a log is placed on a stonecutter, it converts to planks
+log_conversion:
+  # Minimum planks dropped when placing log on stonecutter
+  min_drop: 4
+  # Maximum planks dropped when placing log on stonecutter
+  max_drop: 8
+  # Require player to sneak when placing log to convert
+  require_sneak: false
