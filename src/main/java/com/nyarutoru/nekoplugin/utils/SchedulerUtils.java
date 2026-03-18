@@ -46,7 +46,13 @@ public class SchedulerUtils {
      */
     public static void runAtEntity(Entity entity, Runnable task) {
         if (IS_FOLIA) {
-            entity.getScheduler().run(getPlugin(), t -> task.run(), null);
+            try {
+                entity.getScheduler().run(getPlugin(), t -> task.run(), null);
+            } catch (UnsupportedOperationException e) {
+                // Entity may not be in a valid region yet (e.g., during login)
+                // Run on global scheduler instead
+                runGlobal(task);
+            }
         } else {
             Bukkit.getScheduler().runTask(getPlugin(), task);
         }
@@ -57,7 +63,13 @@ public class SchedulerUtils {
      */
     public static void runAtEntityLater(Entity entity, Runnable task, long delayTicks) {
         if (IS_FOLIA) {
-            entity.getScheduler().runDelayed(getPlugin(), t -> task.run(), null, delayTicks);
+            try {
+                entity.getScheduler().runDelayed(getPlugin(), t -> task.run(), null, delayTicks);
+            } catch (UnsupportedOperationException e) {
+                // Entity may not be in a valid region yet (e.g., during login)
+                // Run on global scheduler instead
+                runGlobalLater(task, delayTicks);
+            }
         } else {
             Bukkit.getScheduler().runTaskLater(getPlugin(), task, delayTicks);
         }

@@ -76,23 +76,6 @@ public class ServerPerformanceUtils {
     }
 
     /**
-     * Gets the current MSPT (Milliseconds Per Tick).
-     * <p>
-     * On Folia: Returns MSPT for the overworld spawn region
-     * On Paper/Spigot: Returns global MSPT
-     *
-     * @return The current MSPT
-     */
-    public static double getMSPT() {
-        if (IS_FOLIA) {
-            World overworld = Bukkit.getWorlds().getFirst();
-            return getMSPT(overworld.getSpawnLocation());
-        } else {
-            return Bukkit.getAverageTickTime();
-        }
-    }
-
-    /**
      * Gets the current MSPT (Milliseconds Per Tick) for a specific location.
      * <p>
      * On Folia: Returns the region-specific MSPT for the region containing the location
@@ -151,30 +134,6 @@ public class ServerPerformanceUtils {
         } catch (Exception e) {
             return 50.0;
         }
-    }
-
-    /**
-     * Gets TPS color for display (GREEN/YELLOW/RED).
-     *
-     * @param tps The TPS value
-     * @return Color name as string
-     */
-    public static String getTpsColorName(double tps) {
-        if (tps >= 18.0) return "GREEN";
-        if (tps >= 15.0) return "YELLOW";
-        return "RED";
-    }
-
-    /**
-     * Gets MSPT color for display (GREEN/YELLOW/RED).
-     *
-     * @param mspt The MSPT value
-     * @return Color name as string
-     */
-    public static String getMsptColorName(double mspt) {
-        if (mspt <= 40.0) return "GREEN";
-        if (mspt <= 50.0) return "YELLOW";
-        return "RED";
     }
 
     /**

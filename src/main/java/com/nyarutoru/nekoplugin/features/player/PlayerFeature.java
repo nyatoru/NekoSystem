@@ -48,8 +48,4 @@ public class PlayerFeature implements Feature {
     public boolean isEnabled() {
         return enabled;
     }
-
-    public PlayerFeatureListener getListener() {
-        return listener;
-    }
 }

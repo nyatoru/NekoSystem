@@ -38,13 +38,6 @@ public class RecipeAPI {
     }
 
     /**
-     * Unregister a recipe by ID.
-     */
-    public void unregisterRecipe(String recipeId) {
-        recipes.removeIf(r -> r.getId().equals(recipeId));
-    }
-
-    /**
      * Find a matching recipe for the given crafting grid.
      *
      * @param grid 9-element array representing 3x3 crafting grid
@@ -65,21 +58,5 @@ public class RecipeAPI {
      */
     public List<CustomRecipe> getAllRecipes() {
         return Collections.unmodifiableList(recipes);
-    }
-
-    /**
-     * Clear all recipes.
-     */
-    public void clearRecipes() {
-        recipes.clear();
-    }
-
-    /**
-     * Get recipes by category.
-     */
-    public List<CustomRecipe> getRecipesByCategory(String category) {
-        return recipes.stream()
-                .filter(r -> category.equals(r.getCategory()))
-                .toList();
     }
 }

@@ -54,7 +54,7 @@ public class DrawerGUI extends BaseGUI {
     }
 
     private static String locationKey(Location loc) {
-        return LocationUtils.getSimpleLocationKey(loc);
+        return LocationUtils.getLocationKey(loc);
     }
 
     /**

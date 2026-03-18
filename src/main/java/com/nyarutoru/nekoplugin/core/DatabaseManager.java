@@ -149,11 +149,4 @@ public class DatabaseManager {
         }
         plugin.getLogger().info("All database connections closed.");
     }
-
-    /**
-     * Get the database folder path.
-     */
-    public File getDatabaseFolder() {
-        return databaseFolder;
-    }
 }
