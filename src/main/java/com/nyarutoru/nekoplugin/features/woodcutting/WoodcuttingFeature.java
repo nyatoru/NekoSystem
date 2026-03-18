@@ -34,6 +34,8 @@ public class WoodcuttingFeature implements Feature {
         woodOnStoneCutter.registerRecipes();
 
         this.enabled = true;
+        
+        plugin.getLogger().info("Woodcutting feature enabled");
     }
 
     @Override

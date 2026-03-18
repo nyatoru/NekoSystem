@@ -47,6 +47,7 @@ public class FeatureManager {
             return;
         }
         features.put(feature.getId(), feature);
+        plugin.getLogger().info("Registered feature: " + feature.getName() + " (" + feature.getId() + ")");
     }
 
     /**
