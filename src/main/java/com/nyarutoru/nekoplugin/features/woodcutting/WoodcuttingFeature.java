@@ -5,10 +5,9 @@ import com.nyarutoru.nekoplugin.core.Feature;
 import org.bukkit.event.HandlerList;
 
 /**
- * Woodcutting feature - enhanced wood processing.
- * Includes:
- * - Stonecutter wood recipes (logs to planks, stairs, slabs, etc.)
- * - Log placement on stonecutter converts to planks
+ * Woodcutting feature - enhanced wood processing using stonecutter.
+ * Allows converting logs to all wood-related items in the stonecutter:
+ * planks, stairs, slabs, fences, doors, trapdoors, pressure plates, buttons, signs.
  */
 public class WoodcuttingFeature implements Feature {
 
@@ -17,7 +16,6 @@ public class WoodcuttingFeature implements Feature {
 
     private boolean enabled = false;
     private WoodOnStoneCutter woodOnStoneCutter;
-    private WoodPlacingListener woodPlacingListener;
 
     @Override
     public String getId() {
@@ -35,18 +33,11 @@ public class WoodcuttingFeature implements Feature {
         woodOnStoneCutter = new WoodOnStoneCutter(plugin);
         woodOnStoneCutter.registerRecipes();
 
-        // Register listener for log placement on stonecutter
-        woodPlacingListener = new WoodPlacingListener(plugin);
-        plugin.getServer().getPluginManager().registerEvents(woodPlacingListener, plugin);
-
         this.enabled = true;
     }
 
     @Override
     public void onDisable() {
-        if (woodPlacingListener != null) {
-            HandlerList.unregisterAll(woodPlacingListener);
-        }
         if (woodOnStoneCutter != null) {
             woodOnStoneCutter.removeRecipes();
         }
