@@ -9,6 +9,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Converts Concrete Powder dropped in water into solid Concrete after 10
@@ -19,8 +20,8 @@ public class ConcreteConverter {
     private static final long CONVERT_TIME_MS = 10 * 1000; // 10 seconds
     // Note: No BukkitTask reference needed for Folia-compatible scheduling
     private static final long CHECK_INTERVAL_TICKS = 20; // 1 second
-    // Map concrete powder to solid concrete
-    private static final Map<Material, Material> POWDER_TO_CONCRETE = Map.ofEntries(
+    // Map concrete powder to solid concrete - using EnumMap for optimal performance
+    private static final Map<Material, Material> POWDER_TO_CONCRETE = new EnumMap<>(Map.ofEntries(
             Map.entry(Material.WHITE_CONCRETE_POWDER, Material.WHITE_CONCRETE),
             Map.entry(Material.ORANGE_CONCRETE_POWDER, Material.ORANGE_CONCRETE),
             Map.entry(Material.MAGENTA_CONCRETE_POWDER, Material.MAGENTA_CONCRETE),
@@ -36,7 +37,7 @@ public class ConcreteConverter {
             Map.entry(Material.BROWN_CONCRETE_POWDER, Material.BROWN_CONCRETE),
             Map.entry(Material.GREEN_CONCRETE_POWDER, Material.GREEN_CONCRETE),
             Map.entry(Material.RED_CONCRETE_POWDER, Material.RED_CONCRETE),
-            Map.entry(Material.BLACK_CONCRETE_POWDER, Material.BLACK_CONCRETE));
+            Map.entry(Material.BLACK_CONCRETE_POWDER, Material.BLACK_CONCRETE)));
     // Track items in water: Item UUID -> time entered water
     private final Map<UUID, Long> itemsInWater = new ConcurrentHashMap<>();
 
@@ -55,9 +56,19 @@ public class ConcreteConverter {
      */
     private void checkAllWorlds() {
         long now = System.currentTimeMillis();
+        long staleThreshold = CONVERT_TIME_MS + TimeUnit.SECONDS.toMillis(30); // 30 seconds extra
 
-        // Clean up dead items first (safe to do on global thread)
-        itemsInWater.keySet().removeIf(uuid -> {
+        // Clean up dead items and stale entries (safe to do on global thread)
+        itemsInWater.entrySet().removeIf(entry -> {
+            UUID uuid = entry.getKey();
+            Long enteredTime = entry.getValue();
+            
+            // Remove if stale (been in map for over 40 seconds total)
+            if (enteredTime != null && (now - enteredTime) > staleThreshold) {
+                return true;
+            }
+            
+            // Remove if entity no longer exists
             for (World world : Bukkit.getWorlds()) {
                 if (world.getEntity(uuid) != null)
                     return false;

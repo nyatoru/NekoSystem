@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Unified Player Feature Listener.
- * Handles: Pet Carrying, AFK System, Auto Item Replenishment
+ * Handles: AFK System, Auto Item Replenishment, Crop Harvest
  */
 public class PlayerFeatureListener implements Listener {
 
@@ -87,12 +87,20 @@ public class PlayerFeatureListener implements Listener {
     }
 
     public void stop() {
-        // Restore all AFK players' display names
+        // Restore all AFK players' display names and clean up all maps
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (afkStatus.getOrDefault(player.getUniqueId(), false)) {
+            UUID uuid = player.getUniqueId();
+            if (afkStatus.getOrDefault(uuid, false)) {
                 restoreDisplayName(player);
             }
         }
+        
+        // Clear all maps to prevent memory leaks
+        originalDisplayNames.clear();
+        originalPlayerListNames.clear();
+        lastKnownLocation.clear();
+        lastActivity.clear();
+        afkStatus.clear();
     }
 
     // ==================== AFK SYSTEM ====================
@@ -123,19 +131,34 @@ public class PlayerFeatureListener implements Listener {
     }
 
     private void setAfk(Player player, boolean afk) {
-        afkStatus.put(player.getUniqueId(), afk);
+        if (player == null) {
+            return;
+        }
+        
+        UUID uuid = player.getUniqueId();
+        afkStatus.put(uuid, afk);
 
         if (afk) {
-            // Store original display name and player list name
-            originalDisplayNames.put(player.getUniqueId(), player.displayName());
-            originalPlayerListNames.put(player.getUniqueId(), player.playerListName());
+            // Store original display name and player list name with null safety
+            Component currentDisplayName = player.displayName();
+            Component currentPlayerListName = player.playerListName();
+            
+            if (currentDisplayName != null) {
+                originalDisplayNames.put(uuid, currentDisplayName);
+            }
+            if (currentPlayerListName != null) {
+                originalPlayerListNames.put(uuid, currentPlayerListName);
+            }
 
             // Set AFK prefix for both display name and tablist
+            Component baseName = currentDisplayName != null ? currentDisplayName : Component.text(player.getName());
             Component afkName = Component.text("[AFK] ").color(NamedTextColor.GRAY)
-                    .append(player.displayName().color(NamedTextColor.GRAY));
+                    .append(baseName.color(NamedTextColor.GRAY));
 
             // Update display name
-            player.displayName(afkName);
+            SchedulerUtils.runAtEntity(player, () -> {
+                player.displayName(afkName);
+            });
 
             // Update player list name (tablist) - FOLIA FIX
             SchedulerUtils.runAtEntity(player, () -> {
@@ -157,11 +180,18 @@ public class PlayerFeatureListener implements Listener {
     }
 
     private void restoreDisplayName(Player player) {
-        Component originalDisplay = originalDisplayNames.remove(player.getUniqueId());
-        Component originalListName = originalPlayerListNames.remove(player.getUniqueId());
+        if (player == null) {
+            return;
+        }
+        
+        UUID uuid = player.getUniqueId();
+        Component originalDisplay = originalDisplayNames.remove(uuid);
+        Component originalListName = originalPlayerListNames.remove(uuid);
 
         if (originalDisplay != null) {
-            player.displayName(originalDisplay);
+            SchedulerUtils.runAtEntity(player, () -> {
+                player.displayName(originalDisplay);
+            });
         }
 
         if (originalListName != null) {

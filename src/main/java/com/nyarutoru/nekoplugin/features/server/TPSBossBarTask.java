@@ -32,8 +32,13 @@ public class TPSBossBarTask {
     }
 
     public void run() {
-        // Gather global stats
-        double cpu = osBean.getProcessCpuLoad() * 100;
+        // Gather global stats with fallback for unavailable CPU load
+        double cpu = osBean.getProcessCpuLoad();
+        // getProcessCpuLoad() can return -1.0 if not available, use 0.0 as fallback
+        if (cpu < 0) {
+            cpu = 0.0;
+        }
+        cpu *= 100;
 
         // Update each OP player with their region-specific TPS and MSPT
         for (Player player : Bukkit.getOnlinePlayers()) {
