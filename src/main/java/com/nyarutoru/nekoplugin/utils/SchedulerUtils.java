@@ -126,14 +126,20 @@ public class SchedulerUtils {
 
     /**
      * Run a repeating task on the global region.
+     *
+     * @param task        the task to run
+     * @param delayTicks  the delay in ticks before the first execution
+     * @param periodTicks the period in ticks between subsequent executions
+     * @return the BukkitTask on Paper/Spigot, null on Folia
      */
-    public static void runGlobalTimer(Runnable task, long delayTicks, long periodTicks) {
+    public static BukkitTask runGlobalTimer(Runnable task, long delayTicks, long periodTicks) {
         if (IS_FOLIA) {
             // Folia requires delay to be at least 1 tick
             long actualDelay = Math.max(1, delayTicks);
             Bukkit.getGlobalRegionScheduler().runAtFixedRate(getPlugin(), t -> task.run(), actualDelay, periodTicks);
+            return null; // Folia doesn't use BukkitTask
         } else {
-            Bukkit.getScheduler().runTaskTimer(getPlugin(), task, delayTicks, periodTicks);
+            return Bukkit.getScheduler().runTaskTimer(getPlugin(), task, delayTicks, periodTicks);
         }
     }
 

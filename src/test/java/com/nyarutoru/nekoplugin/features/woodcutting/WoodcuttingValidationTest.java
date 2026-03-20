@@ -11,8 +11,9 @@ class WoodcuttingValidationTest {
 
     @Test
     void testFeatureConstants() {
-        assertEquals("woodcutting", WoodcuttingFeature.ID);
-        assertEquals("Woodcutting", WoodcuttingFeature.NAME);
+        WoodcuttingFeature feature = new WoodcuttingFeature();
+        assertEquals("woodcutting", feature.getId());
+        assertEquals("Woodcutting", feature.getName());
     }
 
     @Test

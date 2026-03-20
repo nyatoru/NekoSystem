@@ -13,8 +13,9 @@ class ServerFeatureValidationTest {
 
     @Test
     void testFeatureConstants() {
-        assertEquals("server", ServerFeature.ID);
-        assertEquals("Server Utilities", ServerFeature.NAME);
+        ServerFeature feature = new ServerFeature();
+        assertEquals("server", feature.getId());
+        assertEquals("Server Utilities", feature.getName());
     }
 
     @Test

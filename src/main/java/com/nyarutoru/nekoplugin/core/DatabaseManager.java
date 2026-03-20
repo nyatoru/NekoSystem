@@ -12,6 +12,12 @@ import java.util.logging.Level;
  * Centralized SQLite database manager.
  * Provides connection management for multiple feature databases.
  * Each feature can have its own database file.
+ * <p>
+ * Features:
+ * - Automatic connection validation and reconnection
+ * - Connection pooling per feature
+ * - WAL mode for better concurrent access
+ * - Graceful shutdown with proper resource cleanup
  */
 public class DatabaseManager {
 
@@ -21,6 +27,10 @@ public class DatabaseManager {
     private final Map<String, Connection> connections = new ConcurrentHashMap<>();
     private NekoPlugin plugin;
     private File databaseFolder;
+
+    // Track failed connection attempts to avoid spam
+    private final Map<String, Long> lastFailedConnection = new ConcurrentHashMap<>();
+    private static final long RECONNECT_DELAY_MS = 5000; // 5 second delay between reconnect attempts
 
     private DatabaseManager() {
     }
@@ -54,12 +64,54 @@ public class DatabaseManager {
 
     /**
      * Get or create a database connection for a specific feature.
+     * Validates existing connections and attempts reconnection if needed.
      *
      * @param featureName The name of the feature (used as database filename)
-     * @return The SQLite connection for this feature
+     * @return The SQLite connection for this feature, or null if connection fails
      */
     public Connection getConnection(String featureName) {
-        return connections.computeIfAbsent(featureName, this::createConnection);
+        Connection existing = connections.get(featureName);
+
+        // Validate existing connection
+        if (existing != null) {
+            try {
+                if (!existing.isClosed()) {
+                    // Connection is valid, test it with a quick query
+                    if (existing.isValid(1)) {
+                        return existing;
+                    }
+                }
+                // Connection is closed or invalid, remove it and recreate
+                connections.remove(featureName);
+                existing.close(); // Clean up the closed connection
+            } catch (SQLException e) {
+                // Connection is broken, remove and recreate
+                connections.remove(featureName);
+                try {
+                    existing.close();
+                } catch (SQLException ex) {
+                    // Ignore close errors
+                }
+                plugin.getLogger().log(java.util.logging.Level.FINE,
+                    "Connection validation failed for " + featureName + ", reconnecting...", e);
+            }
+        }
+
+        // Check if we're in reconnect cooldown
+        Long lastFail = lastFailedConnection.get(featureName);
+        if (lastFail != null && (System.currentTimeMillis() - lastFail) < RECONNECT_DELAY_MS) {
+            return null; // Still in cooldown
+        }
+
+        // Create new connection
+        Connection newConn = createConnection(featureName);
+        if (newConn != null) {
+            connections.put(featureName, newConn);
+            lastFailedConnection.remove(featureName); // Clear failure tracking
+        } else {
+            lastFailedConnection.put(featureName, System.currentTimeMillis());
+        }
+        return newConn;
     }
 
     /**
@@ -100,17 +152,52 @@ public class DatabaseManager {
 
     /**
      * Execute a table creation statement on a feature database.
+     * Automatically reconnects if the connection is lost.
      */
     public void createTable(String featureName, String createSQL) {
         Connection conn = getConnection(featureName);
-        if (conn == null)
+        if (conn == null) {
+            plugin.getLogger().log(Level.WARNING,
+                "Cannot create table for " + featureName + ": no database connection");
             return;
+        }
 
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(createSQL);
+            plugin.getLogger().log(Level.FINE, "Table created successfully for " + featureName);
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to create table for " + featureName, e);
+            // Check if connection was lost and try to reconnect once
+            if (isConnectionLost(e)) {
+                connections.remove(featureName); // Force reconnection
+                plugin.getLogger().log(Level.INFO,
+                    "Connection lost for " + featureName + ", attempting reconnect...", e);
+                conn = getConnection(featureName);
+                if (conn != null) {
+                    try (Statement stmt = conn.createStatement()) {
+                        stmt.execute(createSQL);
+                        plugin.getLogger().log(Level.FINE,
+                            "Table created successfully after reconnect for " + featureName);
+                        return;
+                    } catch (SQLException e2) {
+                        plugin.getLogger().log(Level.SEVERE,
+                            "Failed to create table for " + featureName + " after reconnect", e2);
+                    }
+                }
+            } else {
+                plugin.getLogger().log(Level.SEVERE, "Failed to create table for " + featureName, e);
+            }
         }
+    }
+
+    /**
+     * Check if a SQLException indicates a lost connection.
+     */
+    private boolean isConnectionLost(SQLException e) {
+        String sqlState = e.getSQLState();
+        // SQLite error codes for connection issues
+        return "08000".equals(sqlState) || // Connection exception
+               "08003".equals(sqlState) || // Connection does not exist
+               "08006".equals(sqlState);   // Connection failure
     }
 
     /**
@@ -142,11 +229,14 @@ public class DatabaseManager {
 
     /**
      * Shutdown all database connections.
+     * Clears all connection state and failure tracking.
      */
     public void shutdown() {
         for (String featureName : connections.keySet()) {
             closeConnection(featureName);
         }
+        connections.clear();
+        lastFailedConnection.clear();
         plugin.getLogger().info("All database connections closed.");
     }
 }

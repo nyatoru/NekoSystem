@@ -14,8 +14,9 @@ class GravesValidationTest {
 
     @Test
     void testFeatureConstants() {
-        assertEquals("graves", GravesFeature.ID);
-        assertEquals("Graves", GravesFeature.NAME);
+        GravesFeature feature = new GravesFeature();
+        assertEquals("graves", feature.getId());
+        assertEquals("Graves", feature.getName());
     }
 
     @Test

@@ -21,6 +21,7 @@ import java.util.function.Predicate;
  * - Prevents re-activation while already active
  * - Persistent action bar while active
  * - Cancels on: item swap, tool break, death, teleport, logout
+ * - Automatic cleanup of timer tasks to prevent memory leaks
  */
 public class ActiveToolAPI {
 
@@ -34,6 +35,8 @@ public class ActiveToolAPI {
     private final Map<String, BukkitTask> shiftTimeoutTasks = new ConcurrentHashMap<>();
     // Active tool state
     private final Map<UUID, ActiveToolState> activeTools = new ConcurrentHashMap<>();
+    // Action bar timer tasks per player (for cleanup on deactivate)
+    private final Map<UUID, BukkitTask> actionBarTasks = new ConcurrentHashMap<>();
 
     private ActiveToolAPI() {
     }
@@ -112,6 +115,7 @@ public class ActiveToolAPI {
 
     /**
      * Activates a tool for the player.
+     * Starts a persistent action bar display that refreshes every second.
      */
     public void activate(Player player, String toolName, Runnable onActivate) {
         UUID uuid = player.getUniqueId();
@@ -119,11 +123,19 @@ public class ActiveToolAPI {
         ActiveToolState state = new ActiveToolState(toolName, player.getInventory().getItemInMainHand().clone());
         activeTools.put(uuid, state);
 
-        SchedulerUtils.runGlobalTimer(() -> {
+        // Cancel any existing action bar task for this player (safety check)
+        BukkitTask existingTask = actionBarTasks.remove(uuid);
+        SchedulerUtils.cancelTask(existingTask);
+
+        // Start new action bar refresh timer and track it
+        BukkitTask timerTask = SchedulerUtils.runGlobalTimer(() -> {
             if (player.isOnline() && isActive(player, toolName)) {
                 player.sendActionBar(ComponentUtils.activeStatus(toolName));
             }
         }, 0, ACTION_BAR_REFRESH_TICKS);
+
+        // Track the timer task for cleanup (null on Folia, which is fine)
+        actionBarTasks.put(uuid, timerTask);
 
         player.sendActionBar(ComponentUtils.activeStatus(toolName));
         player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 2.0f);
@@ -135,6 +147,7 @@ public class ActiveToolAPI {
 
     /**
      * Deactivates the tool for a player.
+     * Cancels the action bar timer and cleans up all associated state.
      */
     public void deactivate(Player player, String reason) {
         UUID uuid = player.getUniqueId();
@@ -143,6 +156,10 @@ public class ActiveToolAPI {
         if (state != null) {
             player.sendActionBar(ComponentUtils.disabledStatus(state.toolName, reason));
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
+
+            // Cancel the action bar timer task
+            BukkitTask timerTask = actionBarTasks.remove(uuid);
+            SchedulerUtils.cancelTask(timerTask);
 
             // Reset shift count for this specific tool
             String key = uuid + ":" + state.toolName;
@@ -201,14 +218,26 @@ public class ActiveToolAPI {
             return false;
         });
 
+        // Cancel action bar timer task
+        BukkitTask timerTask = actionBarTasks.remove(uuid);
+        SchedulerUtils.cancelTask(timerTask);
+
         activeTools.remove(uuid);
     }
 
     public void shutdown() {
+        // Cancel all shift timeout tasks
         for (BukkitTask task : shiftTimeoutTasks.values()) {
             task.cancel();
         }
         shiftTimeoutTasks.clear();
+
+        // Cancel all action bar timer tasks
+        for (BukkitTask task : actionBarTasks.values()) {
+            task.cancel();
+        }
+        actionBarTasks.clear();
+
         shiftCount.clear();
         lastShiftTime.clear();
         activeTools.clear();

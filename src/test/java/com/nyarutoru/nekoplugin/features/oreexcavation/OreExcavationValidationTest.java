@@ -13,8 +13,9 @@ class OreExcavationValidationTest {
 
     @Test
     void testFeatureConstants() {
-        assertEquals("ore_excavation", OreExcavationFeature.ID);
-        assertEquals("Ore Excavation", OreExcavationFeature.NAME);
+        OreExcavationFeature feature = new OreExcavationFeature();
+        assertEquals("ore_excavation", feature.getId());
+        assertEquals("Ore Excavation", feature.getName());
     }
 
     @Test

@@ -1,8 +1,7 @@
 package com.nyarutoru.nekoplugin.features.woodcutting;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
-import com.nyarutoru.nekoplugin.core.Feature;
-import org.bukkit.event.HandlerList;
+import com.nyarutoru.nekoplugin.core.AbstractFeature;
 
 /**
  * Woodcutting feature - enhanced wood processing using stonecutter.
@@ -11,42 +10,17 @@ import org.bukkit.event.HandlerList;
  * 
  * Prevents duplicate recipe registration by tracking processed wood types.
  */
-public class WoodcuttingFeature implements Feature {
+public class WoodcuttingFeature extends AbstractFeature {
 
-    public static final String ID = "woodcutting";
-    public static final String NAME = "Woodcutting";
-
-    private boolean enabled = false;
-    private WoodOnStoneCutter woodOnStoneCutter;
-
-    @Override
-    public String getId() {
-        return ID;
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
+    public WoodcuttingFeature() {
+        super("woodcutting", "Woodcutting");
     }
 
     @Override
     public void onEnable(NekoPlugin plugin) {
-        woodOnStoneCutter = new WoodOnStoneCutter(plugin);
+        WoodOnStoneCutter woodOnStoneCutter = new WoodOnStoneCutter(plugin);
         woodOnStoneCutter.registerRecipes();
-        this.enabled = true;
+        super.onEnable(plugin);
         plugin.getLogger().info("Woodcutting feature enabled");
-    }
-
-    @Override
-    public void onDisable() {
-        if (woodOnStoneCutter != null) {
-            woodOnStoneCutter.removeRecipes();
-        }
-        this.enabled = false;
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
     }
 }

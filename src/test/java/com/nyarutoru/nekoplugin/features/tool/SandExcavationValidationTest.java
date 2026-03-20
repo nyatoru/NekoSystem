@@ -13,8 +13,9 @@ class SandExcavationValidationTest {
 
     @Test
     void testFeatureConstants() {
-        assertEquals("sand_excavation", SandExcavationFeature.ID);
-        assertEquals("Sand Excavation", SandExcavationFeature.NAME);
+        SandExcavationFeature feature = new SandExcavationFeature();
+        assertEquals("sand_excavation", feature.getId());
+        assertEquals("Sand Excavation", feature.getName());
     }
 
     @Test

@@ -1,56 +1,32 @@
 package com.nyarutoru.nekoplugin.features.drawer;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
-import com.nyarutoru.nekoplugin.core.Feature;
+import com.nyarutoru.nekoplugin.core.AbstractFeature;
 import com.nyarutoru.nekoplugin.features.drawer.crafting.DrawerRecipes;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerManager;
-import org.bukkit.event.HandlerList;
 
 /**
  * Drawer storage feature - craft and place drawers to store large quantities of
  * a single item type.
  */
-public class DrawerFeature implements Feature {
+public class DrawerFeature extends AbstractFeature {
 
-    public static final String ID = "drawer";
-    public static final String NAME = "Drawer Storage";
-
-    private boolean enabled = false;
-    private DrawerListener drawerListener;
-
-    @Override
-    public String getId() {
-        return ID;
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
+    public DrawerFeature() {
+        super("drawer", "Drawer Storage");
     }
 
     @Override
     public void onEnable(NekoPlugin plugin) {
         DrawerManager.getInstance().initialize(plugin);
 
-        drawerListener = new DrawerListener();
-        plugin.getServer().getPluginManager().registerEvents(drawerListener, plugin);
-
+        registerListener(new DrawerListener(), plugin);
         new DrawerRecipes().registerAll();
 
-        this.enabled = true;
+        super.onEnable(plugin);
     }
 
     @Override
-    public void onDisable() {
-        if (drawerListener != null) {
-            HandlerList.unregisterAll(drawerListener);
-        }
+    protected void cleanup() {
         DrawerManager.getInstance().shutdown();
-        this.enabled = false;
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return enabled;
     }
 }

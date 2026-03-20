@@ -12,8 +12,9 @@ class PlayerFeatureValidationTest {
 
     @Test
     void testFeatureConstants() {
-        assertEquals("player", PlayerFeature.ID);
-        assertEquals("Player Utilities", PlayerFeature.NAME);
+        PlayerFeature feature = new PlayerFeature();
+        assertEquals("player", feature.getId());
+        assertEquals("Player Utilities", feature.getName());
     }
 
     @Test

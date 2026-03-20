@@ -77,8 +77,9 @@ class HammerValidationTest {
 
     @Test
     void testHammerFeatureConstants() {
-        assertEquals("hammer", HammerFeature.ID);
-        assertEquals("Hammer", HammerFeature.NAME);
+        HammerFeature feature = new HammerFeature();
+        assertEquals("hammer", feature.getId());
+        assertEquals("Hammer", feature.getName());
     }
 
     @Test
