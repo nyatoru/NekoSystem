@@ -547,46 +547,41 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        Set<BlockPos> visited = new HashSet<>();
-        Deque<BlockPos> toCheck = new ArrayDeque<>();
-        List<BlockPos> logsToBreak = new ArrayList<>();
+        // Use distance-based tracking like the reference implementation
+        Map<Integer, List<BlockPos>> logsByDistance = new HashMap<>();
+        Map<Integer, List<BlockPos>> leavesByDistance = new HashMap<>();
+        Set<BlockPos> visitedLogs = new HashSet<>();
+        Set<BlockPos> visitedLeaves = new HashSet<>();
         Set<BlockPos> rootsToBreak = new HashSet<>();
 
-        // Determine tree height and select appropriate offsets
-        int treeHeight = measureTreeHeightDuringBFS(origin, logType, world);
-        boolean isTallTree = treeHeight > 10;
         boolean isMangrove = logType == Material.MANGROVE_LOG || logType == Material.STRIPPED_MANGROVE_LOG;
-        int[][] offsets = isTallTree ? TALL_TREE_OFFSETS : COMPACT_OFFSETS;
 
+        // BFS to find all connected logs with distance tracking
+        Deque<BlockPos> toCheck = new ArrayDeque<>();
         toCheck.add(origin);
-        visited.add(origin);
+        visitedLogs.add(origin);
+        logsByDistance.put(0, new ArrayList<>(Collections.singleton(origin)));
 
-        // BFS to find all connected logs
-        while (!toCheck.isEmpty()) {
+        int maxDistance = 64; // Maximum tree size limit
+
+        while (!toCheck.isEmpty() && logsByDistance.size() < maxDistance) {
             BlockPos current = toCheck.poll();
             if (current == null) {
                 continue;
             }
 
+            int currentDist = getDistance(origin, current);
             Block block = current.getBlock(world);
             if (block == null) {
                 continue;
             }
 
-            Material currentType = block.getType();
-            if (currentType == null) {
-                continue;
-            }
-
-            // Handle logs
-            if (currentType == logType && !isPlayerPlaced(block)) {
-                logsToBreak.add(current);
-            }
-
+            // Search for connected logs using appropriate offsets
+            int[][] offsets = getOffsetsForTree(block, logType, world);
             for (int[] offset : offsets) {
                 BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
-                if (!visited.contains(adjacent)) {
-                    visited.add(adjacent);
+                if (!visitedLogs.contains(adjacent)) {
+                    visitedLogs.add(adjacent);
                     Block adjBlock = adjacent.getBlock(world);
                     if (adjBlock == null) {
                         continue;
@@ -599,80 +594,203 @@ public class TreeFellerListener implements Listener {
 
                     if (adjType == logType && !isPlayerPlaced(adjBlock)) {
                         toCheck.add(adjacent);
+                        int newDist = getDistance(origin, adjacent);
+                        logsByDistance.computeIfAbsent(newDist, k -> new ArrayList<>()).add(adjacent);
                     }
 
                     // Mangrove roots handling
                     if (isMangrove && isMangroveRoot(adjType)) {
                         rootsToBreak.add(adjacent);
-                        // Also check for logs connected through roots
+                        visitedLogs.add(adjacent);
                         toCheck.add(adjacent);
                     }
                 }
             }
 
-            // For mangrove trees, also search for roots below
+            // For mangrove trees, search for additional roots below
             if (isMangrove) {
                 for (int dx = -2; dx <= 2; dx++) {
                     for (int dy = -3; dy <= 0; dy++) {
                         for (int dz = -2; dz <= 2; dz++) {
                             BlockPos rootPos = current.add(dx, dy, dz);
-                            Block rootBlock = rootPos.getBlock(world);
-                            if (rootBlock != null && !visited.contains(rootPos) && isMangroveRoot(rootBlock.getType())) {
-                                rootsToBreak.add(rootPos);
-                                visited.add(rootPos);
+                            if (!visitedLogs.contains(rootPos)) {
+                                Block rootBlock = rootPos.getBlock(world);
+                                if (rootBlock != null && isMangroveRoot(rootBlock.getType())) {
+                                    rootsToBreak.add(rootPos);
+                                    visitedLogs.add(rootPos);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Find connected leaves (like reference implementation)
+            findLeavesAroundLog(current, logType, world, origin, leavesByDistance, visitedLeaves);
+        }
+
+        // Calculate total blocks to break for durability check
+        int totalLogs = 0;
+        for (List<BlockPos> logs : logsByDistance.values()) {
+            totalLogs += logs.size();
+        }
+        int totalLeaves = 0;
+        for (List<BlockPos> leaves : leavesByDistance.values()) {
+            totalLeaves += leaves.size();
+        }
+        int totalBlocks = totalLogs + totalLeaves + rootsToBreak.size();
+
+        // Check durability before breaking (like reference)
+        if (!canBreakTree(player, axe, totalBlocks)) {
+            return;
+        }
+
+        // Break logs by distance (furthest first, like reference)
+        List<Integer> distances = new ArrayList<>(logsByDistance.keySet());
+        distances.sort(Collections.reverseOrder());
+
+        for (int dist : distances) {
+            for (BlockPos logPos : logsByDistance.get(dist)) {
+                if (logPos.equals(origin))
+                    continue; // Skip origin block
+
+                if (!breakBlock(player, axe, logPos, world, origin.toLocation(world))) {
+                    return; // Stop if tool breaks or player switches
+                }
+            }
+        }
+
+        // Break leaves
+        for (int dist : distances) {
+            List<BlockPos> leaves = leavesByDistance.get(dist);
+            if (leaves != null) {
+                for (BlockPos leafPos : leaves) {
+                    breakBlock(player, axe, leafPos, world, origin.toLocation(world));
+                }
+            }
+        }
+
+        // Break mangrove roots
+        for (BlockPos rootPos : rootsToBreak) {
+            if (!breakBlock(player, axe, rootPos, world, origin.toLocation(world))) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Finds leaves connected to a log block (similar to reference getBlocksWithLeafCheck)
+     */
+    private void findLeavesAroundLog(BlockPos logPos, Material logType, World world,
+                                      BlockPos origin, Map<Integer, List<BlockPos>> leavesByDistance,
+                                      Set<BlockPos> visitedLeaves) {
+        if (logPos == null || world == null) {
+            return;
+        }
+
+        int leafRange = 5; // Similar to reference LEAF_DETECT_RANGE
+        for (int dx = -leafRange; dx <= leafRange; dx++) {
+            for (int dy = -leafRange; dy <= leafRange; dy++) {
+                for (int dz = -leafRange; dz <= leafRange; dz++) {
+                    if (dx == 0 && dy == 0 && dz == 0)
+                        continue;
+
+                    BlockPos leafPos = logPos.add(dx, dy, dz);
+                    if (!visitedLeaves.contains(leafPos)) {
+                        Block leafBlock = leafPos.getBlock(world);
+                        if (leafBlock != null && isLeaf(leafBlock.getType())) {
+                            // Check if leaf is player-placed (persistent)
+                            if (!isPlayerPlaced(leafBlock)) {
+                                visitedLeaves.add(leafPos);
+                                int dist = getDistance(origin, leafPos);
+                                leavesByDistance.computeIfAbsent(dist, k -> new ArrayList<>()).add(leafPos);
                             }
                         }
                     }
                 }
             }
         }
+    }
 
-        // Break logs (skip origin as it's broken by the event)
-        for (BlockPos logPos : logsToBreak) {
-            if (logPos.equals(origin))
-                continue;
+    /**
+     * Calculates Manhattan distance between two positions
+     */
+    private int getDistance(BlockPos from, BlockPos to) {
+        if (from == null || to == null) {
+            return 0;
+        }
+        return Math.abs(from.x() - to.x()) + Math.abs(from.y() - to.y()) + Math.abs(from.z() - to.z());
+    }
 
-            ItemStack currentAxe = player.getInventory().getItemInMainHand();
-            if (currentAxe == null || currentAxe.getType() != axe.getType())
-                break;
+    /**
+     * Selects appropriate offset array based on tree characteristics
+     */
+    private int[][] getOffsetsForTree(Block block, Material logType, World world) {
+        // Check tree height to determine offset complexity
+        int height = measureTreeHeightDuringBFS(BlockPos.from(block.getLocation()), logType, world);
+        if (height > 10) {
+            return TALL_TREE_OFFSETS;
+        }
+        return COMPACT_OFFSETS;
+    }
 
-            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
-                break;
-            }
-
-            Block log = logPos.getBlock(world);
-            if (log == null) {
-                continue;
-            }
-
-            for (ItemStack drop : log.getDrops(currentAxe)) {
-                world.dropItemNaturally(origin.toLocation(world), drop);
-            }
-
-            removePlayerPlacedMark(logPos, world);
-            log.setType(Material.AIR);
+    /**
+     * Checks if player has enough durability to break the entire tree
+     * Similar to reference implementation's durability check
+     */
+    private boolean canBreakTree(Player player, ItemStack axe, int totalBlocks) {
+        if (player.getGameMode() == org.bukkit.GameMode.CREATIVE ||
+            player.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
+            return true;
         }
 
-        // Break mangrove roots
-        for (BlockPos rootPos : rootsToBreak) {
-            ItemStack currentAxe = player.getInventory().getItemInMainHand();
-            if (currentAxe == null || currentAxe.getType() != axe.getType())
-                break;
-
-            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
-                break;
-            }
-
-            Block root = rootPos.getBlock(world);
-            if (root == null) {
-                continue;
-            }
-
-            for (ItemStack drop : root.getDrops(currentAxe)) {
-                world.dropItemNaturally(origin.toLocation(world), drop);
-            }
-            root.setType(Material.AIR);
+        if (axe.getType().getMaxDurability() == 0) {
+            return true; // Unbreakable tool
         }
+
+        int durability = axe.getType().getMaxDurability() - axe.getDurability();
+        // Need 1 durability per block (simplified, like reference)
+        return durability >= totalBlocks || totalBlocks <= 1;
+    }
+
+    /**
+     * Breaks a single block and drops items
+     * @return true if successful, false if should stop (tool broke/switched)
+     */
+    private boolean breakBlock(Player player, ItemStack axe, BlockPos pos, World world, Location dropLocation) {
+        if (pos == null || world == null) {
+            return true;
+        }
+
+        Block block = pos.getBlock(world);
+        if (block == null || block.getType() == Material.AIR) {
+            return true;
+        }
+
+        // Check tool is still in hand
+        ItemStack currentAxe = player.getInventory().getItemInMainHand();
+        if (currentAxe == null || currentAxe.getType() != axe.getType()) {
+            return false;
+        }
+
+        // Consume durability
+        if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
+            return false;
+        }
+
+        // Drop items
+        for (ItemStack drop : block.getDrops(currentAxe)) {
+            world.dropItemNaturally(dropLocation, drop);
+        }
+
+        // Remove PDC mark if log
+        if (isLog(block.getType())) {
+            removePlayerPlacedMark(pos, world);
+        }
+
+        // Break block
+        block.setType(Material.AIR);
+        return true;
     }
 
     /**
