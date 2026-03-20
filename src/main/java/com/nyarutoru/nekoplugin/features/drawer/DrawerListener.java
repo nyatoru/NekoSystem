@@ -7,6 +7,7 @@ import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
 import com.nyarutoru.nekoplugin.features.drawer.gui.DrawerGUI;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
@@ -19,6 +20,7 @@ import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -193,6 +195,35 @@ public class DrawerListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(PlayerQuitEvent event) {
         DrawerGUI.cleanupPlayer(event.getPlayer());
+    }
+
+    /**
+     * Handles world unload events to prevent issues with drawers in unloaded worlds.
+     * Drawers are not removed from database, just marked for re-loading when world loads.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldUnload(WorldUnloadEvent event) {
+        World world = event.getWorld();
+        List<Location> drawersToRemove = new ArrayList<>();
+
+        // Find all drawers in this world
+        for (Drawer drawer : DrawerManager.getInstance().getAllDrawers().values()) {
+            Location loc = drawer.getLocation();
+            if (loc != null && loc.getWorld() == world) {
+                // Close all GUIs viewing drawers in this world
+                DrawerGUI.closeAllViewers(drawer);
+                drawersToRemove.add(loc);
+            }
+        }
+
+        // Remove from cache (database keeps the data)
+        for (Location loc : drawersToRemove) {
+            DrawerManager.getInstance().removeDrawer(loc);
+        }
+
+        if (!drawersToRemove.isEmpty()) {
+            DrawerManager.getInstance().markDirty();
+        }
     }
 
     // ==================== PISTON HANDLING ====================
