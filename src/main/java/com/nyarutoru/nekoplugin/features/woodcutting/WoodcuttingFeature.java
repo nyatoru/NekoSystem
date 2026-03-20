@@ -2,11 +2,14 @@ package com.nyarutoru.nekoplugin.features.woodcutting;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.core.Feature;
+import org.bukkit.event.HandlerList;
 
 /**
  * Woodcutting feature - enhanced wood processing using stonecutter.
  * Allows converting logs to all wood-related items in the stonecutter:
  * planks, stairs, slabs, fences, doors, trapdoors, pressure plates, buttons, signs.
+ * 
+ * Prevents duplicate recipe registration by tracking processed wood types.
  */
 public class WoodcuttingFeature implements Feature {
 
@@ -28,12 +31,9 @@ public class WoodcuttingFeature implements Feature {
 
     @Override
     public void onEnable(NekoPlugin plugin) {
-        // Register stonecutter recipes
         woodOnStoneCutter = new WoodOnStoneCutter(plugin);
         woodOnStoneCutter.registerRecipes();
-
         this.enabled = true;
-        
         plugin.getLogger().info("Woodcutting feature enabled");
     }
 

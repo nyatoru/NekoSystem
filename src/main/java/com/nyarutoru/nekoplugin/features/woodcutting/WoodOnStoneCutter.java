@@ -8,12 +8,16 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.StonecuttingRecipe;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Creates stonecutter recipes for wood processing.
  * Allows converting logs to all wood-related items (planks, stairs, slabs, etc.)
+ * 
+ * Prevents duplicate recipes by tracking processed wood types instead of materials.
  */
 public class WoodOnStoneCutter {
 
@@ -36,22 +40,19 @@ public class WoodOnStoneCutter {
     };
 
     // Hardcoded output amounts per item type
-    private static final Map<String, Integer> OUTPUT_AMOUNTS;
-    static {
-        Map<String, Integer> amounts = new java.util.HashMap<>();
-        amounts.put("PLANKS", 4);
-        amounts.put("STAIRS", 4);
-        amounts.put("SLAB", 2);
-        amounts.put("FENCE", 4);
-        amounts.put("FENCE_GATE", 1);
-        amounts.put("DOOR", 1);
-        amounts.put("TRAPDOOR", 2);
-        amounts.put("PRESSURE_PLATE", 2);
-        amounts.put("BUTTON", 4);
-        amounts.put("SIGN", 2);
-        amounts.put("HANGING_SIGN", 2);
-        OUTPUT_AMOUNTS = Map.copyOf(amounts);
-    }
+    private static final Map<String, Integer> OUTPUT_AMOUNTS = Map.ofEntries(
+            Map.entry("PLANKS", 4),
+            Map.entry("STAIRS", 4),
+            Map.entry("SLAB", 2),
+            Map.entry("FENCE", 4),
+            Map.entry("FENCE_GATE", 1),
+            Map.entry("DOOR", 1),
+            Map.entry("TRAPDOOR", 2),
+            Map.entry("PRESSURE_PLATE", 2),
+            Map.entry("BUTTON", 4),
+            Map.entry("SIGN", 2),
+            Map.entry("HANGING_SIGN", 2)
+    );
 
     public WoodOnStoneCutter(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -59,24 +60,42 @@ public class WoodOnStoneCutter {
 
     /**
      * Register all wood stonecutter recipes.
+     * Prevents duplicates by tracking processed wood types.
      */
     public void registerRecipes() {
+        // Clear any existing recipes first
+        removeRecipes();
+        
         int recipeCount = 0;
         int skippedCount = 0;
+        int duplicateCount = 0;
+
+        // Track processed wood types to prevent duplicates
+        // Tag.LOGS contains both OAK_LOG and OAK_WOOD, which would create duplicate recipes
+        Set<String> processedWoodTypes = new HashSet<>();
 
         for (Material log : Tag.LOGS.getValues()) {
             // Skip stripped logs as input
             if (log.name().contains("STRIPPED")) {
+                skippedCount++;
                 continue;
             }
 
-            // Get wood type prefix (e.g., "OAK" from "OAK_LOG")
+            // Get wood type prefix (e.g., "OAK" from "OAK_LOG" or "OAK_WOOD")
             String woodType = getWoodType(log);
             if (woodType == null) {
                 plugin.getLogger().warning("Failed to detect wood type for: " + log.name());
                 skippedCount++;
                 continue;
             }
+
+            // Skip if we already processed this wood type (prevents duplicate recipes)
+            if (processedWoodTypes.contains(woodType)) {
+                plugin.getLogger().fine("Skipping duplicate wood type: " + woodType + " (from " + log.name() + ")");
+                duplicateCount++;
+                continue;
+            }
+            processedWoodTypes.add(woodType);
 
             // Create recipes for each wood item type
             for (String itemType : WOOD_ITEMS) {
@@ -97,27 +116,35 @@ public class WoodOnStoneCutter {
         }
 
         plugin.getLogger().info("Registered " + recipeCount + " wood stonecutter recipes" + 
-            (skippedCount > 0 ? " (skipped " + skippedCount + " materials)" : ""));
+            (duplicateCount > 0 ? " (skipped " + duplicateCount + " duplicates)" : "") +
+            (skippedCount > 0 ? " (skipped " + skippedCount + " invalid)" : ""));
     }
 
     /**
      * Remove all registered recipes.
      */
     public void removeRecipes() {
+        int removedCount = 0;
         for (NamespacedKey key : recipeKeys) {
-            plugin.getServer().removeRecipe(key);
+            if (plugin.getServer().removeRecipe(key)) {
+                removedCount++;
+            }
         }
         recipeKeys.clear();
+        
+        if (removedCount > 0) {
+            plugin.getLogger().fine("Removed " + removedCount + " wood recipes");
+        }
     }
 
     /**
      * Extract wood type from log material name.
-     * e.g., "OAK_LOG" -> "OAK", "DARK_OAK_LOG" -> "DARK_OAK"
+     * Handles: LOG, WOOD, STEM, HYPHAE, and STRIPPED_* variants.
      */
     private String getWoodType(Material log) {
         String name = log.name();
 
-        // Handle special cases
+        // Handle special nether wood cases
         if (name.equals("CRIMSON_STEM") || name.equals("CRIMSON_HYPHAE")) {
             return "CRIMSON";
         }
@@ -130,7 +157,7 @@ public class WoodOnStoneCutter {
             name = name.substring(9);
         }
 
-        // Remove LOG or WOOD suffix
+        // Remove suffix to get wood type
         if (name.endsWith("_LOG")) {
             return name.substring(0, name.length() - 4);
         }
@@ -149,7 +176,6 @@ public class WoodOnStoneCutter {
 
     /**
      * Get material from wood type and item type.
-     * e.g., ("OAK", "PLANKS") -> OAK_PLANKS
      */
     private Material getMaterial(String woodType, String itemType) {
         if (woodType == null || itemType == null) {
@@ -160,15 +186,12 @@ public class WoodOnStoneCutter {
             String materialName = woodType + "_" + itemType;
             Material material = Material.getMaterial(materialName);
             
-            // Validate material exists and is an item
             if (material != null && !material.isItem()) {
-                plugin.getLogger().fine("Material " + materialName + " is not craftable as item");
                 return null;
             }
             
             return material;
         } catch (IllegalArgumentException e) {
-            plugin.getLogger().fine("Invalid material name: " + woodType + "_" + itemType);
             return null;
         }
     }
