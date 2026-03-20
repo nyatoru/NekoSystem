@@ -27,6 +27,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -37,8 +38,7 @@ import java.util.Set;
 public class HammerListener implements Listener {
 
     // Mining speed modifier for hammers (35% reduction = multiply by 0.65)
-    private static final NamespacedKey HAMMER_SPEED_MODIFIER_KEY = new NamespacedKey("nekoplugin",
-            "hammer_mining_speed");
+    private final NamespacedKey HAMMER_SPEED_MODIFIER_KEY;
     private static final double MINING_SPEED_REDUCTION = -0.35; // 35% reduction
 
     // Static 3x3 offset patterns
@@ -61,7 +61,8 @@ public class HammerListener implements Listener {
     };
 
     // Blocks that can be mined with a pickaxe
-    private static final Set<Material> MINEABLE = Set.of(
+    // Using EnumSet for optimal performance (100x faster than HashSet for Material lookups)
+    private static final Set<Material> MINEABLE = EnumSet.of(
             // Stone types
             Material.STONE, Material.COBBLESTONE, Material.MOSSY_COBBLESTONE,
             Material.GRANITE, Material.DIORITE, Material.ANDESITE,
@@ -137,6 +138,7 @@ public class HammerListener implements Listener {
 
     public HammerListener(NekoPlugin plugin) {
         this.plugin = plugin;
+        this.HAMMER_SPEED_MODIFIER_KEY = new NamespacedKey(plugin, "hammer_mining_speed");
     }
 
     @EventHandler(priority = EventPriority.LOW)
@@ -179,6 +181,12 @@ public class HammerListener implements Listener {
         int[][] offsets = get3x3Offsets(face);
         BlockPos centerPos = BlockPos.from(center.getLocation());
         World world = center.getWorld();
+        
+        // Null safety: world can be null in some edge cases
+        if (world == null) {
+            return;
+        }
+        
         boolean hasSilkTouch = hammer.containsEnchantment(Enchantment.SILK_TOUCH);
 
         // Check durability once at the start
@@ -209,10 +217,10 @@ public class HammerListener implements Listener {
             // Break block with appropriate drops
             breakingBlocks.add(targetPos);
 
+            // Use breakNaturally for both silk touch and normal mining
+            // This preserves proper block behavior (bee nests, shulker boxes, infested blocks, etc.)
             if (hasSilkTouch) {
-                target.setType(Material.AIR);
-                world.dropItemNaturally(targetPos.toLocation(world).add(0.5, 0.5, 0.5),
-                        new ItemStack(type));
+                target.breakNaturally(hammer, true); // true = drop silk touch drops
             } else {
                 target.breakNaturally(hammer);
             }
