@@ -5,6 +5,7 @@ import com.nyarutoru.nekoplugin.utils.ServerPerformanceUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
@@ -16,15 +17,23 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.ChunkPopulateEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffectType;
 
-import org.bukkit.Bukkit;
+import java.text.DecimalFormat;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Consolidated Server Events Listener.
@@ -35,6 +44,7 @@ import java.util.Set;
  * - Ladder auto-placement up/down
  * - Anvil repair with Iron Block
  * - Lag notifications on chunk generation
+ * - Map expansion lag detection and broadcast
  */
 public class ServerEventsListener implements Listener {
 
@@ -44,10 +54,7 @@ public class ServerEventsListener implements Listener {
 
     // Lag notification constants
     private static final int MIN_PLAYERS_FOR_LAG_WARNING = 2;
-    private static final double LAG_WARNING_TPS_THRESHOLD = 18.0;
-    private static final int LAG_WARNING_DISTANCE_SQUARED = 128 * 128;
-    private static final int LAG_WARNING_CHUNK_CENTER_Y = 64;
-    private static final int LAG_WARNING_CHUNK_CENTER_XZ = 8;
+    private static final double TPS_WARNING_THRESHOLD = 18.0;
 
     // Pitch detection for ladder placement
     private static final double DOWNWARD_PITCH_THRESHOLD = 0;
@@ -91,9 +98,13 @@ public class ServerEventsListener implements Listener {
             Material.BLACK_STAINED_GLASS_PANE, Material.TINTED_GLASS);
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private final MapExpansionTracker tracker;
+    private boolean timerStarted = false;
+    private final NekoPlugin plugin;
 
     public ServerEventsListener(NekoPlugin plugin) {
-        // Plugin stored for future extensibility
+        this.plugin = plugin;
+        this.tracker = new MapExpansionTracker(plugin);
     }
 
     // ========== Player Join/Quit Messages ==========
@@ -103,6 +114,9 @@ public class ServerEventsListener implements Listener {
         String processedMessage = "<green><bold>+</bold> <gray>" + event.getPlayer().getName() + " joined the server.";
         Component message = miniMessage.deserialize(processedMessage);
         event.joinMessage(message);
+        
+        // Start lag detection timer on first player join
+        startLagDetectionTimer();
     }
 
     @EventHandler
@@ -140,7 +154,7 @@ public class ServerEventsListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGH)
-    public void onBlockDamage(org.bukkit.event.block.BlockDamageEvent event) {
+    public void onBlockDamage(BlockDamageEvent event) {
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
         Material blockType = event.getBlock().getType();
@@ -269,41 +283,131 @@ public class ServerEventsListener implements Listener {
                 .color(NamedTextColor.GREEN));
     }
 
-    // ========== Lag Notification ==========
+    // ========== Map Expansion Lag Detection ==========
 
     @EventHandler
-    public void onChunkLoad(org.bukkit.event.world.ChunkLoadEvent event) {
-        // Only care about new chunk generation
-        if (!event.isNewChunk())
-            return;
+    public void onChunkPopulate(ChunkPopulateEvent event) {
+        // Record chunk generation for tracking
+        tracker.recordChunkGeneration(event.getChunk());
+    }
 
-        // Condition: More than 2 players online
-        if (Bukkit.getOnlinePlayers().size() <= MIN_PLAYERS_FOR_LAG_WARNING)
-            return;
-
-        // Condition: TPS < 18 (Folia-compatible)
-        double tps = ServerPerformanceUtils.getTPS();
-        if (tps >= LAG_WARNING_TPS_THRESHOLD)
-            return;
-
-        org.bukkit.Chunk chunk = event.getChunk();
-
-        // Find the player responsible (nearest player)
-        Player nearestPlayer = chunk.getWorld().getPlayers().stream()
-                .filter(p -> p.getLocation()
-                        .distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y,
-                                LAG_WARNING_CHUNK_CENTER_XZ).getLocation()) < LAG_WARNING_DISTANCE_SQUARED)
-                .min(java.util.Comparator
-                        .comparingDouble(p -> p.getLocation()
-                                .distanceSquared(chunk.getBlock(LAG_WARNING_CHUNK_CENTER_XZ, LAG_WARNING_CHUNK_CENTER_Y,
-                                        LAG_WARNING_CHUNK_CENTER_XZ).getLocation())))
-                .orElse(null);
-
-        if (nearestPlayer != null) {
-            nearestPlayer.sendMessage(Component
-                    .text("⚠ Server lagging (TPS: " + String.format("%.1f", tps)
-                            + "). Please stop exploring new chunks!")
-                    .color(NamedTextColor.RED));
+    /**
+     * Starts the lag detection timer that checks every 10 seconds.
+     */
+    private void startLagDetectionTimer() {
+        if (!timerStarted) {
+            timerStarted = true;
+            // Run every 10 seconds (200 ticks)
+            plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
+                plugin,
+                task -> checkAndBroadcastLag(),
+                200L, // 10 seconds initial delay
+                200L  // 10 seconds interval
+            );
         }
+    }
+
+    /**
+     * Checks lag conditions and broadcasts warning if needed.
+     */
+    private void checkAndBroadcastLag() {
+        // Get current TPS
+        double tps = ServerPerformanceUtils.getTPS();
+        
+        // Get online player count
+        int onlinePlayers = Bukkit.getOnlinePlayers().size();
+        
+        // Check if we should notify
+        if (!tracker.shouldNotify(tps, onlinePlayers)) {
+            return;
+        }
+        
+        // Get contributing players
+        Map<UUID, Integer> contributingPlayers = tracker.getContributingPlayers();
+        
+        if (contributingPlayers.isEmpty()) {
+            return;
+        }
+        
+        // Sort players by chunk count (descending)
+        List<Map.Entry<UUID, Integer>> sortedPlayers = new ArrayList<>(contributingPlayers.entrySet());
+        sortedPlayers.sort(Map.Entry.<UUID, Integer>comparingByValue().reversed());
+        
+        // Build player list message
+        StringBuilder playerListBuilder = new StringBuilder();
+        for (Map.Entry<UUID, Integer> entry : sortedPlayers) {
+            Player player = Bukkit.getPlayer(entry.getKey());
+            String playerName = player != null ? player.getName() : "Unknown";
+            int chunkCount = entry.getValue();
+            playerListBuilder.append("  • ").append(playerName).append(" (").append(chunkCount).append(" chunks)\n");
+        }
+        String playerList = playerListBuilder.toString().trim();
+        
+        // Format TPS with 1 decimal place
+        DecimalFormat df = new DecimalFormat("#.#");
+        String tpsFormatted = df.format(tps);
+        
+        // Get time until next notification
+        long timeUntilNext = TimeUnit.MILLISECONDS.toMinutes(tracker.getTimeUntilNextNotification());
+        
+        // Build broadcast message
+        String broadcastMessage = 
+            "⚠ Server Lag Detected - Map Expansion\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "Current TPS: " + tpsFormatted + "\n" +
+            "Players Exploring New Chunks:\n" +
+            playerList + "\n" +
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+            "Please pause exploration to reduce lag.\n" +
+            "Next warning in 5 minutes.";
+        
+        // Broadcast to all players
+        Bukkit.broadcast(Component.text(broadcastMessage).color(NamedTextColor.RED));
+        
+        // Send detailed message to OPs
+        sendOpDetailedMessage(tpsFormatted, sortedPlayers.size(), contributingPlayers.values().stream().mapToInt(Integer::intValue).sum());
+        
+        // Log to console
+        logToConsole(tpsFormatted, sortedPlayers, contributingPlayers.values().stream().mapToInt(Integer::intValue).sum());
+        
+        // Reset cooldown
+        tracker.resetCooldown();
+    }
+
+    /**
+     * Sends detailed debug information to OPs only.
+     */
+    private void sendOpDetailedMessage(String tps, int playerCount, int chunkCount) {
+        String opMessage = 
+            "[MAP LAG DEBUG] Details:\n" +
+            "- TPS: " + tps + " (threshold: 18.0)\n" +
+            "- Chunks generated: " + chunkCount + " (last 10s)\n" +
+            "- Active explorers: " + playerCount + " players\n" +
+            "- Cooldown resets in: 5:00";
+        
+        Component opComponent = Component.text(opMessage).color(NamedTextColor.GOLD);
+        
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.isOp()) {
+                player.sendMessage(opComponent);
+            }
+        }
+    }
+
+    /**
+     * Logs lag event to server console.
+     */
+    private void logToConsole(String tps, List<Map.Entry<UUID, Integer>> sortedPlayers, int chunkCount) {
+        StringBuilder playerNames = new StringBuilder();
+        for (int i = 0; i < sortedPlayers.size(); i++) {
+            if (i > 0) playerNames.append(", ");
+            Player player = Bukkit.getPlayer(sortedPlayers.get(i).getKey());
+            playerNames.append(player != null ? player.getName() : "Unknown");
+        }
+        
+        plugin.getLogger().info(String.format(
+            "Map expansion lag detected: TPS %s, %d chunks, %d players (%s)",
+            tps, chunkCount, sortedPlayers.size(), playerNames.toString()
+        ));
     }
 }
