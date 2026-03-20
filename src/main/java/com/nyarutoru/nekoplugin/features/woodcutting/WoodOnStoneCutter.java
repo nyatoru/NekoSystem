@@ -8,7 +8,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.StonecuttingRecipe;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -37,19 +36,22 @@ public class WoodOnStoneCutter {
     };
 
     // Hardcoded output amounts per item type
-    private static final Map<String, Integer> OUTPUT_AMOUNTS = new HashMap<>() {{
-        put("PLANKS", 4);
-        put("STAIRS", 4);
-        put("SLAB", 2);
-        put("FENCE", 4);
-        put("FENCE_GATE", 1);
-        put("DOOR", 1);
-        put("TRAPDOOR", 2);
-        put("PRESSURE_PLATE", 2);
-        put("BUTTON", 4);
-        put("SIGN", 2);
-        put("HANGING_SIGN", 2);
-    }};
+    private static final Map<String, Integer> OUTPUT_AMOUNTS;
+    static {
+        Map<String, Integer> amounts = new java.util.HashMap<>();
+        amounts.put("PLANKS", 4);
+        amounts.put("STAIRS", 4);
+        amounts.put("SLAB", 2);
+        amounts.put("FENCE", 4);
+        amounts.put("FENCE_GATE", 1);
+        amounts.put("DOOR", 1);
+        amounts.put("TRAPDOOR", 2);
+        amounts.put("PRESSURE_PLATE", 2);
+        amounts.put("BUTTON", 4);
+        amounts.put("SIGN", 2);
+        amounts.put("HANGING_SIGN", 2);
+        OUTPUT_AMOUNTS = Map.copyOf(amounts);
+    }
 
     public WoodOnStoneCutter(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -60,6 +62,7 @@ public class WoodOnStoneCutter {
      */
     public void registerRecipes() {
         int recipeCount = 0;
+        int skippedCount = 0;
 
         for (Material log : Tag.LOGS.getValues()) {
             // Skip stripped logs as input
@@ -70,6 +73,8 @@ public class WoodOnStoneCutter {
             // Get wood type prefix (e.g., "OAK" from "OAK_LOG")
             String woodType = getWoodType(log);
             if (woodType == null) {
+                plugin.getLogger().warning("Failed to detect wood type for: " + log.name());
+                skippedCount++;
                 continue;
             }
 
@@ -91,7 +96,8 @@ public class WoodOnStoneCutter {
             }
         }
 
-        plugin.getLogger().info("Registered " + recipeCount + " wood stonecutter recipes");
+        plugin.getLogger().info("Registered " + recipeCount + " wood stonecutter recipes" + 
+            (skippedCount > 0 ? " (skipped " + skippedCount + " materials)" : ""));
     }
 
     /**
@@ -146,10 +152,23 @@ public class WoodOnStoneCutter {
      * e.g., ("OAK", "PLANKS") -> OAK_PLANKS
      */
     private Material getMaterial(String woodType, String itemType) {
+        if (woodType == null || itemType == null) {
+            return null;
+        }
+        
         try {
             String materialName = woodType + "_" + itemType;
-            return Material.getMaterial(materialName);
+            Material material = Material.getMaterial(materialName);
+            
+            // Validate material exists and is an item
+            if (material != null && !material.isItem()) {
+                plugin.getLogger().fine("Material " + materialName + " is not craftable as item");
+                return null;
+            }
+            
+            return material;
         } catch (IllegalArgumentException e) {
+            plugin.getLogger().fine("Invalid material name: " + woodType + "_" + itemType);
             return null;
         }
     }
