@@ -4,6 +4,7 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -376,10 +377,14 @@ public class TreeFellerListener implements Listener {
         if (pos == null || world == null) {
             return;
         }
-        Block block = pos.getBlock(world);
-        if (block != null) {
-            cleanupPlayerPlacedMark(block);
-        }
+        // Use SchedulerUtils for Folia-compatible chunk access
+        Location loc = pos.toLocation(world);
+        SchedulerUtils.runAtLocation(loc, () -> {
+            Block block = pos.getBlock(world);
+            if (block != null) {
+                cleanupPlayerPlacedMark(block);
+            }
+        });
     }
 
     /**
@@ -646,36 +651,103 @@ public class TreeFellerListener implements Listener {
         }
 
         // Break logs by distance (furthest first, like reference)
+        // On Folia, we must schedule block operations on the correct region
         List<Integer> distances = new ArrayList<>(logsByDistance.keySet());
         distances.sort(Collections.reverseOrder());
 
+        // Collect all blocks to break for batch processing
+        List<BlockPos> blocksToBreak = new ArrayList<>();
         for (int dist : distances) {
             for (BlockPos logPos : logsByDistance.get(dist)) {
-                if (logPos.equals(origin))
-                    continue; // Skip origin block
-
-                if (!breakBlock(player, axe, logPos, world, origin.toLocation(world))) {
-                    return; // Stop if tool breaks or player switches
+                if (!logPos.equals(origin)) {
+                    blocksToBreak.add(logPos);
                 }
             }
         }
 
-        // Break leaves
+        // Add leaves
         for (int dist : distances) {
             List<BlockPos> leaves = leavesByDistance.get(dist);
             if (leaves != null) {
-                for (BlockPos leafPos : leaves) {
-                    breakBlock(player, axe, leafPos, world, origin.toLocation(world));
-                }
+                blocksToBreak.addAll(leaves);
             }
         }
 
-        // Break mangrove roots
-        for (BlockPos rootPos : rootsToBreak) {
-            if (!breakBlock(player, axe, rootPos, world, origin.toLocation(world))) {
-                break;
-            }
+        // Add mangrove roots
+        blocksToBreak.addAll(rootsToBreak);
+
+        // Process block breaking with proper scheduling
+        breakTreeBlocksSequential(player, axe, blocksToBreak, world, origin.toLocation(world));
+    }
+
+    /**
+     * Breaks tree blocks sequentially with proper region scheduling for Folia.
+     * Uses SchedulerUtils to ensure operations run on the correct region.
+     */
+    private void breakTreeBlocksSequential(Player player, ItemStack axe, List<BlockPos> blocksToBreak,
+                                           World world, Location dropLocation) {
+        if (blocksToBreak.isEmpty()) {
+            return;
         }
+
+        // Process blocks one at a time with proper scheduling
+        // This ensures Folia region safety while maintaining sequential execution
+        breakNextBlock(player, axe, blocksToBreak, 0, world, dropLocation);
+    }
+
+    /**
+     * Recursively breaks the next block in the list with proper scheduling.
+     */
+    private void breakNextBlock(Player player, ItemStack axe, List<BlockPos> blocksToBreak,
+                                 int index, World world, Location dropLocation) {
+        if (index >= blocksToBreak.size()) {
+            return; // All blocks processed
+        }
+
+        // Check if player still has tool in hand
+        ItemStack currentAxe = player.getInventory().getItemInMainHand();
+        if (currentAxe == null || currentAxe.getType() != axe.getType()) {
+            return; // Tool switched, stop breaking
+        }
+
+        BlockPos pos = blocksToBreak.get(index);
+        if (pos == null) {
+            breakNextBlock(player, axe, blocksToBreak, index + 1, world, dropLocation);
+            return;
+        }
+
+        Location blockLocation = pos.toLocation(world);
+
+        // Use SchedulerUtils for Folia-compatible region-aware scheduling
+        SchedulerUtils.runAtLocation(blockLocation, () -> {
+            Block block = blockLocation.getBlock();
+            if (block == null || block.getType() == Material.AIR) {
+                breakNextBlock(player, axe, blocksToBreak, index + 1, world, dropLocation);
+                return;
+            }
+
+            // Consume durability
+            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
+                return; // Tool durability too low, stop
+            }
+
+            // Drop items
+            for (ItemStack drop : block.getDrops(currentAxe)) {
+                world.dropItemNaturally(dropLocation, drop);
+            }
+
+            // Remove PDC mark if log
+            if (isLog(block.getType())) {
+                removePlayerPlacedMark(pos, world);
+            }
+
+            // Break block
+            block.setType(Material.AIR);
+
+            // Schedule next block (use small delay for sequential processing)
+            SchedulerUtils.runAtLocationLater(blockLocation, () ->
+                breakNextBlock(player, axe, blocksToBreak, index + 1, world, dropLocation), 1L);
+        });
     }
 
     /**
