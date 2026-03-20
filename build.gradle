@@ -8,7 +8,7 @@ version = '1.0.0-SNAPSHOT'
 
 
 dependencies {
-    paperweight.foliaDevBundle("1.21.11-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     
     // Testing dependencies
     testImplementation platform('org.junit:junit-bom:5.10.2')

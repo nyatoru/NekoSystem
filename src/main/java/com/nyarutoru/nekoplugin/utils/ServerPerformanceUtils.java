@@ -1,24 +1,37 @@
 package com.nyarutoru.nekoplugin.utils;
 
-import io.papermc.paper.threadedregions.ThreadedRegionizer;
-import io.papermc.paper.threadedregions.TickRegionScheduler;
-import io.papermc.paper.threadedregions.TickRegions;
-import net.minecraft.server.level.ServerLevel;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
-import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.entity.Player;
 
+import java.lang.reflect.Method;
+
 /**
- * Utility class for getting server performance metrics with Folia compatibility.
+ * Utility class for getting server performance metrics with Folia and Paper compatibility.
  * <p>
- * On Folia, each region has its own TPS and MSPT.
- * On Paper/Spigot, uses standard Bukkit methods.
+ * On Folia: Uses region-specific TPS and MSPT APIs
+ * On Paper/Spigot: Uses standard Bukkit methods
  */
 public class ServerPerformanceUtils {
 
     private static final boolean IS_FOLIA = SchedulerUtils.isFolia();
+    private static Method getRegionTPSMethod = null;
+    private static Method getRegionMSPTMethod = null;
+
+    static {
+        // Try to get Folia-specific methods via reflection
+        if (IS_FOLIA) {
+            try {
+                Class<?> serverClass = Bukkit.getServer().getClass();
+                getRegionTPSMethod = serverClass.getMethod("getRegionTPS", Location.class);
+                getRegionMSPTMethod = serverClass.getMethod("getRegionMSPT", Location.class);
+            } catch (NoSuchMethodException e) {
+                // Methods not available, will use fallbacks
+                getRegionTPSMethod = null;
+                getRegionMSPTMethod = null;
+            }
+        }
+    }
 
     private ServerPerformanceUtils() {
     }
@@ -34,9 +47,13 @@ public class ServerPerformanceUtils {
     public static double getTPS() {
         if (IS_FOLIA) {
             // Get region TPS for overworld spawn (index 0 = 5 second average for real-time data)
-            World overworld = Bukkit.getWorlds().getFirst();
-            double[] regionTps = Bukkit.getServer().getRegionTPS(overworld.getSpawnLocation());
-            return regionTps != null && regionTps.length > 0 ? regionTps[0] : 20.0;
+            try {
+                var overworld = Bukkit.getWorlds().getFirst();
+                double[] regionTps = getRegionTPS(overworld.getSpawnLocation());
+                return regionTps != null && regionTps.length > 0 ? regionTps[0] : 20.0;
+            } catch (Exception e) {
+                return 20.0;
+            }
         } else {
             // Paper/Spigot: Use standard TPS array (0 = 1min, 1 = 5min, 2 = 15min)
             return Bukkit.getTPS()[0];
@@ -55,8 +72,12 @@ public class ServerPerformanceUtils {
     public static double getTPS(Location location) {
         if (IS_FOLIA) {
             // Index 0 = 5 second average for real-time data
-            double[] regionTps = Bukkit.getServer().getRegionTPS(location);
-            return regionTps != null && regionTps.length > 0 ? regionTps[0] : 20.0;
+            try {
+                double[] regionTps = getRegionTPS(location);
+                return regionTps != null && regionTps.length > 0 ? regionTps[0] : 20.0;
+            } catch (Exception e) {
+                return 20.0;
+            }
         } else {
             return Bukkit.getTPS()[0];
         }
@@ -86,7 +107,11 @@ public class ServerPerformanceUtils {
      */
     public static double getMSPT(Location location) {
         if (IS_FOLIA) {
-            return getFoliaRegionMSPT(location);
+            try {
+                return getRegionMSPT(location);
+            } catch (Exception e) {
+                return Bukkit.getAverageTickTime();
+            }
         } else {
             return Bukkit.getAverageTickTime();
         }
@@ -106,34 +131,40 @@ public class ServerPerformanceUtils {
     }
 
     /**
-     * Gets the region-specific MSPT from Folia's internal regionizer API.
+     * Gets region TPS using reflection for Folia compatibility.
      *
-     * @param location The location to check
-     * @return The MSPT for that region, or 50.0 if unavailable
+     * @param location The location to get TPS for
+     * @return TPS array or null if not available
      */
-    private static double getFoliaRegionMSPT(Location location) {
-        try {
-            ServerLevel world = ((CraftWorld) location.getWorld()).getHandle();
-            int chunkX = location.getBlockX() >> 4;
-            int chunkZ = location.getBlockZ() >> 4;
-
-            ThreadedRegionizer.ThreadedRegion<TickRegions.TickRegionData, TickRegions.TickRegionSectionData>
-                    region = world.regioniser.getRegionAtSynchronised(chunkX, chunkZ);
-
-            if (region == null) {
-                return 50.0;
+    private static double[] getRegionTPS(Location location) {
+        if (getRegionTPSMethod != null) {
+            try {
+                return (double[]) getRegionTPSMethod.invoke(Bukkit.getServer(), location);
+            } catch (Exception e) {
+                return null;
             }
-
-            TickRegions.TickRegionData regionData = region.getData();
-            final long currTime = System.nanoTime();
-            final TickRegionScheduler.RegionScheduleHandle handle = regionData.getRegionSchedulingHandle();
-
-            // Get 5-second average tick time for real-time data
-            return handle.getTickReport5s(currTime).timePerTickData().segmentAll().average() / 1_000_000.0;
-
-        } catch (Exception e) {
-            return 50.0;
         }
+        return null;
+    }
+
+    /**
+     * Gets region MSPT using reflection for Folia compatibility.
+     *
+     * @param location The location to get MSPT for
+     * @return MSPT value or default if not available
+     */
+    private static double getRegionMSPT(Location location) {
+        if (getRegionMSPTMethod != null) {
+            try {
+                Object result = getRegionMSPTMethod.invoke(Bukkit.getServer(), location);
+                if (result instanceof Number) {
+                    return ((Number) result).doubleValue();
+                }
+            } catch (Exception e) {
+                // Fall through to default
+            }
+        }
+        return 50.0;
     }
 
     /**
