@@ -30,6 +30,12 @@ public class Drawer implements ConfigurationSerializable {
     }
 
     public Drawer(Location location, Material itemType, int itemCount, DrawerTier tier) {
+        if (location == null) {
+            throw new IllegalArgumentException("Drawer location cannot be null");
+        }
+        if (tier == null) {
+            throw new IllegalArgumentException("Drawer tier cannot be null");
+        }
         this.location = location;
         this.itemType = itemType;
         this.itemCount = itemCount;
@@ -102,11 +108,14 @@ public class Drawer implements ConfigurationSerializable {
     }
 
     public void setTier(DrawerTier tier) {
+        if (tier == null) {
+            throw new IllegalArgumentException("Drawer tier cannot be null");
+        }
         this.tier = tier;
     }
 
     public int getMaxCapacity() {
-        return tier.getMaxItems();
+        return tier != null ? tier.getMaxItems() : 256;
     }
 
     public int getRemainingSpace() {
@@ -168,6 +177,9 @@ public class Drawer implements ConfigurationSerializable {
     }
 
     public boolean upgrade(DrawerTier newTier) {
+        if (newTier == null) {
+            throw new IllegalArgumentException("New tier cannot be null");
+        }
         if (newTier.getLevel() > this.tier.getLevel()) {
             this.tier = newTier;
             return true;
@@ -176,21 +188,33 @@ public class Drawer implements ConfigurationSerializable {
     }
 
     public double getFillPercentage() {
-        if (getMaxCapacity() == 0)
+        int maxCapacity = getMaxCapacity();
+        if (maxCapacity <= 0)
             return 0;
-        return (double) itemCount / getMaxCapacity();
+        return (double) itemCount / maxCapacity;
     }
 
     @Override
     public Map<String, Object> serialize() {
         Map<String, Object> map = new HashMap<>();
-        map.put("world", location.getWorld().getName());
-        map.put("x", location.getBlockX());
-        map.put("y", location.getBlockY());
-        map.put("z", location.getBlockZ());
+        
+        // Null safety: world can be unloaded during serialization
+        if (location == null || location.getWorld() == null) {
+            // Return minimal valid serialization - will be cleaned up on load
+            map.put("world", "unknown");
+            map.put("x", 0);
+            map.put("y", 0);
+            map.put("z", 0);
+        } else {
+            map.put("world", location.getWorld().getName());
+            map.put("x", location.getBlockX());
+            map.put("y", location.getBlockY());
+            map.put("z", location.getBlockZ());
+        }
+        
         map.put("itemType", itemType != null ? itemType.name() : null);
         map.put("itemCount", itemCount);
-        map.put("tier", tier.name());
+        map.put("tier", tier != null ? tier.name() : "TIER_1");
         return map;
     }
 

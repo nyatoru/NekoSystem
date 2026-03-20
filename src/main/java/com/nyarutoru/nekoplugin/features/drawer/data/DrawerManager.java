@@ -190,9 +190,26 @@ public class DrawerManager {
     }
 
     public Drawer createDrawer(Location location, DrawerTier tier) {
-        String key = locationKey(location);
-        if (drawers.containsKey(key))
+        if (location == null) {
+            plugin.getLogger().warning("Cannot create drawer at null location");
             return null;
+        }
+        
+        if (location.getWorld() == null) {
+            plugin.getLogger().warning("Cannot create drawer in unloaded world");
+            return null;
+        }
+        
+        if (tier == null) {
+            plugin.getLogger().warning("Cannot create drawer with null tier");
+            return null;
+        }
+        
+        String key = locationKey(location);
+        if (drawers.containsKey(key)) {
+            plugin.getLogger().warning("Drawer already exists at " + location);
+            return null;
+        }
 
         Drawer drawer = new Drawer(location);
         drawer.setTier(tier);
@@ -239,41 +256,59 @@ public class DrawerManager {
     // ==================== DATABASE OPERATIONS ====================
 
     private void insertDrawer(Drawer drawer) {
+        if (drawer == null) {
+            return;
+        }
+        
+        Location loc = drawer.getLocation();
+        if (loc == null || loc.getWorld() == null) {
+            plugin.getLogger().warning("Cannot insert drawer with null location or world");
+            return;
+        }
+        
         String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
         Connection conn = getConnection();
         if (conn == null)
             return;
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            Location loc = drawer.getLocation();
             stmt.setString(1, loc.getWorld().getName());
             stmt.setInt(2, loc.getBlockX());
             stmt.setInt(3, loc.getBlockY());
             stmt.setInt(4, loc.getBlockZ());
             stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
             stmt.setInt(6, drawer.getItemCount());
-            stmt.setString(7, drawer.getTier().name());
+            stmt.setString(7, drawer.getTier() != null ? drawer.getTier().name() : "TIER_1");
             stmt.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to insert drawer", e);
+            plugin.getLogger().log(Level.WARNING, "Failed to insert drawer at " + loc, e);
         }
     }
 
     private void deleteDrawer(Drawer drawer) {
+        if (drawer == null) {
+            return;
+        }
+        
+        Location loc = drawer.getLocation();
+        if (loc == null || loc.getWorld() == null) {
+            plugin.getLogger().warning("Cannot delete drawer with null location or world");
+            return;
+        }
+        
         String sql = "DELETE FROM drawers WHERE world = ? AND x = ? AND y = ? AND z = ?";
         Connection conn = getConnection();
         if (conn == null)
             return;
 
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            Location loc = drawer.getLocation();
             stmt.setString(1, loc.getWorld().getName());
             stmt.setInt(2, loc.getBlockX());
             stmt.setInt(3, loc.getBlockY());
             stmt.setInt(4, loc.getBlockZ());
             stmt.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to delete drawer", e);
+            plugin.getLogger().log(Level.WARNING, "Failed to delete drawer at " + loc, e);
         }
     }
 
@@ -351,46 +386,70 @@ public class DrawerManager {
     }
 
     public void loadAll() {
-        if (plugin == null || !DatabaseManager.getInstance().isConnected(DATABASE_NAME))
+        if (plugin == null || !DatabaseManager.getInstance().isConnected(DATABASE_NAME)) {
+            if (plugin != null) {
+                plugin.getLogger().warning("Cannot load drawers: plugin or database not initialized");
+            }
             return;
+        }
 
         drawers.clear();
 
         String sql = "SELECT world, x, y, z, item_type, item_count, tier FROM drawers";
         Server server = plugin.getServer();
         Connection conn = getConnection();
-        if (conn == null)
+        if (conn == null) {
+            plugin.getLogger().warning("Cannot load drawers: database connection unavailable");
             return;
+        }
+
+        int loaded = 0;
+        int skipped = 0;
 
         try (Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
 
             while (rs.next()) {
-                String worldName = rs.getString("world");
-                World world = server.getWorld(worldName);
+                try {
+                    String worldName = rs.getString("world");
+                    if (worldName == null || worldName.equals("unknown")) {
+                        skipped++;
+                        continue; // Skip invalid world data
+                    }
+                    
+                    World world = server.getWorld(worldName);
 
-                if (world == null) {
-                    continue; // World not loaded
+                    if (world == null) {
+                        plugin.getLogger().info("Skipping drawer in unloaded world: " + worldName);
+                        skipped++;
+                        continue; // World not loaded
+                    }
+
+                    int x = rs.getInt("x");
+                    int y = rs.getInt("y");
+                    int z = rs.getInt("z");
+                    String itemTypeName = rs.getString("item_type");
+                    int itemCount = rs.getInt("item_count");
+                    String tierName = rs.getString("tier");
+
+                    Location location = new Location(world, x, y, z);
+                    Material itemType = itemTypeName != null ? Material.getMaterial(itemTypeName) : null;
+                    DrawerTier tier = DrawerTier.getByName(tierName);
+
+                    Drawer drawer = new Drawer(location, itemType, itemCount, tier);
+                    drawers.put(locationKey(location), drawer);
+                    loaded++;
+                    
+                } catch (Exception e) {
+                    plugin.getLogger().log(Level.WARNING, "Failed to load drawer from row, skipping", e);
+                    skipped++;
                 }
-
-                int x = rs.getInt("x");
-                int y = rs.getInt("y");
-                int z = rs.getInt("z");
-                String itemTypeName = rs.getString("item_type");
-                int itemCount = rs.getInt("item_count");
-                String tierName = rs.getString("tier");
-
-                Location location = new Location(world, x, y, z);
-                Material itemType = itemTypeName != null ? Material.getMaterial(itemTypeName) : null;
-                DrawerTier tier = DrawerTier.getByName(tierName);
-
-                Drawer drawer = new Drawer(location, itemType, itemCount, tier);
-                drawers.put(locationKey(location), drawer);
             }
 
-            plugin.getLogger().info("Loaded " + drawers.size() + " drawers from database.");
+            plugin.getLogger().info("Loaded " + loaded + " drawers from database" + 
+                    (skipped > 0 ? " (skipped " + skipped + " invalid entries)" : "") + ".");
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to load drawers", e);
+            plugin.getLogger().log(Level.SEVERE, "Failed to load drawers from database", e);
         }
     }
 

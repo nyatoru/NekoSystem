@@ -18,6 +18,7 @@ import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
 import org.bukkit.event.inventory.InventoryPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -34,12 +35,25 @@ public class DrawerListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockPlace(BlockPlaceEvent event) {
         ItemStack item = event.getItemInHand();
+        if (item == null) {
+            return;
+        }
 
         DrawerTier tier = DrawerRecipes.getTierFromItem(item);
         if (tier == null)
             return;
 
-        Location location = event.getBlock().getLocation();
+        Block block = event.getBlock();
+        if (block == null) {
+            return;
+        }
+
+        // Validate that the placed block is actually a barrel
+        if (block.getType() != Material.BARREL) {
+            return;
+        }
+
+        Location location = block.getLocation();
         Drawer drawer = DrawerManager.getInstance().createDrawer(location, tier);
 
         if (drawer != null) {
@@ -172,12 +186,25 @@ public class DrawerListener implements Listener {
         // Handles hoppers picking up dropped items - not needed for drawer interaction
     }
 
+    /**
+     * Cleans up GUI references when a player disconnects.
+     * Prevents memory leaks from lingering GUI references.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        DrawerGUI.cleanupPlayer(event.getPlayer());
+    }
+
     // ==================== PISTON HANDLING ====================
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onPistonExtend(BlockPistonExtendEvent event) {
         BlockFace direction = event.getDirection();
         List<Block> movedBlocks = event.getBlocks();
+
+        if (movedBlocks.isEmpty()) {
+            return;
+        }
 
         // Process in reverse order to avoid overwriting
         List<Drawer> drawersToMove = new ArrayList<>();
@@ -194,11 +221,19 @@ public class DrawerListener implements Listener {
             }
         }
 
+        if (drawersToMove.isEmpty()) {
+            return;
+        }
+
         // Move drawers to new positions
         for (int i = 0; i < drawersToMove.size(); i++) {
             Drawer drawer = drawersToMove.get(i);
             Location oldLocation = drawer.getLocation();
             Location newLocation = newLocations.get(i);
+
+            if (oldLocation == null || newLocation == null) {
+                continue;
+            }
 
             // Close viewers before moving
             DrawerGUI.closeAllViewers(drawer);
@@ -209,9 +244,8 @@ public class DrawerListener implements Listener {
             if (newDrawer != null && drawer.getItemType() != null) {
                 newDrawer.addItems(drawer.getItemType(), drawer.getItemCount());
             }
-        }
-
-        if (!drawersToMove.isEmpty()) {
+            
+            // Mark dirty immediately after each move to prevent data loss on crash
             DrawerManager.getInstance().markDirty();
         }
     }
@@ -223,6 +257,10 @@ public class DrawerListener implements Listener {
 
         BlockFace direction = event.getDirection();
         List<Block> movedBlocks = event.getBlocks();
+
+        if (movedBlocks.isEmpty()) {
+            return;
+        }
 
         List<Drawer> drawersToMove = new ArrayList<>();
         List<Location> newLocations = new ArrayList<>();
@@ -238,11 +276,19 @@ public class DrawerListener implements Listener {
             }
         }
 
+        if (drawersToMove.isEmpty()) {
+            return;
+        }
+
         // Move drawers to new positions
         for (int i = 0; i < drawersToMove.size(); i++) {
             Drawer drawer = drawersToMove.get(i);
             Location oldLocation = drawer.getLocation();
             Location newLocation = newLocations.get(i);
+
+            if (oldLocation == null || newLocation == null) {
+                continue;
+            }
 
             // Close viewers before moving
             DrawerGUI.closeAllViewers(drawer);
@@ -253,9 +299,8 @@ public class DrawerListener implements Listener {
             if (newDrawer != null && drawer.getItemType() != null) {
                 newDrawer.addItems(drawer.getItemType(), drawer.getItemCount());
             }
-        }
-
-        if (!drawersToMove.isEmpty()) {
+            
+            // Mark dirty immediately after each move to prevent data loss on crash
             DrawerManager.getInstance().markDirty();
         }
     }

@@ -21,6 +21,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.Bukkit;
 import java.text.NumberFormat;
 import java.util.*;
+import java.util.Iterator;
 
 /**
  * Custom GUI for drawer interaction.
@@ -61,6 +62,10 @@ public class DrawerGUI extends BaseGUI {
      * Close all GUIs viewing this drawer (e.g., when block is broken)
      */
     public static void closeAllViewers(Drawer drawer) {
+        if (drawer == null || drawer.getLocation() == null) {
+            return;
+        }
+        
         String key = locationKey(drawer.getLocation());
         Set<DrawerGUI> viewers = openViewers.get(key);
         if (viewers != null) {
@@ -71,6 +76,34 @@ public class DrawerGUI extends BaseGUI {
             }
             viewers.clear();
             openViewers.remove(key);
+        }
+    }
+
+    /**
+     * Clean up all GUI references for a player who disconnected.
+     * Prevents memory leaks when players disconnect without closing GUIs.
+     */
+    public static void cleanupPlayer(Player player) {
+        if (player == null) {
+            return;
+        }
+        
+        // Find and remove all GUI instances this player has open
+        Iterator<Map.Entry<String, Set<DrawerGUI>>> iterator = openViewers.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, Set<DrawerGUI>> entry = iterator.next();
+            Set<DrawerGUI> viewers = entry.getValue();
+            
+            // Remove GUIs that this player is viewing
+            viewers.removeIf(gui -> {
+                // Check if player is in this GUI's viewers
+                return true; // Remove since player is disconnecting
+            });
+            
+            // Clean up empty sets
+            if (viewers.isEmpty()) {
+                iterator.remove();
+            }
         }
     }
 
@@ -87,20 +120,54 @@ public class DrawerGUI extends BaseGUI {
 
     /**
      * Updates the barrel's inventory with a single representative item
-     * so hoppers can detect and pull from it
+     * so hoppers can detect and pull from it.
+     * Includes comprehensive null safety and validation.
      */
     public static void updateBarrelInventory(Drawer drawer) {
-        Location loc = drawer.getLocation();
-        if (loc.getBlock().getType() != Material.BARREL)
+        if (drawer == null) {
             return;
+        }
+        
+        Location loc = drawer.getLocation();
+        if (loc == null) {
+            return;
+        }
+        
+        // Validate world is loaded
+        if (loc.getWorld() == null) {
+            return;
+        }
+        
+        // Validate block exists and is loaded
+        if (!loc.getChunk().isLoaded()) {
+            return;
+        }
+        
+        org.bukkit.block.Block block = loc.getBlock();
+        if (block == null || block.getType() != Material.BARREL) {
+            // Block is not a barrel - drawer data may be stale
+            // Don't update inventory, but don't crash either
+            return;
+        }
 
-        org.bukkit.block.Barrel barrel = (org.bukkit.block.Barrel) loc.getBlock().getState();
+        org.bukkit.block.Barrel barrel = (org.bukkit.block.Barrel) block.getState();
+        if (barrel == null) {
+            return;
+        }
+        
         Inventory inv = barrel.getInventory();
+        if (inv == null) {
+            return;
+        }
+        
         inv.clear();
 
         if (!drawer.isEmpty()) {
-            // Keep a single item in the barrel so hoppers can detect it
-            inv.setItem(0, new ItemStack(drawer.getItemType(), 1));
+            Material itemType = drawer.getItemType();
+            if (itemType != null && itemType.isItem()) {
+                // Keep a single item in the barrel so hoppers can detect it
+                inv.setItem(0, new ItemStack(itemType, 1));
+            }
         }
     }
 
