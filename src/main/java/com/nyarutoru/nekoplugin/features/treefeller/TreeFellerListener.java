@@ -4,6 +4,7 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -16,7 +17,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
+import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.*;
@@ -254,6 +257,9 @@ public class TreeFellerListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
         Block block = event.getBlock();
+        if (block == null) {
+            return;
+        }
         if (isLog(block.getType())) {
             block.getChunk().getPersistentDataContainer().set(
                     getBlockKey(block.getLocation()),
@@ -264,7 +270,20 @@ public class TreeFellerListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
+        Block block = event.getBlock();
+        if (block == null) {
+            return;
+        }
+
+        // Always clean up PDC data for broken logs (prevents PDC proliferation)
+        if (isLog(block.getType())) {
+            cleanupPlayerPlacedMark(block);
+        }
+
         Player player = event.getPlayer();
+        if (player == null) {
+            return;
+        }
 
         if (!ActiveToolAPI.getInstance().isActive(player, TOOL_NAME))
             return;
@@ -274,7 +293,6 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        Block block = event.getBlock();
         Material logType = block.getType();
 
         if (!isLog(logType))
@@ -294,6 +312,33 @@ public class TreeFellerListener implements Listener {
         }
 
         fellTree(player, block, logType);
+    }
+
+    /**
+     * Handles chunk unload events to clean up PDC data.
+     * Prevents PDC data accumulation for chunks that are unloaded.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChunkUnload(ChunkUnloadEvent event) {
+        Chunk chunk = event.getChunk();
+        if (chunk == null) {
+            return;
+        }
+
+        // Clean up all PDC keys for logs in this chunk
+        // This prevents PDC data from accumulating for unloaded chunks
+        PersistentDataContainer pdc = chunk.getPersistentDataContainer();
+        List<String> keysToRemove = new ArrayList<>();
+
+        for (NamespacedKey key : pdc.getKeys()) {
+            if (key.getNamespace().equals(plugin.getName()) && key.getKey().startsWith("pp_")) {
+                keysToRemove.add(key.getKey());
+            }
+        }
+
+        for (String key : keysToRemove) {
+            pdc.remove(new NamespacedKey(plugin, key));
+        }
     }
 
     private boolean isHoldingAxe(Player player) {
@@ -328,8 +373,30 @@ public class TreeFellerListener implements Listener {
     }
 
     private void removePlayerPlacedMark(BlockPos pos, World world) {
+        if (pos == null || world == null) {
+            return;
+        }
         Block block = pos.getBlock(world);
-        block.getChunk().getPersistentDataContainer().remove(getBlockKey(block.getLocation()));
+        if (block != null) {
+            cleanupPlayerPlacedMark(block);
+        }
+    }
+
+    /**
+     * Cleans up player-placed mark for a block.
+     * Used to prevent PDC data proliferation.
+     *
+     * @param block the block to clean up
+     */
+    private void cleanupPlayerPlacedMark(Block block) {
+        if (block == null) {
+            return;
+        }
+        Chunk chunk = block.getChunk();
+        if (chunk == null) {
+            return;
+        }
+        chunk.getPersistentDataContainer().remove(getBlockKey(block.getLocation()));
     }
 
     /**
@@ -338,8 +405,20 @@ public class TreeFellerListener implements Listener {
      * Looks for structural elements like fences, stairs, slabs, doors, etc. nearby.
      */
     private boolean isPartOfStructure(Block startLog) {
+        if (startLog == null) {
+            return false;
+        }
+
         World world = startLog.getWorld();
+        if (world == null) {
+            return false;
+        }
+
         BlockPos startPos = BlockPos.from(startLog.getLocation());
+        if (startPos == null) {
+            return false;
+        }
+
         int structureBlockCount = 0;
 
         // Check surrounding area for structure blocks
@@ -349,7 +428,7 @@ public class TreeFellerListener implements Listener {
                     BlockPos checkPos = startPos.add(dx, dy, dz);
                     Block checkBlock = checkPos.getBlock(world);
 
-                    if (isStructureBlock(checkBlock.getType())) {
+                    if (checkBlock != null && isStructureBlock(checkBlock.getType())) {
                         structureBlockCount++;
                         if (structureBlockCount > MAX_STRUCTURE_BLOCKS_ALLOWED) {
                             return true; // Too many structure blocks nearby - likely a building
@@ -359,17 +438,19 @@ public class TreeFellerListener implements Listener {
             }
         }
 
-        // Also check if log is directly adjacent to multiple planks (floor/wall
-        // indicator)
+        // Also check if log is directly adjacent to multiple planks (floor/wall indicator)
         int adjacentPlanks = 0;
         int[][] directNeighbors = {
                 { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 }, { 0, 1, 0 }, { 0, -1, 0 }
         };
         for (int[] offset : directNeighbors) {
             BlockPos neighbor = startPos.add(offset[0], offset[1], offset[2]);
-            Material mat = neighbor.getBlock(world).getType();
-            if (mat.name().endsWith("_PLANKS")) {
-                adjacentPlanks++;
+            Block neighborBlock = neighbor.getBlock(world);
+            if (neighborBlock != null) {
+                Material mat = neighborBlock.getType();
+                if (mat != null && mat.name().endsWith("_PLANKS")) {
+                    adjacentPlanks++;
+                }
             }
         }
 
@@ -382,8 +463,19 @@ public class TreeFellerListener implements Listener {
      * Includes multi-trunk detection for forked and branching trees.
      */
     private boolean isActualTree(Block startLog, Material logType) {
+        if (startLog == null || logType == null) {
+            return false;
+        }
+
         World world = startLog.getWorld();
+        if (world == null) {
+            return false;
+        }
+
         BlockPos startPos = BlockPos.from(startLog.getLocation());
+        if (startPos == null) {
+            return false;
+        }
 
         Set<BlockPos> visitedLogs = new HashSet<>();
         Set<BlockPos> visitedLeaves = new HashSet<>();
@@ -395,13 +487,16 @@ public class TreeFellerListener implements Listener {
         // BFS to find all connected logs and count nearby leaves
         while (!toCheck.isEmpty()) {
             BlockPos current = toCheck.poll();
+            if (current == null) {
+                continue;
+            }
 
             // Search for connected logs (including horizontal for multi-trunk)
             for (int[] offset : VALIDATION_LOG_OFFSETS) {
                 BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
                 if (!visitedLogs.contains(adjacent)) {
                     Block adjBlock = adjacent.getBlock(world);
-                    if (adjBlock.getType() == logType && !isPlayerPlaced(adjBlock)) {
+                    if (adjBlock != null && adjBlock.getType() == logType && !isPlayerPlaced(adjBlock)) {
                         visitedLogs.add(adjacent);
                         toCheck.add(adjacent);
                     }
@@ -414,7 +509,8 @@ public class TreeFellerListener implements Listener {
                     for (int dz = -2; dz <= 2; dz++) {
                         BlockPos leafPos = current.add(dx, dy, dz);
                         if (!visitedLeaves.contains(leafPos)) {
-                            if (isLeaf(leafPos.getBlock(world).getType())) {
+                            Block leafBlock = leafPos.getBlock(world);
+                            if (leafBlock != null && isLeaf(leafBlock.getType())) {
                                 visitedLeaves.add(leafPos);
                             }
                         }
@@ -432,9 +528,24 @@ public class TreeFellerListener implements Listener {
     }
 
     private void fellTree(Player player, Block originBlock, Material logType) {
+        if (player == null || originBlock == null || logType == null) {
+            return;
+        }
+
         ItemStack axe = player.getInventory().getItemInMainHand();
+        if (axe == null) {
+            return;
+        }
+
         World world = originBlock.getWorld();
+        if (world == null) {
+            return;
+        }
+
         BlockPos origin = BlockPos.from(originBlock.getLocation());
+        if (origin == null) {
+            return;
+        }
 
         Set<BlockPos> visited = new HashSet<>();
         Deque<BlockPos> toCheck = new ArrayDeque<>();
@@ -453,9 +564,19 @@ public class TreeFellerListener implements Listener {
         // BFS to find all connected logs
         while (!toCheck.isEmpty()) {
             BlockPos current = toCheck.poll();
+            if (current == null) {
+                continue;
+            }
+
             Block block = current.getBlock(world);
+            if (block == null) {
+                continue;
+            }
 
             Material currentType = block.getType();
+            if (currentType == null) {
+                continue;
+            }
 
             // Handle logs
             if (currentType == logType && !isPlayerPlaced(block)) {
@@ -467,7 +588,14 @@ public class TreeFellerListener implements Listener {
                 if (!visited.contains(adjacent)) {
                     visited.add(adjacent);
                     Block adjBlock = adjacent.getBlock(world);
+                    if (adjBlock == null) {
+                        continue;
+                    }
+
                     Material adjType = adjBlock.getType();
+                    if (adjType == null) {
+                        continue;
+                    }
 
                     if (adjType == logType && !isPlayerPlaced(adjBlock)) {
                         toCheck.add(adjacent);
@@ -488,7 +616,8 @@ public class TreeFellerListener implements Listener {
                     for (int dy = -3; dy <= 0; dy++) {
                         for (int dz = -2; dz <= 2; dz++) {
                             BlockPos rootPos = current.add(dx, dy, dz);
-                            if (!visited.contains(rootPos) && isMangroveRoot(rootPos.getBlock(world).getType())) {
+                            Block rootBlock = rootPos.getBlock(world);
+                            if (rootBlock != null && !visited.contains(rootPos) && isMangroveRoot(rootBlock.getType())) {
                                 rootsToBreak.add(rootPos);
                                 visited.add(rootPos);
                             }
@@ -504,7 +633,7 @@ public class TreeFellerListener implements Listener {
                 continue;
 
             ItemStack currentAxe = player.getInventory().getItemInMainHand();
-            if (currentAxe.getType() != axe.getType())
+            if (currentAxe == null || currentAxe.getType() != axe.getType())
                 break;
 
             if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
@@ -512,6 +641,10 @@ public class TreeFellerListener implements Listener {
             }
 
             Block log = logPos.getBlock(world);
+            if (log == null) {
+                continue;
+            }
+
             for (ItemStack drop : log.getDrops(currentAxe)) {
                 world.dropItemNaturally(origin.toLocation(world), drop);
             }
@@ -523,7 +656,7 @@ public class TreeFellerListener implements Listener {
         // Break mangrove roots
         for (BlockPos rootPos : rootsToBreak) {
             ItemStack currentAxe = player.getInventory().getItemInMainHand();
-            if (currentAxe.getType() != axe.getType())
+            if (currentAxe == null || currentAxe.getType() != axe.getType())
                 break;
 
             if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
@@ -531,6 +664,10 @@ public class TreeFellerListener implements Listener {
             }
 
             Block root = rootPos.getBlock(world);
+            if (root == null) {
+                continue;
+            }
+
             for (ItemStack drop : root.getDrops(currentAxe)) {
                 world.dropItemNaturally(origin.toLocation(world), drop);
             }
@@ -542,15 +679,24 @@ public class TreeFellerListener implements Listener {
      * Measures tree height during initial BFS (no separate pass needed).
      */
     private int measureTreeHeightDuringBFS(BlockPos origin, Material logType, World world) {
+        if (origin == null || world == null || logType == null) {
+            return 0;
+        }
+
         int height = 0;
         for (int y = 0; y < 64; y++) {
             BlockPos check = origin.add(0, y, 0);
             Block block = check.getBlock(world);
-            if (block.getType() == logType && !isPlayerPlaced(block)) {
-                height++;
-            } else if (isLeaf(block.getType())) {
+            if (block == null) {
                 break;
-            } else if (block.getType() != logType) {
+            }
+            Material blockType = block.getType();
+            if (blockType == logType && !isPlayerPlaced(block)) {
+                height++;
+            } else if (isLeaf(blockType)) {
+                break;
+            } else {
+                // Not a log or leaf - stop counting
                 break;
             }
         }
