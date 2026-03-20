@@ -22,7 +22,7 @@ public class GraveManager {
     private static GraveManager instance;
     
     private final NekoPlugin plugin;
-    private final Map<Long, Grave> gravesByLocation;
+    private final Map<String, Grave> gravesByLocation;
     private final Map<UUID, List<UUID>> gravesByPlayer;
     private NamespacedKey graveKey;
     private boolean databaseInitialized = false;
@@ -50,6 +50,24 @@ public class GraveManager {
      *
      * @return The GraveManager instance
      */
+
+    /**
+     * Creates a unique key for a location.
+     * Replaces deprecated toBlockKey() method.
+     *
+     * @param location The location
+     * @return A unique string key for the location
+     */
+    private String getLocationKey(Location location) {
+        if (location == null || location.getWorld() == null) {
+            return "null";
+        }
+        return location.getWorld().getName() + ":" +
+               location.getBlockX() + ":" +
+               location.getBlockY() + ":" +
+               location.getBlockZ();
+    }
+
     public static GraveManager getInstance() {
         if (instance == null) {
             throw new IllegalStateException("GraveManager not initialized");
@@ -115,7 +133,7 @@ public class GraveManager {
         enforceGraveLimit(player.getUniqueId());
         
         // Store the grave
-        gravesByLocation.put(safeLocation.toBlockKey(), grave);
+        gravesByLocation.put(getLocationKey(safeLocation), grave);
         gravesByPlayer.computeIfAbsent(player.getUniqueId(), k -> new ArrayList<>()).add(grave.getGraveId());
         
         // Place grave block (player head)
@@ -139,7 +157,7 @@ public class GraveManager {
         if (location == null) {
             return null;
         }
-        return gravesByLocation.get(location.toBlockKey());
+        return gravesByLocation.get(getLocationKey(location));
     }
 
     /**
@@ -213,7 +231,7 @@ public class GraveManager {
         graveLocation.getBlock().setType(org.bukkit.Material.AIR);
         
         // Remove from storage
-        gravesByLocation.remove(graveLocation.toBlockKey());
+        gravesByLocation.remove(getLocationKey(graveLocation));
         
         List<UUID> playerGraves = gravesByPlayer.get(grave.getPlayerUuid());
         if (playerGraves != null) {
