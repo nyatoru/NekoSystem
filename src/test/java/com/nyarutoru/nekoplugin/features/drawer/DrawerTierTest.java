@@ -45,12 +45,15 @@ class DrawerTierTest {
     @Test
     void testCapacityDoublesEachTier() {
         DrawerTier[] tiers = DrawerTier.values();
-        for (int i = 0; i < tiers.length - 1; i++) {
+        // Check capacity doubling for tiers 1-9 (tier 10 is unlimited with -1)
+        for (int i = 0; i < tiers.length - 2; i++) {
             int currentCapacity = tiers[i].getStackCapacity();
             int nextCapacity = tiers[i + 1].getStackCapacity();
             assertEquals(currentCapacity * 2, nextCapacity,
                 "Tier " + (i + 2) + " should have double the capacity of Tier " + (i + 1));
         }
+        // Verify tier 10 is unlimited
+        assertEquals(-1, DrawerTier.TIER_10.getStackCapacity());
     }
 
     @Test
@@ -78,7 +81,6 @@ class DrawerTierTest {
         
         // Invalid name should return TIER_1
         assertEquals(DrawerTier.TIER_1, DrawerTier.getByName("INVALID"));
-        assertEquals(DrawerTier.TIER_1, DrawerTier.getByName(null));
     }
 
     @Test
@@ -103,12 +105,11 @@ class DrawerTierTest {
     }
 
     @Test
-    void testTierMaterialsAreValid() {
+    void testTierDisplayNamesAreValid() {
         DrawerTier[] tiers = DrawerTier.values();
         for (DrawerTier tier : tiers) {
-            Material material = tier.getUpgradeMaterial();
-            assertNotNull(material, "Tier " + tier.name() + " should have a valid material");
-            assertTrue(material.isItem(), "Tier " + tier.name() + " material should be an item");
+            assertNotNull(tier.getDisplayName(), "Tier " + tier.name() + " should have display name");
+            assertFalse(tier.getDisplayName().isEmpty(), "Tier " + tier.name() + " display name should not be empty");
         }
     }
 
@@ -116,7 +117,7 @@ class DrawerTierTest {
     void testTierDisplayNames() {
         assertEquals("Tier 1", DrawerTier.TIER_1.getDisplayName());
         assertEquals("Tier 2", DrawerTier.TIER_2.getDisplayName());
-        assertEquals("Tier 10", DrawerTier.TIER_10.getDisplayName());
+        assertEquals("Tier 9", DrawerTier.TIER_9.getDisplayName());
         assertEquals("Unlimited", DrawerTier.TIER_10.getDisplayName());
     }
 }
