@@ -681,8 +681,9 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Breaks tree blocks sequentially with proper region scheduling for Folia.
-     * Uses SchedulerUtils to ensure operations run on the correct region.
+     * Breaks tree blocks with optimized scheduling based on server type.
+     * - Paper/Spigot: Instant break (all blocks same tick)
+     * - Folia: Batch processing (10 blocks per tick for region safety)
      */
     private void breakTreeBlocksSequential(Player player, ItemStack axe, List<BlockPos> blocksToBreak,
                                            World world, Location dropLocation) {
@@ -690,45 +691,39 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        // Process blocks one at a time with proper scheduling
-        // This ensures Folia region safety while maintaining sequential execution
-        breakNextBlock(player, axe, blocksToBreak, 0, world, dropLocation);
+        if (!SchedulerUtils.isFolia()) {
+            // Paper/Spigot: Break all blocks instantly for best performance
+            breakAllBlocksInstant(player, axe, blocksToBreak, world, dropLocation);
+        } else {
+            // Folia: Batch process 10 blocks per tick (10x faster than 1 block/tick)
+            breakNextBatch(player, axe, blocksToBreak, 0, world, dropLocation);
+        }
     }
 
     /**
-     * Recursively breaks the next block in the list with proper scheduling.
+     * Breaks all blocks instantly on Paper/Spigot (no delay).
+     * All blocks are broken in the same tick for instant tree felling.
      */
-    private void breakNextBlock(Player player, ItemStack axe, List<BlockPos> blocksToBreak,
-                                 int index, World world, Location dropLocation) {
-        if (index >= blocksToBreak.size()) {
-            return; // All blocks processed
-        }
-
-        // Check if player still has tool in hand
+    private void breakAllBlocksInstant(Player player, ItemStack axe, List<BlockPos> blocksToBreak,
+                                        World world, Location dropLocation) {
         ItemStack currentAxe = player.getInventory().getItemInMainHand();
         if (currentAxe == null || currentAxe.getType() != axe.getType()) {
-            return; // Tool switched, stop breaking
+            return; // Tool switched
         }
 
-        BlockPos pos = blocksToBreak.get(index);
-        if (pos == null) {
-            breakNextBlock(player, axe, blocksToBreak, index + 1, world, dropLocation);
-            return;
-        }
+        for (BlockPos pos : blocksToBreak) {
+            if (pos == null) {
+                continue;
+            }
 
-        Location blockLocation = pos.toLocation(world);
-
-        // Use SchedulerUtils for Folia-compatible region-aware scheduling
-        SchedulerUtils.runAtLocation(blockLocation, () -> {
-            Block block = blockLocation.getBlock();
+            Block block = pos.getBlock(world);
             if (block == null || block.getType() == Material.AIR) {
-                breakNextBlock(player, axe, blocksToBreak, index + 1, world, dropLocation);
-                return;
+                continue;
             }
 
             // Consume durability
             if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
-                return; // Tool durability too low, stop
+                break; // Tool durability too low
             }
 
             // Drop items
@@ -738,16 +733,78 @@ public class TreeFellerListener implements Listener {
 
             // Remove PDC mark if log
             if (isLog(block.getType())) {
-                removePlayerPlacedMark(pos, world);
+                cleanupPlayerPlacedMark(block);
             }
 
             // Break block
             block.setType(Material.AIR);
+        }
+    }
 
-            // Schedule next block (use small delay for sequential processing)
-            SchedulerUtils.runAtLocationLater(blockLocation, () ->
-                breakNextBlock(player, axe, blocksToBreak, index + 1, world, dropLocation), 1L);
-        });
+    /**
+     * Breaks blocks in batches of 10 per tick on Folia.
+     * Recursively processes batches until all blocks are broken.
+     */
+    private static final int BATCH_SIZE = 10; // Process 10 blocks per tick
+
+    private void breakNextBatch(Player player, ItemStack axe, List<BlockPos> blocksToBreak,
+                                 int index, World world, Location dropLocation) {
+        if (index >= blocksToBreak.size()) {
+            return; // All batches processed
+        }
+
+        // Check if player still has tool in hand
+        ItemStack currentAxe = player.getInventory().getItemInMainHand();
+        if (currentAxe == null || currentAxe.getType() != axe.getType()) {
+            return; // Tool switched, stop breaking
+        }
+
+        // Calculate batch range
+        int endIndex = Math.min(index + BATCH_SIZE, blocksToBreak.size());
+
+        // Use SchedulerUtils for Folia-compatible region-aware scheduling
+        // Process entire batch in same region tick
+        if (!blocksToBreak.isEmpty()) {
+            Location batchLocation = blocksToBreak.get(index).toLocation(world);
+            SchedulerUtils.runAtLocation(batchLocation, () -> {
+                // Process this batch
+                for (int i = index; i < endIndex; i++) {
+                    BlockPos pos = blocksToBreak.get(i);
+                    if (pos == null) {
+                        continue;
+                    }
+
+                    Block block = pos.getBlock(world);
+                    if (block == null || block.getType() == Material.AIR) {
+                        continue;
+                    }
+
+                    // Consume durability
+                    if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
+                        return; // Tool durability too low, stop
+                    }
+
+                    // Drop items
+                    for (ItemStack drop : block.getDrops(currentAxe)) {
+                        world.dropItemNaturally(dropLocation, drop);
+                    }
+
+                    // Remove PDC mark if log
+                    if (isLog(block.getType())) {
+                        cleanupPlayerPlacedMark(block);
+                    }
+
+                    // Break block
+                    block.setType(Material.AIR);
+                }
+
+                // Schedule next batch if there are more blocks
+                if (endIndex < blocksToBreak.size()) {
+                    SchedulerUtils.runAtLocationLater(batchLocation, () ->
+                        breakNextBatch(player, axe, blocksToBreak, endIndex, world, dropLocation), 1L);
+                }
+            });
+        }
     }
 
     /**
