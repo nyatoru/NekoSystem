@@ -5,29 +5,6 @@ import com.nyarutoru.nekoplugin.core.AbstractFeature;
 import com.nyarutoru.nekoplugin.features.treefeller.tree.TreeType;
 import com.nyarutoru.nekoplugin.features.treefeller.tool.ToolConfig;
 
-/**
- * Main feature class for the TreeFeller system.
- * <p>
- * TreeFeller allows players to cut down entire trees by breaking a single log block.
- * The feature detects connected logs using BFS, validates with leaf detection,
- * and breaks all wood blocks while respecting tool durability and cooldowns.
- * <p>
- * Features:
- * <ul>
- *     <li>Shift-activation (10 shifts within 3 seconds)</li>
- *     <li>BFS-based tree detection algorithm</li>
- *     <li>Leaf validation to prevent felling player structures</li>
- *     <li>Configurable tool requirements (all axe types supported)</li>
- *     <li>Support for all vanilla tree types</li>
- *     <li>Sound effects</li>
- *     <li>Optional falling tree animation</li>
- *     <li>Optional sapling replanting</li>
- *     <li>Debug mode for troubleshooting</li>
- * </ul>
- *
- * @author Redstone Agents
- * @since 2026-03-21
- */
 public class TreeFellerFeature extends AbstractFeature {
 
     private TreeFellerListener listener;
@@ -46,7 +23,7 @@ public class TreeFellerFeature extends AbstractFeature {
         this.plugin = plugin;
 
         // Register event listener
-        listener = new TreeFellerListener();
+        listener = new TreeFellerListener(plugin);
         registerListener(listener, plugin);
         plugin.getLogger().info("TreeFeller event listener registered");
 

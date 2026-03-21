@@ -1,5 +1,6 @@
 package com.nyarutoru.nekoplugin.features.treefeller;
 
+import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.features.treefeller.animation.FallingTreeAnimation;
 import com.nyarutoru.nekoplugin.features.treefeller.animation.TreeFellerEffects;
@@ -12,8 +13,10 @@ import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Chunk;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -21,10 +24,14 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -40,6 +47,7 @@ public class TreeFellerListener implements Listener {
 
     public static final String TOOL_NAME = "TreeFeller";
     private static final int MAX_BLOCKS = 500;
+    private static final String PLAYER_PLACED_KEY = "treefeller_player_placed";
 
     // Log materials that can be vein-mined
     // Using EnumSet for optimal performance
@@ -67,15 +75,100 @@ public class TreeFellerListener implements Listener {
     private final ToolMatcher toolMatcher;
     private final TreeFellerEffects effects;
     private final FallingTreeAnimation animation;
+    private final NekoPlugin plugin;
 
     /**
      * Creates a new TreeFellerListener.
+     *
+     * @param plugin the plugin instance
      */
-    public TreeFellerListener() {
+    public TreeFellerListener(NekoPlugin plugin) {
+        this.plugin = plugin;
         this.treeDetector = new TreeDetector();
         this.toolMatcher = new ToolMatcher();
         this.effects = new TreeFellerEffects();
         this.animation = new FallingTreeAnimation();
+    }
+
+    /**
+     * Gets the PDC key for player-placed block tracking.
+     *
+     * @return the namespaced key for player-placed data
+     */
+    private NamespacedKey getPlayerPlacedKey() {
+        return new NamespacedKey(plugin, PLAYER_PLACED_KEY);
+    }
+
+    /**
+     * Checks if a block was placed by a player.
+     *
+     * @param block the block to check
+     * @return true if the block was player-placed, false otherwise
+     */
+    private boolean isPlayerPlaced(Block block) {
+        if (block == null) {
+            return false;
+        }
+        Chunk chunk = block.getChunk();
+        if (chunk == null) {
+            return false;
+        }
+        PersistentDataContainer pdc = chunk.getPersistentDataContainer();
+        NamespacedKey key = getPlayerPlacedKey();
+        Byte value = pdc.get(key, PersistentDataType.BYTE);
+        return value != null && value == 1;
+    }
+
+    /**
+     * Marks a block as player-placed.
+     *
+     * @param block the block to mark
+     */
+    private void markPlayerPlaced(Block block) {
+        if (block == null) {
+            return;
+        }
+        Chunk chunk = block.getChunk();
+        if (chunk == null) {
+            return;
+        }
+        PersistentDataContainer pdc = chunk.getPersistentDataContainer();
+        pdc.set(getPlayerPlacedKey(), PersistentDataType.BYTE, (byte) 1);
+    }
+
+    /**
+     * Removes the player-placed mark from a block.
+     *
+     * @param block the block to clean up
+     */
+    private void cleanupPlayerPlaced(Block block) {
+        if (block == null) {
+            return;
+        }
+        Chunk chunk = block.getChunk();
+        if (chunk == null) {
+            return;
+        }
+        chunk.getPersistentDataContainer().remove(getPlayerPlacedKey());
+    }
+
+    /**
+     * Checks if any log in the tree was player-placed.
+     *
+     * @param world the world containing the tree
+     * @param logs the list of log positions
+     * @return true if any log was player-placed, false otherwise
+     */
+    private boolean hasPlayerPlacedLog(World world, List<BlockPos> logs) {
+        if (!TreeFellerConfig.ALLOW_PLAYER_PLACED) {
+            for (BlockPos logPos : logs) {
+                Block logBlock = logPos.getBlock(world);
+                if (logBlock != null && isPlayerPlaced(logBlock)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -105,6 +198,17 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
+     * Tracks player-placed log blocks.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Block block = event.getBlock();
+        if (block != null && LOGS.contains(block.getType())) {
+            markPlayerPlaced(block);
+        }
+    }
+
+    /**
      * Handles block break events for tree felling.
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -127,6 +231,9 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
+        // Clean up player-placed data for broken logs
+        cleanupPlayerPlaced(block);
+
         // Check if feature is enabled
         if (!TreeFellerConfig.ENABLED) {
             return;
@@ -140,6 +247,14 @@ public class TreeFellerListener implements Listener {
         World world = block.getWorld();
         TreeStructure tree = treeDetector.detect(world, BlockPos.from(block));
         if (tree == null) {
+            return;
+        }
+
+        // Check if tree contains player-placed logs
+        if (hasPlayerPlacedLog(world, tree.getLogs())) {
+            if (TreeFellerConfig.DEBUG) {
+                player.sendMessage(Component.text("TreeFeller: Cannot fell player-placed trees", NamedTextColor.YELLOW));
+            }
             return;
         }
 
