@@ -945,12 +945,16 @@ public class TreeFellerListener implements Listener {
                             Block adjacentBlock = adjacentLeaf.getBlock(world);
                             if (adjacentBlock != null && isLeaf(adjacentBlock.getType())) {
                                 if (!isPlayerPlaced(adjacentBlock)) {
-                                    // Reference: Check leaf decay chain - new leaf distance must be >= current leaf distance
+                                    // Reference: Check leaf decay chain - new leaf distance must be > current leaf distance
                                     // This prevents jumping to leaves from adjacent trees
                                     if (hasValidLeafDecayChainForBFS(currentLeaf.getBlock(world), adjacentBlock)) {
-                                        if (isValidLeafForTreeFelling(adjacentBlock, leafRange)) {
-                                            discoveredLeaves.add(adjacentLeaf);
-                                            leafQueue.add(adjacentLeaf);
+                                        // Additional check: ensure leaf is within range of OUR starting log
+                                        // This prevents chain reaction from reaching other trees
+                                        if (getDistance(logPos, adjacentLeaf) <= leafRange) {
+                                            if (isValidLeafForTreeFelling(adjacentBlock, leafRange)) {
+                                                discoveredLeaves.add(adjacentLeaf);
+                                                leafQueue.add(adjacentLeaf);
+                                            }
                                         }
                                     }
                                 }
@@ -961,6 +965,11 @@ public class TreeFellerListener implements Listener {
             }
         }
 
+        // Reference: Call leafCheck() to validate leaves belong to this tree
+        // This prevents breaking leaves from adjacent trees when leaf distance data is unreliable
+        // Reference: TreeFeller.java lines 1157-1181
+        leafCheck(foundLeaves, logType, world);
+        
         // Add found leaves to results
         // Reference: leaves are organized by distance from origin (the block player broke)
         for (List<BlockPos> leafList : foundLeaves.values()) {
