@@ -30,6 +30,7 @@ public final class FallingTreeAnimation {
      * <p>
      * Blocks are broken sequentially with the configured delay.
      * The animation runs asynchronously using the scheduler.
+     * Folia-compatible: Uses region-based scheduling for block operations.
      *
      * @param world the world containing the tree
      * @param logs the list of log positions to break
@@ -46,6 +47,7 @@ public final class FallingTreeAnimation {
         List<BlockPos> sortedLogs = sortBlocks(logs);
 
         // Schedule sequential block breaking
+        // On Folia: Async scheduler for timing, then region scheduler for block operations
         SchedulerUtils.runAsyncTimer(new Runnable() {
             private int index = 0;
 
@@ -56,11 +58,23 @@ public final class FallingTreeAnimation {
                 }
 
                 BlockPos pos = sortedLogs.get(index);
-                Block block = pos.getBlock(world);
-
-                if (block != null && block.getType() != Material.AIR) {
-                    block.breakNaturally();
-                    effects.playEffects(block);
+                
+                // On Folia, block operations must be scheduled on the region thread
+                if (SchedulerUtils.isFolia()) {
+                    Block block = pos.getBlock(world);
+                    if (block != null && block.getType() != Material.AIR) {
+                        SchedulerUtils.runAtLocation(block.getLocation(), () -> {
+                            block.breakNaturally();
+                            effects.playEffects(block);
+                        });
+                    }
+                } else {
+                    // Paper/Spigot: Can break blocks directly from async task
+                    Block block = pos.getBlock(world);
+                    if (block != null && block.getType() != Material.AIR) {
+                        block.breakNaturally();
+                        effects.playEffects(block);
+                    }
                 }
 
                 index++;
