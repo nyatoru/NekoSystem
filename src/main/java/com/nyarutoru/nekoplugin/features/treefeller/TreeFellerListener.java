@@ -200,6 +200,26 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
+     * Validates the vertical to horizontal log ratio.
+     * Prevents felling of horizontal log structures (bridges, houses, etc.).
+     *
+     * @param tree the tree structure to validate
+     * @return true if the ratio meets the minimum requirement, false otherwise
+     */
+    private boolean isValidVerticalRatio(TreeStructure tree) {
+        int verticalLogs = tree.getVerticalLogCount();
+        int horizontalLogs = tree.getHorizontalLogCount();
+
+        // If no horizontal logs, ratio is infinite (always valid)
+        if (horizontalLogs == 0) {
+            return true;
+        }
+
+        double ratio = (double) verticalLogs / horizontalLogs;
+        return ratio >= TreeFellerConfig.MIN_VERTICAL_LOG_RATIO;
+    }
+
+    /**
      * Handles player sneak events for shift-activation.
      */
     @EventHandler
@@ -300,6 +320,14 @@ public class TreeFellerListener implements Listener {
             if (TreeFellerConfig.DEBUG) {
                 player.sendMessage(Component.text("TreeFeller: Insufficient logs detected (" + 
                         tree.getLogCount() + " < " + TreeFellerConfig.REQUIRED_LOGS + ")", NamedTextColor.YELLOW));
+            }
+            return;
+        }
+
+        // Validate vertical to horizontal log ratio (prevents horizontal structures)
+        if (!isValidVerticalRatio(tree)) {
+            if (TreeFellerConfig.DEBUG) {
+                player.sendMessage(Component.text("TreeFeller: Insufficient vertical logs (ratio too low)", NamedTextColor.YELLOW));
             }
             return;
         }

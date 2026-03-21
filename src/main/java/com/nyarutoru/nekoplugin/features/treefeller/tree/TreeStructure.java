@@ -3,6 +3,7 @@ package com.nyarutoru.nekoplugin.features.treefeller.tree;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import org.bukkit.Location;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -97,6 +98,65 @@ public class TreeStructure {
             }
         }
         return minY;
+    }
+
+    /**
+     * Gets the count of vertical logs (logs with Y-axis orientation).
+     * A log is considered vertical if it has log neighbors above or below.
+     *
+     * @return the count of vertical logs
+     */
+    public int getVerticalLogCount() {
+        int count = 0;
+        Set<BlockPos> logSet = new HashSet<>(logs);
+
+        for (BlockPos log : logs) {
+            // Check if this log has vertical neighbors (above or below)
+            BlockPos above = new BlockPos(log.x(), log.y() + 1, log.z());
+            BlockPos below = new BlockPos(log.x(), log.y() - 1, log.z());
+
+            if (logSet.contains(above) || logSet.contains(below)) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /**
+     * Gets the count of horizontal logs (logs with X/Z-axis orientation).
+     * A log is considered horizontal if it has log neighbors on the sides but not above/below.
+     *
+     * @return the count of horizontal logs
+     */
+    public int getHorizontalLogCount() {
+        int count = 0;
+        Set<BlockPos> logSet = new HashSet<>(logs);
+
+        for (BlockPos log : logs) {
+            // Check if this log has horizontal neighbors (X/Z directions)
+            boolean hasHorizontalNeighbor = false;
+
+            BlockPos[] horizontalNeighbors = {
+                new BlockPos(log.x() + 1, log.y(), log.z()),
+                new BlockPos(log.x() - 1, log.y(), log.z()),
+                new BlockPos(log.x(), log.y(), log.z() + 1),
+                new BlockPos(log.x(), log.y(), log.z() - 1)
+            };
+
+            for (BlockPos neighbor : horizontalNeighbors) {
+                if (logSet.contains(neighbor)) {
+                    hasHorizontalNeighbor = true;
+                    break;
+                }
+            }
+
+            if (hasHorizontalNeighbor) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     /**

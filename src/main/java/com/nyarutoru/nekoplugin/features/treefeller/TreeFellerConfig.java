@@ -71,6 +71,15 @@ public final class TreeFellerConfig {
     public static final int REQUIRED_LOGS = 4;
 
     /**
+     * What is the minimum ratio of vertical to horizontal logs that a tree may have?
+     * Prevents felling of horizontal log structures (bridges, houses, etc.).
+     * Ratio: vertical_logs / horizontal_logs
+     * 0.5 = must have at least 1 vertical log for every 2 horizontal logs
+     * Matches reference implementation default.
+     */
+    public static final double MIN_VERTICAL_LOG_RATIO = 0.5;
+
+    /**
      * Range (in blocks) to search for leaves from trunk blocks.
      * Matches reference implementation default.
      * Values over 6 are useless for vanilla trees (leaves naturally decay).
