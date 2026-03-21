@@ -871,6 +871,8 @@ public class TreeFellerListener implements Listener {
      * Finds all leaves connected to a log block using BFS (like reference getBlocksWithLeafCheck).
      * This method searches for leaves around the log, then recursively finds leaves connected
      * to those leaves (chain reaction), matching the reference implementation's behavior.
+     * 
+     * Reference: TreeFeller.getBlocksWithLeafCheck() + leafCheck()
      */
     private void findLeavesAroundLog(BlockPos logPos, Material logType, World world,
                                        BlockPos origin, Map<Integer, List<BlockPos>> leavesByDistance,
@@ -879,13 +881,14 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        int leafRange = 6; // Leaf detect/break range
+        int leafRange = 6; // Leaf detect/break range (matches reference LEAF_BREAK_RANGE)
 
         // Use BFS to find all connected leaves (like reference getBlocks method)
+        Map<Integer, List<BlockPos>> foundLeaves = new HashMap<>();
         Queue<BlockPos> leafQueue = new ArrayDeque<>();
         Set<BlockPos> discoveredLeaves = new HashSet<>();
 
-        // Start by finding leaves adjacent to the log
+        // Start by finding leaves within range of the log
         for (int dx = -leafRange; dx <= leafRange; dx++) {
             for (int dy = -leafRange; dy <= leafRange; dy++) {
                 for (int dz = -leafRange; dz <= leafRange; dz++) {
@@ -898,7 +901,7 @@ public class TreeFellerListener implements Listener {
                     if (leafBlock != null && isLeaf(leafBlock.getType())) {
                         // Check if leaf is player-placed (persistent)
                         if (!isPlayerPlaced(leafBlock)) {
-                            // Check leaf distance data if available (like reference)
+                            // Check leaf decay distance data (like reference)
                             if (isValidLeafForTreeFelling(leafBlock, leafRange)) {
                                 if (!discoveredLeaves.contains(leafPos)) {
                                     discoveredLeaves.add(leafPos);
@@ -911,31 +914,25 @@ public class TreeFellerListener implements Listener {
             }
         }
 
-        // Now do BFS to find leaves connected to other leaves (chain reaction)
-        // This is the key difference - reference follows leaf-to-leaf connections
+        // BFS to find leaves connected to other leaves (chain reaction)
+        // This matches reference getBlocks() behavior for leaf detection
         while (!leafQueue.isEmpty()) {
             BlockPos currentLeaf = leafQueue.poll();
             if (currentLeaf == null) {
                 continue;
             }
 
-            // Skip if already processed globally
+            // Skip if already processed
             if (visitedLeaves.contains(currentLeaf)) {
                 continue;
             }
 
-            // Add to final results
+            // Add to found leaves with distance
+            int dist = getDistance(logPos, currentLeaf);
+            foundLeaves.computeIfAbsent(dist, k -> new ArrayList<>()).add(currentLeaf);
             visitedLeaves.add(currentLeaf);
-            int dist = getDistance(origin, currentLeaf);
-            leavesByDistance.computeIfAbsent(dist, k -> new ArrayList<>()).add(currentLeaf);
 
-            // Search for connected leaves around this leaf (diagonal search like reference)
-            Block currentBlock = currentLeaf.getBlock(world);
-            if (currentBlock == null) {
-                continue;
-            }
-
-            // Check all 26 directions (3x3x3 cube minus center) like reference
+            // Search for connected leaves around this leaf (26 directions like reference)
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dy = -1; dy <= 1; dy++) {
                     for (int dz = -1; dz <= 1; dz++) {
@@ -958,17 +955,169 @@ public class TreeFellerListener implements Listener {
                 }
             }
         }
+
+        // REFERENCE leafCheck(): Validate leaves are actually connected to trunk
+        // Remove leaves that have a shorter path to trunk than their BFS distance
+        // This prevents breaking leaves from nearby trees
+        leafCheck(foundLeaves, logPos, world);
+
+        // Add validated leaves to results
+        for (List<BlockPos> leafList : foundLeaves.values()) {
+            for (BlockPos leafPos : leafList) {
+                int dist = getDistance(origin, leafPos);
+                leavesByDistance.computeIfAbsent(dist, k -> new ArrayList<>()).add(leafPos);
+            }
+        }
+    }
+
+    /**
+     * Reference implementation leafCheck() - validates leaves are connected to trunk.
+     * Removes leaves that can reach the trunk in fewer steps than their BFS distance.
+     * This prevents breaking leaves from nearby/adjacent trees.
+     * 
+     * @param foundLeaves Leaves found by BFS, grouped by distance
+     * @param trunkPos Starting trunk block position
+     * @param world World
+     */
+    private void leafCheck(Map<Integer, List<BlockPos>> foundLeaves, BlockPos trunkPos, World world) {
+        List<Integer> distances = new ArrayList<>(foundLeaves.keySet());
+        Collections.sort(distances);
+
+        int doneIndex = -1;
+        for (int i = 0; i < distances.size(); i++) {
+            int distance = distances.get(i);
+            List<BlockPos> leavesAtDistance = foundLeaves.get(distance);
+
+            // Check each leaf at this distance
+            Iterator<BlockPos> it = leavesAtDistance.iterator();
+            while (it.hasNext()) {
+                BlockPos leaf = it.next();
+
+                // Calculate actual shortest distance from leaf to trunk
+                int actualDistance = calculateShortestDistanceToTrunk(leaf, trunkPos, world);
+
+                // If leaf can reach trunk in fewer steps, it belongs to a different tree
+                if (actualDistance < distance) {
+                    it.remove(); // Remove this leaf - it's from another tree
+                }
+            }
+
+            // If this distance layer is now empty, all further layers are invalid
+            if (i > 0 && leavesAtDistance.isEmpty()) {
+                doneIndex = i;
+                break;
+            }
+        }
+
+        // Remove all layers beyond the empty one
+        if (doneIndex > -1) {
+            for (int i = doneIndex; i < distances.size(); i++) {
+                foundLeaves.remove(distances.get(i));
+            }
+        }
+    }
+
+    /**
+     * Calculates the shortest distance from a leaf to the trunk using BFS.
+     * Reference implementation distance() method.
+     */
+    private int calculateShortestDistanceToTrunk(BlockPos leaf, BlockPos trunkPos, World world) {
+        if (leaf == null || trunkPos == null || world == null) {
+            return Integer.MAX_VALUE;
+        }
+
+        // BFS to find shortest path to trunk
+        Queue<BlockPos> queue = new ArrayDeque<>();
+        Set<BlockPos> visited = new HashSet<>();
+
+        queue.add(leaf);
+        visited.add(leaf);
+
+        int distance = 0;
+        while (!queue.isEmpty()) {
+            int layerSize = queue.size();
+
+            for (int i = 0; i < layerSize; i++) {
+                BlockPos current = queue.poll();
+                if (current == null) continue;
+
+                // Check if we reached the trunk
+                if (current.equals(trunkPos)) {
+                    return distance;
+                }
+
+                // Check 26 neighbors
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        for (int dz = -1; dz <= 1; dz++) {
+                            if (dx == 0 && dy == 0 && dz == 0) continue;
+
+                            BlockPos neighbor = current.add(dx, dy, dz);
+                            if (!visited.contains(neighbor)) {
+                                Block block = neighbor.getBlock(world);
+                                if (block != null && (isLeaf(block.getType()) || block.getType().equals(trunkPos.getBlock(world).getType()))) {
+                                    visited.add(neighbor);
+                                    queue.add(neighbor);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            distance++;
+
+            // Safety limit
+            if (distance > 10) break;
+        }
+
+        return distance;
     }
 
     /**
      * Validates if a leaf should be broken.
-     * Simplified check - only verify it's not player-placed.
-     * Reference implementation breaks ALL natural leaves without strict distance checks.
+     * Reference implementation checks leaf decay distance data to ensure
+     * leaves are actually connected to logs (not from nearby trees).
      */
     private boolean isValidLeafForTreeFelling(Block leafBlock, int maxRange) {
-        // Don't check decay distance - break all natural leaves
-        // The BFS chain reaction naturally limits which leaves are found
+        if (leafBlock == null || !(leafBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves)) {
+            return true; // Non-leaf blocks pass through
+        }
+        
+        org.bukkit.block.data.type.Leaves leafData = (org.bukkit.block.data.type.Leaves) leafBlock.getBlockData();
+        
+        // Check if leaf has valid decay distance (1-6 means it's connected to logs)
+        // Distance 0 or invalid means it's player-placed or disconnected
+        int distance = leafData.getDistance();
+        if (distance < 1 || distance > 6) {
+            return false; // Invalid distance - likely from another tree or player-placed
+        }
+        
+        // Leaf is valid - it has proper decay distance indicating connection to logs
         return true;
+    }
+    
+    /**
+     * Checks if two adjacent leaves have valid decay distance chain.
+     * Reference: leaves should have consistent distance values (difference of 0-1)
+     */
+    private boolean hasValidLeafDecayChain(Block currentLeaf, Block adjacentLeaf) {
+        if (!(currentLeaf.getBlockData() instanceof org.bukkit.block.data.type.Leaves)) {
+            return true;
+        }
+        if (!(adjacentLeaf.getBlockData() instanceof org.bukkit.block.data.type.Leaves)) {
+            return true;
+        }
+        
+        org.bukkit.block.data.type.Leaves currentData = (org.bukkit.block.data.type.Leaves) currentLeaf.getBlockData();
+        org.bukkit.block.data.type.Leaves adjacentData = (org.bukkit.block.data.type.Leaves) adjacentLeaf.getBlockData();
+        
+        int currentDist = currentData.getDistance();
+        int adjacentDist = adjacentData.getDistance();
+        
+        // Valid leaf chain: distance difference should be 0 or 1
+        // Large jumps indicate leaves from different trees
+        int diff = Math.abs(currentDist - adjacentDist);
+        return diff <= 1;
     }
 
     /**
