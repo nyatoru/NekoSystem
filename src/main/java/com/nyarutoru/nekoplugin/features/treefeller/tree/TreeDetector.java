@@ -160,19 +160,22 @@ public final class TreeDetector {
     /**
      * Detects all leaf blocks associated with the tree.
      * <p>
-     * Searches for leaf blocks within the configured detection range
-     * of any log block in the tree.
+     * Uses distance-based leaf association to ensure Individual Tree Detection.
+     * Each leaf is assigned to the nearest log, preventing nearby trees from
+     * having their leaves mixed together.
      *
      * @param world the world containing the tree
      * @param logs the list of log positions
      * @param treeType the tree type to match
-     * @return list of all detected leaf positions
+     * @return list of detected leaf positions (only those closest to this tree's logs)
      */
     private List<BlockPos> detectLeaves(World world, List<BlockPos> logs, TreeType treeType) {
         List<BlockPos> leaves = new ArrayList<>();
-        Set<BlockPos> visited = new HashSet<>();
         int detectRange = TreeFellerConfig.LEAF_DETECT_RANGE;
         int detectRangeSquared = detectRange * detectRange;
+
+        // Create a set of all log positions for quick lookup
+        Set<BlockPos> logSet = new HashSet<>(logs);
 
         // Search around each log for leaves
         for (BlockPos logPos : logs) {
@@ -188,8 +191,8 @@ public final class TreeDetector {
 
                         BlockPos checkPos = new BlockPos(logPos.x() + dx, logPos.y() + dy, logPos.z() + dz);
 
-                        // Skip if already visited
-                        if (visited.contains(checkPos)) {
+                        // Skip if already added to leaves
+                        if (leaves.contains(checkPos)) {
                             continue;
                         }
 
@@ -199,8 +202,52 @@ public final class TreeDetector {
                         }
 
                         // Check if this is a matching leaf block
-                        if (treeType.isLeafBlock(block.getType())) {
-                            visited.add(checkPos);
+                        if (!treeType.isLeafBlock(block.getType())) {
+                            continue;
+                        }
+
+                        // Individual Tree Detection: Only add leaf if it's closest to this tree's logs
+                        // Find the distance to the nearest log in THIS tree
+                        int minDistanceToThisTree = Integer.MAX_VALUE;
+                        for (BlockPos treeLog : logSet) {
+                            int dist = distanceSquared(checkPos, treeLog);
+                            if (dist < minDistanceToThisTree) {
+                                minDistanceToThisTree = dist;
+                            }
+                        }
+
+                        // Check if any other log (not in this tree) is closer
+                        // This prevents stealing leaves from nearby trees
+                        boolean isClosestToThisTree = true;
+                        for (int checkDx = -detectRange; checkDx <= detectRange && isClosestToThisTree; checkDx++) {
+                            for (int checkDy = -detectRange; checkDy <= detectRange && isClosestToThisTree; checkDy++) {
+                                for (int checkDz = -detectRange; checkDz <= detectRange; checkDz++) {
+                                    BlockPos otherLogPos = new BlockPos(
+                                            checkPos.x() + checkDx,
+                                            checkPos.y() + checkDy,
+                                            checkPos.z() + checkDz
+                                    );
+
+                                    // Skip if this is one of our logs
+                                    if (logSet.contains(otherLogPos)) {
+                                        continue;
+                                    }
+
+                                    Block otherBlock = otherLogPos.getBlock(world);
+                                    if (otherBlock != null && treeType.isLogBlock(otherBlock.getType())) {
+                                        // Found another tree's log - check if it's closer
+                                        int distToOtherLog = checkDx * checkDx + checkDy * checkDy + checkDz * checkDz;
+                                        if (distToOtherLog < minDistanceToThisTree) {
+                                            // This leaf is closer to another tree's log - don't claim it
+                                            isClosestToThisTree = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isClosestToThisTree) {
                             leaves.add(checkPos);
                         }
                     }
@@ -209,6 +256,20 @@ public final class TreeDetector {
         }
 
         return leaves;
+    }
+
+    /**
+     * Calculates squared distance between two block positions.
+     *
+     * @param a first position
+     * @param b second position
+     * @return squared distance (avoids sqrt for performance)
+     */
+    private int distanceSquared(BlockPos a, BlockPos b) {
+        int dx = a.x() - b.x();
+        int dy = a.y() - b.y();
+        int dz = a.z() - b.z();
+        return dx * dx + dy * dy + dz * dz;
     }
 
     /**
