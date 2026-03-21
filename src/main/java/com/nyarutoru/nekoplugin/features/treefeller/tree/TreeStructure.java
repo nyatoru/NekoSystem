@@ -84,6 +84,22 @@ public class TreeStructure {
     }
 
     /**
+     * Gets the Y coordinate of the bottom-most log in the tree.
+     * Used for max-height validation.
+     *
+     * @return the Y coordinate of the lowest log
+     */
+    public int getBottomY() {
+        int minY = Integer.MAX_VALUE;
+        for (BlockPos log : logs) {
+            if (log.y() < minY) {
+                minY = log.y();
+            }
+        }
+        return minY;
+    }
+
+    /**
      * Gets the origin block position where detection started.
      *
      * @return the origin position

@@ -185,6 +185,21 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
+     * Validates that the cut height is within the allowed range from the bottom.
+     * Prevents players from cutting down trees by breaking only the top block.
+     *
+     * @param tree the tree structure being cut
+     * @param brokenBlock the block that was broken
+     * @return true if the cut is within the valid height range, false otherwise
+     */
+    private boolean isValidCutHeight(TreeStructure tree, Block brokenBlock) {
+        int bottomY = tree.getBottomY();
+        int cutY = brokenBlock.getY();
+        int heightFromBottom = cutY - bottomY + 1; // +1 because bottom block = height 1
+        return heightFromBottom <= TreeFellerConfig.MAX_HEIGHT_FROM_BOTTOM;
+    }
+
+    /**
      * Handles player sneak events for shift-activation.
      */
     @EventHandler
@@ -259,6 +274,15 @@ public class TreeFellerListener implements Listener {
         if (hasPlayerPlacedLog(world, tree.getLogs())) {
             if (TreeFellerConfig.DEBUG) {
                 player.sendMessage(Component.text("TreeFeller: Cannot fell player-placed trees", NamedTextColor.YELLOW));
+            }
+            return;
+        }
+
+        // Check max-height from bottom (prevents cutting from top)
+        if (!isValidCutHeight(tree, block)) {
+            if (TreeFellerConfig.DEBUG) {
+                player.sendMessage(Component.text("TreeFeller: Must cut within " + TreeFellerConfig.MAX_HEIGHT_FROM_BOTTOM + 
+                        " blocks from bottom (cut at Y=" + block.getY() + ", tree bottom at Y=" + tree.getBottomY() + ")", NamedTextColor.YELLOW));
             }
             return;
         }

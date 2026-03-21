@@ -56,6 +56,14 @@ public final class TreeFellerConfig {
     public static final int MINIMUM_LEAVES = 10;
 
     /**
+     * How far from the bottom can you cut down a tree?
+     * Prevents cutting down trees from the top.
+     * 1 = must break bottom block, 5 = can break up to 5 blocks from bottom
+     * Matches reference implementation default.
+     */
+    public static final int MAX_HEIGHT_FROM_BOTTOM = 5;
+
+    /**
      * Range (in blocks) to search for leaves from trunk blocks.
      */
     public static final int LEAF_DETECT_RANGE = 5;
