@@ -649,6 +649,7 @@ public class TreeFellerListener implements Listener {
         Set<BlockPos> visitedLogs = new HashSet<>();
         Set<BlockPos> visitedLeaves = new HashSet<>();
         Set<BlockPos> rootsToBreak = new HashSet<>();
+        List<BlockPos> rootsList = new ArrayList<>(); // Track roots for breaking
 
         boolean isMangrove = logType == Material.MANGROVE_LOG || logType == Material.STRIPPED_MANGROVE_LOG;
 
@@ -697,6 +698,7 @@ public class TreeFellerListener implements Listener {
                     // Mangrove roots handling
                     if (isMangrove && isMangroveRoot(adjType)) {
                         rootsToBreak.add(adjacent);
+                        rootsList.add(adjacent); // Track for breaking
                         visitedLogs.add(adjacent);
                         toCheck.add(adjacent);
                     }
@@ -713,6 +715,7 @@ public class TreeFellerListener implements Listener {
                                 Block rootBlock = rootPos.getBlock(world);
                                 if (rootBlock != null && isMangroveRoot(rootBlock.getType())) {
                                     rootsToBreak.add(rootPos);
+                                    rootsList.add(rootPos); // Track for breaking
                                     visitedLogs.add(rootPos);
                                 }
                             }
@@ -726,6 +729,7 @@ public class TreeFellerListener implements Listener {
         }
 
         // Calculate total blocks to break for durability check
+        // Reference: Only count logs + roots for durability (NOT leaves)
         int totalLogs = 0;
         for (List<BlockPos> logs : logsByDistance.values()) {
             totalLogs += logs.size();
@@ -734,20 +738,22 @@ public class TreeFellerListener implements Listener {
         for (List<BlockPos> leaves : leavesByDistance.values()) {
             totalLeaves += leaves.size();
         }
-        int totalBlocks = totalLogs + totalLeaves + rootsToBreak.size();
+        int totalRoots = rootsToBreak.size();
+        int totalDurability = totalLogs + totalRoots; // Only logs + roots count for durability
 
-        debug(player, "Tree detected: " + totalLogs + " logs, " + totalLeaves + " leaves, " + rootsToBreak.size() + " roots");
+        debug(player, "Tree detected: " + totalLogs + " logs, " + totalLeaves + " leaves, " + totalRoots + " roots");
+        debug(player, "Durability required: " + totalDurability + " (logs + roots only)");
 
         // Check durability before breaking (like reference)
-        if (!canBreakTree(player, axe, totalBlocks)) {
-            debug(player, "Cancelled: insufficient tool durability");
+        if (!canBreakTree(player, axe, totalDurability)) {
+            debug(player, "Cancelled: insufficient tool durability (need " + totalDurability + ")");
             return;
         }
 
-        debug(player, "Starting to break " + totalBlocks + " blocks...");
+        debug(player, "Starting to break " + (totalLogs + totalLeaves + totalRoots) + " blocks...");
         // Break blocks following reference implementation order:
         // For each log (sorted by distance), break leaves near it, then break the log
-        breakTreeWithLeaves(player, axe, logsByDistance, world, origin.toLocation(world), origin);
+        breakTreeWithLeaves(player, axe, logsByDistance, rootsList, world, origin.toLocation(world), origin);
     }
 
     /**
@@ -756,13 +762,14 @@ public class TreeFellerListener implements Listener {
      * This matches reference fellTree() lines 267-321.
      */
     private void breakTreeWithLeaves(Player player, ItemStack axe, Map<Integer, List<BlockPos>> logsByDistance,
+                                       List<BlockPos> rootsToBreak,
                                        World world, Location dropLocation, BlockPos origin) {
         if (!SchedulerUtils.isFolia()) {
             // Paper/Spigot: Break instantly
-            breakTreeWithLeavesInstant(player, axe, logsByDistance, world, dropLocation, origin);
+            breakTreeWithLeavesInstant(player, axe, logsByDistance, rootsToBreak, world, dropLocation, origin);
         } else {
             // Folia: Use scheduled breaking (simplified for region safety)
-            breakTreeWithLeavesInstant(player, axe, logsByDistance, world, dropLocation, origin);
+            breakTreeWithLeavesInstant(player, axe, logsByDistance, rootsToBreak, world, dropLocation, origin);
         }
     }
 
@@ -771,10 +778,29 @@ public class TreeFellerListener implements Listener {
      * Follows reference order: for each log, break nearby leaves, then the log.
      */
     private void breakTreeWithLeavesInstant(Player player, ItemStack axe, Map<Integer, List<BlockPos>> logsByDistance,
-                                              World world, Location dropLocation, BlockPos origin) {
+                                               World world, Location dropLocation, BlockPos origin) {
+        breakTreeWithLeavesInstant(player, axe, logsByDistance, new ArrayList<>(), world, dropLocation, origin);
+    }
+    
+    /**
+     * Instant breaking for Paper/Spigot (and Folia as fallback) with roots.
+     * Follows reference order: for each log, break nearby leaves, then the log.
+     */
+    private void breakTreeWithLeavesInstant(Player player, ItemStack axe, Map<Integer, List<BlockPos>> logsByDistance,
+                                               List<BlockPos> rootsToBreak,
+                                               World world, Location dropLocation, BlockPos origin) {
         ItemStack currentAxe = player.getInventory().getItemInMainHand();
         if (currentAxe == null || currentAxe.getType() != axe.getType()) {
             return; // Tool switched
+        }
+
+        // First: Break all mangrove roots (consume durability)
+        for (BlockPos rootPos : rootsToBreak) {
+            if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
+                debug(player, "Tool broke during root breaking - stopping");
+                return;
+            }
+            breakSingleBlock(player, currentAxe, rootPos, world, dropLocation, true);
         }
 
         // Sort distances (closest to farthest, like reference line 255)
@@ -791,6 +817,12 @@ public class TreeFellerListener implements Listener {
                 // Skip origin (broken by event)
                 if (logPos.equals(origin)) continue;
 
+                // Check durability before breaking this log
+                if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
+                    debug(player, "Tool broke during felling - stopping");
+                    return;
+                }
+
                 // Reference line 267/311: Get leaves around THIS specific log
                 // This is the KEY difference - leaves found per-log, not all upfront!
                 Map<Integer, List<BlockPos>> leavesAroundLog = new HashMap<>();
@@ -798,6 +830,7 @@ public class TreeFellerListener implements Listener {
                 findLeavesAroundLog(logPos, null, world, origin, leavesAroundLog, visitedLeaves);
 
                 // Break all leaves around this log (reference line 270/314)
+                // Leaves don't consume durability
                 for (List<BlockPos> leafList : leavesAroundLog.values()) {
                     for (BlockPos leafPos : leafList) {
                         breakSingleBlock(player, currentAxe, leafPos, world, dropLocation, false);
