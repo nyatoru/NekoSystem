@@ -643,6 +643,11 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
+        debug(player, "§e=== Tree Feller Started ===");
+        debug(player, "§7Origin: §f" + originBlock.getX() + ", " + originBlock.getY() + ", " + originBlock.getZ());
+        debug(player, "§7Log type: §f" + logType.name());
+        debug(player, "§7Leaf range: §f6 blocks");
+
         // Use distance-based tracking like the reference implementation
         Map<Integer, List<BlockPos>> logsByDistance = new HashMap<>();
         Map<Integer, List<BlockPos>> leavesByDistance = new HashMap<>();
@@ -741,16 +746,20 @@ public class TreeFellerListener implements Listener {
         int totalRoots = rootsToBreak.size();
         int totalDurability = totalLogs + totalRoots; // Only logs + roots count for durability
 
-        debug(player, "Tree detected: " + totalLogs + " logs, " + totalLeaves + " leaves, " + totalRoots + " roots");
-        debug(player, "Durability required: " + totalDurability + " (logs + roots only)");
+        debug(player, "§a✓ Tree Detection Complete:");
+        debug(player, "  §7Logs: §f" + totalLogs);
+        debug(player, "  §7Leaves: §f" + totalLeaves);
+        debug(player, "  §7Roots: §f" + totalRoots);
+        debug(player, "  §7Durability needed: §f" + totalDurability);
 
         // Check durability before breaking (like reference)
         if (!canBreakTree(player, axe, totalDurability)) {
-            debug(player, "Cancelled: insufficient tool durability (need " + totalDurability + ")");
+            debug(player, "§c✗ Cancelled: Insufficient tool durability (need " + totalDurability + ")");
             return;
         }
 
-        debug(player, "Starting to break " + (totalLogs + totalLeaves + totalRoots) + " blocks...");
+        debug(player, "§a✓ Durability check passed");
+        debug(player, "§e=== Starting Block Breaking ===");
         // Break blocks following reference implementation order:
         // For each log (sorted by distance), break leaves near it, then break the log
         breakTreeWithLeaves(player, axe, logsByDistance, rootsList, world, origin.toLocation(world), origin);
@@ -881,7 +890,9 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        int leafRange = 4; // Leaf detect/break range (reduced from 6 to prevent chaining to adjacent trees)
+        int leafRange = 6; // Leaf detect/break range (matches reference LEAF_BREAK_RANGE)
+        
+        debug(null, "§7Searching leaves around log §f(" + logPos.x() + ", " + logPos.y() + ", " + logPos.z() + ")§7, range: §f" + leafRange);
 
         // Use BFS to find all connected leaves (like reference getBlocks method)
         Map<Integer, List<BlockPos>> foundLeaves = new HashMap<>();
@@ -968,7 +979,16 @@ public class TreeFellerListener implements Listener {
         // Reference: Call leafCheck() to validate leaves belong to this tree
         // This prevents breaking leaves from adjacent trees when leaf distance data is unreliable
         // Reference: TreeFeller.java lines 1157-1181
+        int leavesBeforeCheck = foundLeaves.values().stream().mapToInt(List::size).sum();
+        debug(null, "§7Leaves found before validation: §f" + leavesBeforeCheck);
+        
         leafCheck(foundLeaves, logType, world);
+        
+        int leavesAfterCheck = foundLeaves.values().stream().mapToInt(List::size).sum();
+        int removed = leavesBeforeCheck - leavesAfterCheck;
+        if (removed > 0) {
+            debug(null, "§7leafCheck removed §f" + removed + " §7leaves (from other trees)");
+        }
         
         // Add found leaves to results
         // Reference: leaves are organized by distance from origin (the block player broke)
@@ -997,8 +1017,11 @@ public class TreeFellerListener implements Listener {
         
         List<Integer> distances = new ArrayList<>(foundLeaves.keySet());
         Collections.sort(distances);
+        
+        debug(null, "§7leafCheck: Validating §f" + distances.size() + " §7distance layers");
 
         int doneIndex = -1;
+        int removedCount = 0;
         for (int i = 0; i < distances.size(); i++) {
             int d = distances.get(i);
             List<BlockPos> leavesAtDistance = foundLeaves.get(d);
@@ -1015,6 +1038,9 @@ public class TreeFellerListener implements Listener {
                 // If leaf can reach trunk in fewer steps, it belongs to a different tree
                 if (actualDistance < d) {
                     it.remove(); // Remove this leaf - it's from another tree
+                    removedCount++;
+                    debug(null, "§7  Removed leaf at §f" + leaf.x() + ", " + leaf.y() + ", " + leaf.z() + 
+                          " §7(BFS dist=" + d + ", actual dist=" + actualDistance + ")");
                 }
             }
 
@@ -1031,6 +1057,8 @@ public class TreeFellerListener implements Listener {
                 foundLeaves.remove(distances.get(i));
             }
         }
+        
+        debug(null, "§7leafCheck complete: Removed §f" + removedCount + " §7leaves");
     }
 
     /**
