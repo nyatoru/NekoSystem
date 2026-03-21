@@ -7,7 +7,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
-import org.bukkit.command.PluginCommand;
+
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -31,23 +31,37 @@ public class TreeFellerCommands implements CommandExecutor, TabCompleter {
 
     /**
      * Registers all treefeller commands.
+     * Paper plugins must register commands programmatically via CommandMap.
      */
     public void register() {
-        PluginCommand cmd = plugin.getCommand("treefeller");
-        if (cmd != null) {
-            cmd.setExecutor(this);
-            cmd.setTabCompleter(this);
-        }
+        org.bukkit.command.Command command = new org.bukkit.command.Command("treefeller") {
+            @Override
+            public boolean execute(org.bukkit.command.CommandSender sender, String commandLabel, String[] args) {
+                return TreeFellerCommands.this.onCommand(sender, this, commandLabel, args);
+            }
+
+            @Override
+            public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) throws IllegalArgumentException {
+                return TreeFellerCommands.this.onTabComplete(sender, this, alias, args);
+            }
+        };
+        
+        command.setDescription("TreeFeller feature commands");
+        command.setUsage("/treefeller <debug|help>");
+        command.setPermission("op");
+        command.setAliases(java.util.List.of("tf"));
+        
+        // Register via CommandMap (Paper plugin standard)
+        plugin.getServer().getCommandMap().register("treefeller", command);
     }
 
     /**
      * Unregisters all treefeller commands.
      */
     public void unregister() {
-        PluginCommand cmd = plugin.getCommand("treefeller");
-        if (cmd != null) {
-            cmd.setExecutor(null);
-            cmd.setTabCompleter(null);
+        org.bukkit.command.Command command = plugin.getServer().getCommandMap().getCommand("treefeller");
+        if (command != null) {
+            command.unregister(plugin.getServer().getCommandMap());
         }
     }
 
