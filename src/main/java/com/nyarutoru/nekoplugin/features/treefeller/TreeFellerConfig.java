@@ -84,9 +84,9 @@ public final class TreeFellerConfig {
     /**
      * Allow diagonally connected logs to be detected as part of the tree.
      * If false, only orthogonally connected logs (6 directions) are detected.
-     * Set to true to support natural trees with horizontal branches.
+     * Matches reference implementation default (diagonal-leaves: false).
      */
-    public static final boolean DIAGONAL_LOGS = true;
+    public static final boolean DIAGONAL_LOGS = false;
 
     /**
      * Ignore leaf block data (persistent flag).
