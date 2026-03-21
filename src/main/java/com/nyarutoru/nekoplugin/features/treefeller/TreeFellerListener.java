@@ -1,6 +1,5 @@
 package com.nyarutoru.nekoplugin.features.treefeller;
 
-import com.nyarutoru.nekoplugin.api.tool.AbstractVeinMiner;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.features.treefeller.animation.FallingTreeAnimation;
 import com.nyarutoru.nekoplugin.features.treefeller.animation.TreeFellerEffects;
@@ -15,30 +14,29 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
-import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * Event listener for the TreeFeller feature.
  * <p>
  * Handles tree felling using shift-activation (10 shifts within 3 seconds).
- * Extends AbstractVeinMiner for consistent activation pattern with OreExcavation and SandExcavation.
+ * Uses ActiveToolAPI for activation tracking.
  *
  * @author Redstone Agents
  * @since 2026-03-21
  */
-public class TreeFellerListener extends AbstractVeinMiner {
+public class TreeFellerListener implements Listener {
 
     public static final String TOOL_NAME = "TreeFeller";
     private static final int MAX_BLOCKS = 500;
@@ -69,7 +67,6 @@ public class TreeFellerListener extends AbstractVeinMiner {
     private final ToolMatcher toolMatcher;
     private final TreeFellerEffects effects;
     private final FallingTreeAnimation animation;
-    private final Predicate<Player> toolPredicate = this::isHoldingAxe;
 
     /**
      * Creates a new TreeFellerListener.
@@ -81,37 +78,6 @@ public class TreeFellerListener extends AbstractVeinMiner {
         this.animation = new FallingTreeAnimation();
     }
 
-    @Override
-    protected String getToolName() {
-        return TOOL_NAME;
-    }
-
-    @Override
-    protected int getMaxBlocks() {
-        return MAX_BLOCKS;
-    }
-
-    @Override
-    protected int[][] getSearchOffsets() {
-        // Use cardinal directions for tree detection
-        return CARDINAL_OFFSETS;
-    }
-
-    @Override
-    protected Set<Material> getTargetMaterials() {
-        return LOGS;
-    }
-
-    @Override
-    protected Predicate<Player> getToolPredicate() {
-        return toolPredicate;
-    }
-
-    @Override
-    protected int getRadiusSquared() {
-        return -1; // No radius limit for trees
-    }
-
     /**
      * Checks if player is holding a valid axe.
      */
@@ -120,15 +86,36 @@ public class TreeFellerListener extends AbstractVeinMiner {
         return ItemUtils.isAxe(item);
     }
 
-    @Override
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockBreak(org.bukkit.event.block.BlockBreakEvent event) {
+    /**
+     * Handles player sneak events for shift-activation.
+     */
+    @EventHandler
+    public void onPlayerSneak(PlayerToggleSneakEvent event) {
+        if (!event.isSneaking()) {
+            return;
+        }
+
         Player player = event.getPlayer();
 
-        if (!ActiveToolAPI.getInstance().isActive(player, getToolName()))
-            return;
+        ActiveToolAPI.getInstance().onShift(
+                player,
+                TOOL_NAME,
+                this::isHoldingAxe,
+                null);
+    }
 
-        if (!getToolPredicate().test(player)) {
+    /**
+     * Handles block break events for tree felling.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+
+        if (!ActiveToolAPI.getInstance().isActive(player, TOOL_NAME)) {
+            return;
+        }
+
+        if (!isHoldingAxe(player)) {
             ActiveToolAPI.getInstance().deactivate(player, "wrong tool");
             return;
         }
@@ -136,8 +123,9 @@ public class TreeFellerListener extends AbstractVeinMiner {
         Block block = event.getBlock();
         Material blockType = block.getType();
 
-        if (!getTargetMaterials().contains(blockType))
+        if (!LOGS.contains(blockType)) {
             return;
+        }
 
         // Check if feature is enabled
         if (!TreeFellerConfig.ENABLED) {
@@ -191,12 +179,6 @@ public class TreeFellerListener extends AbstractVeinMiner {
             player.sendMessage(Component.text("TreeFeller: Felled " + tree.getLogCount() + " logs and " +
                     tree.getLeafCount() + " leaves", NamedTextColor.GREEN));
         }
-    }
-
-    @Override
-    protected void performVeinMine(Player player, Block originBlock, Material targetType) {
-        // This method is overridden to use tree detection instead of simple BFS
-        // The actual tree felling logic is in onBlockBreak
     }
 
     /**

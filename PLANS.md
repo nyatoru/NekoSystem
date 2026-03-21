@@ -30,7 +30,7 @@ TreeFeller is a comprehensive tree-felling feature that allows players to cut do
 ```
 src/main/java/com/nyarutoru/nekoplugin/features/treefeller/
 ├── TreeFellerFeature.java          # Main feature class (extends AbstractFeature)
-├── TreeFellerListener.java         # Event listener (extends AbstractVeinMiner)
+├── TreeFellerListener.java         # Event listener (implements Listener)
 ├── TreeFellerConfig.java           # Hardcoded configuration values
 ├── tree/
 │   ├── TreeDetector.java           # BFS-based tree detection algorithm
@@ -62,8 +62,8 @@ src/main/resources/
 - Logs startup status
 
 #### TreeFellerListener.java
-- Extends `AbstractVeinMiner` for shift-activation pattern
-- Uses ActiveToolAPI for activation (10 shifts within 3 seconds)
+- Implements `Listener` for event handling
+- Uses ActiveToolAPI for shift-activation (10 shifts within 3 seconds)
 - Handles `PlayerToggleSneakEvent` for tool activation
 - Handles `BlockBreakEvent` for tree felling logic
 - Implements tree detection and validation
@@ -707,7 +707,7 @@ During the planning process, the following research was conducted:
 2. **NekoPlugin Pattern Analysis**: Reviewed existing features to understand:
    - AbstractFeature lifecycle pattern
    - ActiveToolAPI integration for shift-activation
-   - AbstractVeinMiner BFS pattern for ore excavation
+   - OreExcavation/SandExcavation activation patterns
    - Configuration patterns (currently hardcoded in *Config classes)
    - Command patterns (GraveCommands)
    - Utility classes (BlockPos, ItemUtils, ComponentUtils, SchedulerUtils)
