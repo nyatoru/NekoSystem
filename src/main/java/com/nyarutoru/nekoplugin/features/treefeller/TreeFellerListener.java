@@ -808,7 +808,9 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Finds leaves connected to a log block (similar to reference getBlocksWithLeafCheck)
+     * Finds all leaves connected to a log block using BFS (like reference getBlocksWithLeafCheck).
+     * This method searches for leaves around the log, then recursively finds leaves connected
+     * to those leaves (chain reaction), matching the reference implementation's behavior.
      */
     private void findLeavesAroundLog(BlockPos logPos, Material logType, World world,
                                       BlockPos origin, Map<Integer, List<BlockPos>> leavesByDistance,
@@ -817,7 +819,13 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        int leafRange = 5; // Similar to reference LEAF_DETECT_RANGE
+        int leafRange = 6; // Reference LEAF_DETECT_RANGE default is 6
+
+        // Use BFS to find all connected leaves (like reference getBlocks method)
+        Queue<BlockPos> leafQueue = new ArrayDeque<>();
+        Set<BlockPos> discoveredLeaves = new HashSet<>();
+
+        // Start by finding leaves adjacent to the log
         for (int dx = -leafRange; dx <= leafRange; dx++) {
             for (int dy = -leafRange; dy <= leafRange; dy++) {
                 for (int dz = -leafRange; dz <= leafRange; dz++) {
@@ -825,20 +833,89 @@ public class TreeFellerListener implements Listener {
                         continue;
 
                     BlockPos leafPos = logPos.add(dx, dy, dz);
-                    if (!visitedLeaves.contains(leafPos)) {
-                        Block leafBlock = leafPos.getBlock(world);
-                        if (leafBlock != null && isLeaf(leafBlock.getType())) {
-                            // Check if leaf is player-placed (persistent)
-                            if (!isPlayerPlaced(leafBlock)) {
-                                visitedLeaves.add(leafPos);
-                                int dist = getDistance(origin, leafPos);
-                                leavesByDistance.computeIfAbsent(dist, k -> new ArrayList<>()).add(leafPos);
+                    Block leafBlock = leafPos.getBlock(world);
+
+                    if (leafBlock != null && isLeaf(leafBlock.getType())) {
+                        // Check if leaf is player-placed (persistent)
+                        if (!isPlayerPlaced(leafBlock)) {
+                            // Check leaf distance data if available (like reference)
+                            if (isValidLeafForTreeFelling(leafBlock, leafRange)) {
+                                if (!discoveredLeaves.contains(leafPos)) {
+                                    discoveredLeaves.add(leafPos);
+                                    leafQueue.add(leafPos);
+                                }
                             }
                         }
                     }
                 }
             }
         }
+
+        // Now do BFS to find leaves connected to other leaves (chain reaction)
+        // This is the key difference - reference follows leaf-to-leaf connections
+        while (!leafQueue.isEmpty()) {
+            BlockPos currentLeaf = leafQueue.poll();
+            if (currentLeaf == null) {
+                continue;
+            }
+
+            // Skip if already processed globally
+            if (visitedLeaves.contains(currentLeaf)) {
+                continue;
+            }
+
+            // Add to final results
+            visitedLeaves.add(currentLeaf);
+            int dist = getDistance(origin, currentLeaf);
+            leavesByDistance.computeIfAbsent(dist, k -> new ArrayList<>()).add(currentLeaf);
+
+            // Search for connected leaves around this leaf (diagonal search like reference)
+            Block currentBlock = currentLeaf.getBlock(world);
+            if (currentBlock == null) {
+                continue;
+            }
+
+            // Check all 26 directions (3x3x3 cube minus center) like reference
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        if (dx == 0 && dy == 0 && dz == 0)
+                            continue;
+
+                        BlockPos adjacentLeaf = currentLeaf.add(dx, dy, dz);
+                        if (!discoveredLeaves.contains(adjacentLeaf) && !visitedLeaves.contains(adjacentLeaf)) {
+                            Block adjacentBlock = adjacentLeaf.getBlock(world);
+                            if (adjacentBlock != null && isLeaf(adjacentBlock.getType())) {
+                                if (!isPlayerPlaced(adjacentBlock)) {
+                                    if (isValidLeafForTreeFelling(adjacentBlock, leafRange)) {
+                                        discoveredLeaves.add(adjacentLeaf);
+                                        leafQueue.add(adjacentLeaf);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Validates if a leaf should be broken based on distance from log and leaf decay data.
+     * Similar to reference implementation's leafCheck and getBlocks methods.
+     */
+    private boolean isValidLeafForTreeFelling(Block leafBlock, int maxRange) {
+        // Check leaf distance data (Minecraft's decay mechanic)
+        // Leaves have a distance property (1-7) from the nearest log
+        var leafData = leafBlock.getBlockData();
+        if (leafData instanceof org.bukkit.block.data.type.Leaves) {
+            org.bukkit.block.data.type.Leaves leaves = (org.bukkit.block.data.type.Leaves) leafData;
+            int distance = leaves.getDistance();
+            // Only break leaves within valid range (distance 1-7 from log)
+            return distance >= 1 && distance <= maxRange;
+        }
+        // If not a proper leaf block data, use distance check only
+        return true;
     }
 
     /**
