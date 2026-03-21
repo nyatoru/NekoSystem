@@ -123,6 +123,13 @@ public final class TreeFellerConfig {
      */
     public static final double REPLANT_CHANCE = 1.0;
 
+    /**
+     * If enabled, connected trees will also be felled resulting in a cascade 
+     * that could fell an entire forest.
+     * DISABLED by default (matches reference implementation default).
+     */
+    public static final boolean CASCADE = false;
+
     // =========================================================================
     // Animation Settings
     // =========================================================================
