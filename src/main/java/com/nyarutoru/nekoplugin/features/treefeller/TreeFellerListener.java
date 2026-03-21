@@ -959,7 +959,7 @@ public class TreeFellerListener implements Listener {
         // REFERENCE leafCheck(): Validate leaves are actually connected to trunk
         // Remove leaves that have a shorter path to trunk than their BFS distance
         // This prevents breaking leaves from nearby trees
-        leafCheck(foundLeaves, logPos, world);
+        leafCheck(foundLeaves, logType, world);
 
         // Add validated leaves to results
         for (List<BlockPos> leafList : foundLeaves.values()) {
@@ -972,32 +972,38 @@ public class TreeFellerListener implements Listener {
 
     /**
      * Reference implementation leafCheck() - validates leaves are connected to trunk.
-     * Removes leaves that can reach the trunk in fewer steps than their BFS distance.
+     * Removes leaves that can reach ANY trunk block in fewer steps than their BFS distance.
      * This prevents breaking leaves from nearby/adjacent trees.
      * 
-     * @param foundLeaves Leaves found by BFS, grouped by distance
-     * @param trunkPos Starting trunk block position
+     * Reference: TreeFeller.java lines 1157-1181
+     * 
+     * @param foundLeaves Leaves found by BFS, grouped by distance from starting log
+     * @param trunkMaterials Material types to search for (log types)
      * @param world World
      */
-    private void leafCheck(Map<Integer, List<BlockPos>> foundLeaves, BlockPos trunkPos, World world) {
+    private void leafCheck(Map<Integer, List<BlockPos>> foundLeaves, Material logType, World world) {
+        // Skip validation if ignoreLeafData is enabled (not implemented in our plugin)
+        // if (ignoreLeafData) return;
+        
         List<Integer> distances = new ArrayList<>(foundLeaves.keySet());
         Collections.sort(distances);
 
         int doneIndex = -1;
         for (int i = 0; i < distances.size(); i++) {
-            int distance = distances.get(i);
-            List<BlockPos> leavesAtDistance = foundLeaves.get(distance);
+            int d = distances.get(i);
+            List<BlockPos> leavesAtDistance = foundLeaves.get(d);
 
             // Check each leaf at this distance
             Iterator<BlockPos> it = leavesAtDistance.iterator();
             while (it.hasNext()) {
                 BlockPos leaf = it.next();
 
-                // Calculate actual shortest distance from leaf to trunk
-                int actualDistance = calculateShortestDistanceToTrunk(leaf, trunkPos, world);
+                // Calculate actual shortest distance from leaf to ANY trunk block
+                // Reference: distance() method searches for shortest path to trunk materials
+                int actualDistance = distance(leaf, logType, world, d);
 
                 // If leaf can reach trunk in fewer steps, it belongs to a different tree
-                if (actualDistance < distance) {
+                if (actualDistance < d) {
                     it.remove(); // Remove this leaf - it's from another tree
                 }
             }
@@ -1018,59 +1024,84 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Calculates the shortest distance from a leaf to the trunk using BFS.
      * Reference implementation distance() method.
+     * Finds the shortest distance from a leaf to ANY trunk block using BFS.
+     * 
+     * Reference: TreeFeller.java lines 641-650
+     * 
+     * @param from Starting leaf position
+     * @param trunkMaterial Material type to search for (log type)
+     * @param world World
+     * @param max Maximum distance to search
+     * @return Shortest distance to any trunk block, or max if not found
      */
-    private int calculateShortestDistanceToTrunk(BlockPos leaf, BlockPos trunkPos, World world) {
-        if (leaf == null || trunkPos == null || world == null) {
-            return Integer.MAX_VALUE;
+    private int distance(BlockPos from, Material trunkMaterial, World world, int max) {
+        if (from == null || world == null) {
+            return max;
         }
 
-        // BFS to find shortest path to trunk
-        Queue<BlockPos> queue = new ArrayDeque<>();
-        Set<BlockPos> visited = new HashSet<>();
-
-        queue.add(leaf);
-        visited.add(leaf);
-
-        int distance = 0;
-        while (!queue.isEmpty()) {
-            int layerSize = queue.size();
-
-            for (int i = 0; i < layerSize; i++) {
-                BlockPos current = queue.poll();
-                if (current == null) continue;
-
-                // Check if we reached the trunk
-                if (current.equals(trunkPos)) {
-                    return distance;
+        // BFS to find shortest path to any trunk block
+        // Reference: getBlocks() is called iteratively for each distance layer
+        for (int d = 0; d < max; d++) {
+            // Get all blocks at distance d from the leaf
+            List<BlockPos> blocksAtDistance = getBlocksAtDistance(from, d, world);
+            
+            // Check if any of these blocks are trunk blocks
+            for (BlockPos pos : blocksAtDistance) {
+                Block block = pos.getBlock(world);
+                if (block != null && block.getType() == trunkMaterial) {
+                    return d; // Found trunk at distance d
                 }
+            }
+        }
+        
+        return max; // No trunk found within max distance
+    }
 
-                // Check 26 neighbors
+    /**
+     * Gets all blocks at a specific distance from a starting position using BFS.
+     * Helper method for distance() calculation.
+     */
+    private List<BlockPos> getBlocksAtDistance(BlockPos start, int targetDistance, World world) {
+        if (start == null || targetDistance < 0) {
+            return new ArrayList<>();
+        }
+
+        // BFS layer-by-layer
+        List<BlockPos> currentLayer = new ArrayList<>();
+        currentLayer.add(start);
+        
+        Set<BlockPos> visited = new HashSet<>();
+        visited.add(start);
+
+        for (int d = 0; d < targetDistance; d++) {
+            List<BlockPos> nextLayer = new ArrayList<>();
+            
+            for (BlockPos pos : currentLayer) {
+                // Check all 26 neighbors (diagonal search)
                 for (int dx = -1; dx <= 1; dx++) {
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dz = -1; dz <= 1; dz++) {
                             if (dx == 0 && dy == 0 && dz == 0) continue;
 
-                            BlockPos neighbor = current.add(dx, dy, dz);
+                            BlockPos neighbor = pos.add(dx, dy, dz);
                             if (!visited.contains(neighbor)) {
                                 Block block = neighbor.getBlock(world);
-                                if (block != null && (isLeaf(block.getType()) || block.getType().equals(trunkPos.getBlock(world).getType()))) {
+                                if (block != null && (isLeaf(block.getType()) || isLog(block.getType()))) {
                                     visited.add(neighbor);
-                                    queue.add(neighbor);
+                                    nextLayer.add(neighbor);
                                 }
                             }
                         }
                     }
                 }
             }
-            distance++;
-
-            // Safety limit
-            if (distance > 10) break;
+            
+            currentLayer = nextLayer;
+            if (currentLayer.isEmpty()) break;
         }
 
-        return distance;
+        return currentLayer;
     }
 
     /**
