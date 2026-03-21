@@ -15,6 +15,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Chunk;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
@@ -47,7 +48,7 @@ public class TreeFellerListener implements Listener {
 
     public static final String TOOL_NAME = "TreeFeller";
     private static final int MAX_BLOCKS = 500;
-    private static final String PLAYER_PLACED_KEY = "treefeller_player_placed";
+    private static final String PLAYER_PLACED_PREFIX = "pp_";
 
     // Log materials that can be vein-mined
     // Using EnumSet for optimal performance
@@ -91,12 +92,16 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Gets the PDC key for player-placed block tracking.
+     * Gets the PDC key for a specific block location.
+     * Uses format: "pp_x_y_z" where x, y, z are block coordinates.
      *
-     * @return the namespaced key for player-placed data
+     * @param block the block to get the key for
+     * @return the namespaced key for this specific block
      */
-    private NamespacedKey getPlayerPlacedKey() {
-        return new NamespacedKey(plugin, PLAYER_PLACED_KEY);
+    private NamespacedKey getBlockKey(Block block) {
+        Location loc = block.getLocation();
+        String key = PLAYER_PLACED_PREFIX + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ();
+        return new NamespacedKey(plugin, key);
     }
 
     /**
@@ -114,7 +119,7 @@ public class TreeFellerListener implements Listener {
             return false;
         }
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
-        NamespacedKey key = getPlayerPlacedKey();
+        NamespacedKey key = getBlockKey(block);
         Byte value = pdc.get(key, PersistentDataType.BYTE);
         return value != null && value == 1;
     }
@@ -133,7 +138,7 @@ public class TreeFellerListener implements Listener {
             return;
         }
         PersistentDataContainer pdc = chunk.getPersistentDataContainer();
-        pdc.set(getPlayerPlacedKey(), PersistentDataType.BYTE, (byte) 1);
+        pdc.set(getBlockKey(block), PersistentDataType.BYTE, (byte) 1);
     }
 
     /**
@@ -149,7 +154,7 @@ public class TreeFellerListener implements Listener {
         if (chunk == null) {
             return;
         }
-        chunk.getPersistentDataContainer().remove(getPlayerPlacedKey());
+        chunk.getPersistentDataContainer().remove(getBlockKey(block));
     }
 
     /**
