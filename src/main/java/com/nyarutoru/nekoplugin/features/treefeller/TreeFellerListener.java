@@ -34,9 +34,9 @@ public class TreeFellerListener implements Listener {
 
     public static final String TOOL_NAME = "Tree Feller";
 
-    // Tree validation constants
-    private static final int MIN_LOGS_FOR_TREE = 4;
-    private static final int MIN_LEAVES_FOR_TREE = 20;
+    // Tree validation constants (lowered for better usability)
+    private static final int MIN_LOGS_FOR_TREE = 2;
+    private static final int MIN_LEAVES_FOR_TREE = 4;
     private static final int STRUCTURE_CHECK_RADIUS = 2;
     private static final int MAX_STRUCTURE_BLOCKS_ALLOWED = 2;
 
