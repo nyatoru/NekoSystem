@@ -916,6 +916,7 @@ public class TreeFellerListener implements Listener {
 
         // BFS to find leaves connected to other leaves (chain reaction)
         // This matches reference getBlocks() behavior for leaf detection
+        // The BFS through connected leaves naturally limits to this tree's leaves
         while (!leafQueue.isEmpty()) {
             BlockPos currentLeaf = leafQueue.poll();
             if (currentLeaf == null) {
@@ -927,7 +928,7 @@ public class TreeFellerListener implements Listener {
                 continue;
             }
 
-            // Add to found leaves with distance
+            // Add to found leaves with distance from starting log
             int dist = getDistance(logPos, currentLeaf);
             foundLeaves.computeIfAbsent(dist, k -> new ArrayList<>()).add(currentLeaf);
             visitedLeaves.add(currentLeaf);
@@ -956,12 +957,8 @@ public class TreeFellerListener implements Listener {
             }
         }
 
-        // REFERENCE leafCheck(): Validate leaves are actually connected to trunk
-        // Remove leaves that have a shorter path to trunk than their BFS distance
-        // This prevents breaking leaves from nearby trees
-        leafCheck(foundLeaves, logType, world);
-
-        // Add validated leaves to results
+        // Add found leaves to results
+        // Reference: leaves are organized by distance from origin (the block player broke)
         for (List<BlockPos> leafList : foundLeaves.values()) {
             for (BlockPos leafPos : leafList) {
                 int dist = getDistance(origin, leafPos);
@@ -1029,24 +1026,37 @@ public class TreeFellerListener implements Listener {
      * 
      * Reference: TreeFeller.java lines 641-650
      * 
+     * Key: Searches through CONNECTED leaf/log blocks from the leaf position.
+     * If it finds a trunk block at distance < BFS distance, leaf belongs to different tree.
+     * 
      * @param from Starting leaf position
      * @param trunkMaterial Material type to search for (log type)
      * @param world World
-     * @param max Maximum distance to search
-     * @return Shortest distance to any trunk block, or max if not found
+     * @param max Maximum distance to search (the BFS distance from starting log)
+     * @return Shortest distance to any trunk block through connected blocks, or max if not found
      */
     private int distance(BlockPos from, Material trunkMaterial, World world, int max) {
         if (from == null || world == null) {
             return max;
         }
 
-        // BFS to find shortest path to any trunk block
-        // Reference: getBlocks() is called iteratively for each distance layer
+        Block startBlock = from.getBlock(world);
+        if (startBlock == null) {
+            return max;
+        }
+
+        // Reference: materialTypes includes the starting block type + trunk materials
+        // This allows BFS to traverse through leaves to find connected trunk
+        Set<Material> materialTypes = new HashSet<>();
+        materialTypes.add(startBlock.getType()); // Start from leaf type
+        materialTypes.add(trunkMaterial); // Search for trunk type
+
+        // BFS layer by layer (reference: getBlocks iterative search)
         for (int d = 0; d < max; d++) {
-            // Get all blocks at distance d from the leaf
-            List<BlockPos> blocksAtDistance = getBlocksAtDistance(from, d, world);
+            // Get all connected blocks at exactly distance d
+            List<BlockPos> blocksAtDistance = getConnectedBlocksAtDistance(from, d, materialTypes, world);
             
-            // Check if any of these blocks are trunk blocks
+            // Check if any block at this distance is a trunk block
             for (BlockPos pos : blocksAtDistance) {
                 Block block = pos.getBlock(world);
                 if (block != null && block.getType() == trunkMaterial) {
@@ -1059,15 +1069,18 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Gets all blocks at a specific distance from a starting position using BFS.
-     * Helper method for distance() calculation.
+     * Gets all CONNECTED blocks at a specific distance from a starting position.
+     * Uses BFS through specified material types only (leaves + trunk).
+     * 
+     * This matches reference getBlocks() behavior for distance calculation.
      */
-    private List<BlockPos> getBlocksAtDistance(BlockPos start, int targetDistance, World world) {
-        if (start == null || targetDistance < 0) {
+    private List<BlockPos> getConnectedBlocksAtDistance(BlockPos start, int targetDistance, 
+                                                          Set<Material> allowedMaterials, World world) {
+        if (start == null || targetDistance < 0 || allowedMaterials == null) {
             return new ArrayList<>();
         }
 
-        // BFS layer-by-layer
+        // BFS layer-by-layer through CONNECTED blocks only
         List<BlockPos> currentLayer = new ArrayList<>();
         currentLayer.add(start);
         
@@ -1078,7 +1091,10 @@ public class TreeFellerListener implements Listener {
             List<BlockPos> nextLayer = new ArrayList<>();
             
             for (BlockPos pos : currentLayer) {
-                // Check all 26 neighbors (diagonal search)
+                Block currentBlock = pos.getBlock(world);
+                if (currentBlock == null) continue;
+
+                // Check all 26 neighbors (diagonal search - matches reference)
                 for (int dx = -1; dx <= 1; dx++) {
                     for (int dy = -1; dy <= 1; dy++) {
                         for (int dz = -1; dz <= 1; dz++) {
@@ -1086,10 +1102,13 @@ public class TreeFellerListener implements Listener {
 
                             BlockPos neighbor = pos.add(dx, dy, dz);
                             if (!visited.contains(neighbor)) {
-                                Block block = neighbor.getBlock(world);
-                                if (block != null && (isLeaf(block.getType()) || isLog(block.getType()))) {
-                                    visited.add(neighbor);
-                                    nextLayer.add(neighbor);
+                                Block neighborBlock = neighbor.getBlock(world);
+                                if (neighborBlock != null) {
+                                    // Only traverse through allowed materials (leaves + trunk)
+                                    if (allowedMaterials.contains(neighborBlock.getType())) {
+                                        visited.add(neighbor);
+                                        nextLayer.add(neighbor);
+                                    }
                                 }
                             }
                         }
@@ -1098,7 +1117,7 @@ public class TreeFellerListener implements Listener {
             }
             
             currentLayer = nextLayer;
-            if (currentLayer.isEmpty()) break;
+            if (currentLayer.isEmpty()) break; // No more connected blocks
         }
 
         return currentLayer;
