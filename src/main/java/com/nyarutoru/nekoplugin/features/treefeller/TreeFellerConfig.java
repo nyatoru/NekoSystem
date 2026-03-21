@@ -175,6 +175,15 @@ public final class TreeFellerConfig {
                 null
         ));
 
+        // Copper Axe (Minecraft 1.21+)
+        TOOLS.add(new ToolConfig(
+                "Copper Axe",
+                Material.COPPER_AXE,
+                1,
+                null,
+                null
+        ));
+
         // Iron Axe
         TOOLS.add(new ToolConfig(
                 "Iron Axe",
