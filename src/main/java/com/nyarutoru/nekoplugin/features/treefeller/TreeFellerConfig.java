@@ -72,12 +72,14 @@ public final class TreeFellerConfig {
 
     /**
      * Range (in blocks) to search for leaves from trunk blocks.
+     * Matches reference implementation default.
+     * Values over 6 are useless for vanilla trees (leaves naturally decay).
      */
-    public static final int LEAF_DETECT_RANGE = 5;
+    public static final int LEAF_DETECT_RANGE = 6;
 
     /**
      * Range (in blocks) to break leaves from trunk blocks.
-     * Should match or exceed LEAF_DETECT_RANGE to ensure all detected leaves are broken.
+     * Matches reference implementation default (same as detect range).
      */
     public static final int LEAF_BREAK_RANGE = 6;
 
