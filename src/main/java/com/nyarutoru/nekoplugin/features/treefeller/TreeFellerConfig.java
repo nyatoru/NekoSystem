@@ -64,6 +64,13 @@ public final class TreeFellerConfig {
     public static final int MAX_HEIGHT_FROM_BOTTOM = 5;
 
     /**
+     * How many logs should be required for logs to be counted as a tree?
+     * Prevents single or small log clusters from being felled.
+     * Matches reference implementation default.
+     */
+    public static final int REQUIRED_LOGS = 4;
+
+    /**
      * Range (in blocks) to search for leaves from trunk blocks.
      */
     public static final int LEAF_DETECT_RANGE = 5;

@@ -295,6 +295,15 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
+        // Validate tree has sufficient logs
+        if (tree.getLogCount() < TreeFellerConfig.REQUIRED_LOGS) {
+            if (TreeFellerConfig.DEBUG) {
+                player.sendMessage(Component.text("TreeFeller: Insufficient logs detected (" + 
+                        tree.getLogCount() + " < " + TreeFellerConfig.REQUIRED_LOGS + ")", NamedTextColor.YELLOW));
+            }
+            return;
+        }
+
         // Validate tree has sufficient leaves
         LeafValidator validator = new LeafValidator(tree.getTreeType());
         if (!validator.validate(world, tree.getLogs(), tree.getLeaves())) {
