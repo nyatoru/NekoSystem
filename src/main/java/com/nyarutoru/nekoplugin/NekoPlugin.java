@@ -35,11 +35,11 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(new DrawerFeature());
         FeatureManager.getInstance().registerFeature(new OreExcavationFeature());
         FeatureManager.getInstance().registerFeature(new SandExcavationFeature());
-        FeatureManager.getInstance().registerFeature(new TreeFellerFeature());
         FeatureManager.getInstance().registerFeature(new HammerFeature());
         FeatureManager.getInstance().registerFeature(new PlayerFeature());
         FeatureManager.getInstance().registerFeature(new ServerFeature());
         FeatureManager.getInstance().registerFeature(new WoodcuttingFeature());
+        FeatureManager.getInstance().registerFeature(new TreeFellerFeature());
 
         // Enable all features
         FeatureManager.getInstance().enableAll();
