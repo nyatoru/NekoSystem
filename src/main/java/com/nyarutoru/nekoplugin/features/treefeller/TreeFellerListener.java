@@ -945,9 +945,13 @@ public class TreeFellerListener implements Listener {
                             Block adjacentBlock = adjacentLeaf.getBlock(world);
                             if (adjacentBlock != null && isLeaf(adjacentBlock.getType())) {
                                 if (!isPlayerPlaced(adjacentBlock)) {
-                                    if (isValidLeafForTreeFelling(adjacentBlock, leafRange)) {
-                                        discoveredLeaves.add(adjacentLeaf);
-                                        leafQueue.add(adjacentLeaf);
+                                    // Reference: Check leaf decay chain - new leaf distance must be >= current leaf distance
+                                    // This prevents jumping to leaves from adjacent trees
+                                    if (hasValidLeafDecayChainForBFS(currentLeaf.getBlock(world), adjacentBlock)) {
+                                        if (isValidLeafForTreeFelling(adjacentBlock, leafRange)) {
+                                            discoveredLeaves.add(adjacentLeaf);
+                                            leafQueue.add(adjacentLeaf);
+                                        }
                                     }
                                 }
                             }
@@ -1168,6 +1172,38 @@ public class TreeFellerListener implements Listener {
         // Large jumps indicate leaves from different trees
         int diff = Math.abs(currentDist - adjacentDist);
         return diff <= 1;
+    }
+    
+    /**
+     * Reference getBlocks() leaf validation - checks leaf decay distance when traversing leaf-to-leaf.
+     * When searching from trunk outward, new leaf distance must be > current leaf distance.
+     * This prevents jumping to leaves from adjacent trees.
+     * 
+     * Reference: TreeFeller.java lines 567-577
+     */
+    private boolean hasValidLeafDecayChainForBFS(Block currentBlock, Block newBlock) {
+        // Only validate if both blocks are leaves
+        if (!(currentBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves)) {
+            return true;
+        }
+        if (!(newBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves)) {
+            return true;
+        }
+        
+        org.bukkit.block.data.type.Leaves currentLeaf = (org.bukkit.block.data.type.Leaves) currentBlock.getBlockData();
+        org.bukkit.block.data.type.Leaves newLeaf = (org.bukkit.block.data.type.Leaves) newBlock.getBlockData();
+        
+        int currentDist = currentLeaf.getDistance();
+        int newDist = newLeaf.getDistance();
+        
+        // Reference: when traversing trunk→leaves (invertLeafDirection=false)
+        // New leaf distance must be > current leaf distance (getting farther from trunk)
+        // This ensures we follow the natural decay chain and don't jump to other trees
+        if (newDist <= currentDist) {
+            return false; // Leaf is not getting farther from trunk - likely from different tree
+        }
+        
+        return true;
     }
 
     /**
