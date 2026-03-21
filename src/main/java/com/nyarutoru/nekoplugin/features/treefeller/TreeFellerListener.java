@@ -881,7 +881,7 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        int leafRange = 6; // Leaf detect/break range (matches reference LEAF_BREAK_RANGE)
+        int leafRange = 4; // Leaf detect/break range (reduced from 6 to prevent chaining to adjacent trees)
 
         // Use BFS to find all connected leaves (like reference getBlocks method)
         Map<Integer, List<BlockPos>> foundLeaves = new HashMap<>();
