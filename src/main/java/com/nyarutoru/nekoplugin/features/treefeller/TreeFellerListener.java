@@ -5,6 +5,8 @@ import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -25,6 +27,7 @@ import org.bukkit.persistence.PersistentDataType;
 
 import java.util.*;
 import java.util.EnumSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Handles Tree Feller events using ActiveToolAPI.
@@ -34,9 +37,9 @@ public class TreeFellerListener implements Listener {
 
     public static final String TOOL_NAME = "Tree Feller";
 
-    // Tree validation constants (lowered for better usability)
-    private static final int MIN_LOGS_FOR_TREE = 2;
-    private static final int MIN_LEAVES_FOR_TREE = 4;
+    // Tree validation constants
+    private static final int MIN_LOGS_FOR_TREE = 4;
+    private static final int MIN_LEAVES_FOR_TREE = 10;
     private static final int STRUCTURE_CHECK_RADIUS = 2;
     private static final int MAX_STRUCTURE_BLOCKS_ALLOWED = 2;
 
@@ -236,9 +239,56 @@ public class TreeFellerListener implements Listener {
             Material.MANGROVE_ROOTS, Material.MUDDY_MANGROVE_ROOTS);
 
     private final NekoPlugin plugin;
+    // Debug mode per player (OPs only)
+    private final Map<UUID, Boolean> debugEnabled = new ConcurrentHashMap<>();
 
     public TreeFellerListener(NekoPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * Checks if debug mode is enabled for a player.
+     */
+    public boolean isDebugging(Player player) {
+        if (player == null) return false;
+        return debugEnabled.getOrDefault(player.getUniqueId(), false);
+    }
+
+    /**
+     * Sets debug mode for a player.
+     */
+    public void setDebugging(Player player, boolean enabled) {
+        if (player == null) return;
+        debugEnabled.put(player.getUniqueId(), enabled);
+    }
+
+    /**
+     * Sends a debug message to all players with debug enabled.
+     */
+    private void debug(String message) {
+        if (debugEnabled.isEmpty()) return;
+        
+        Component debugMsg = Component.text("[TreeFeller Debug] ", NamedTextColor.GOLD)
+            .append(Component.text(message, NamedTextColor.WHITE));
+        
+        for (Map.Entry<UUID, Boolean> entry : debugEnabled.entrySet()) {
+            if (entry.getValue()) {
+                Player player = plugin.getServer().getPlayer(entry.getKey());
+                if (player != null && player.isOnline()) {
+                    player.sendMessage(debugMsg);
+                }
+            }
+        }
+    }
+
+    /**
+     * Sends a debug message to a specific player.
+     */
+    private void debug(Player player, String message) {
+        if (player == null || !isDebugging(player)) return;
+        
+        player.sendMessage(Component.text("[TreeFeller Debug] ", NamedTextColor.GOLD)
+            .append(Component.text(message, NamedTextColor.WHITE)));
     }
 
     @EventHandler
@@ -290,28 +340,35 @@ public class TreeFellerListener implements Listener {
             return;
 
         if (!isHoldingAxe(player)) {
+            debug(player, "Deactivated: not holding axe");
             ActiveToolAPI.getInstance().deactivate(player, "no axe");
             return;
         }
 
         Material logType = block.getType();
 
-        if (!isLog(logType))
+        if (!isLog(logType)) {
+            debug(player, "Cancelled: not a log (" + logType + ")");
             return;
+        }
 
         if (isPlayerPlaced(block)) {
+            debug(player, "Cancelled: player-placed log at " + block.getLocation());
             return;
         }
 
         // Advanced structure detection
         if (isPartOfStructure(block)) {
+            debug(player, "Cancelled: part of structure at " + block.getLocation());
             return;
         }
 
         if (!isActualTree(block, logType)) {
+            debug(player, "Cancelled: not a valid tree (insufficient logs/leaves)");
             return;
         }
 
+        debug(player, "Felling tree at " + block.getLocation() + " with log type: " + logType);
         fellTree(player, block, logType);
     }
 
@@ -645,11 +702,15 @@ public class TreeFellerListener implements Listener {
         }
         int totalBlocks = totalLogs + totalLeaves + rootsToBreak.size();
 
+        debug(player, "Tree detected: " + totalLogs + " logs, " + totalLeaves + " leaves, " + rootsToBreak.size() + " roots");
+
         // Check durability before breaking (like reference)
         if (!canBreakTree(player, axe, totalBlocks)) {
+            debug(player, "Cancelled: insufficient tool durability");
             return;
         }
 
+        debug(player, "Starting to break " + totalBlocks + " blocks...");
         // Break blocks following reference implementation order:
         // For each log (sorted by distance), break leaves near it, then break the log
         breakTreeWithLeaves(player, axe, logsByDistance, world, origin.toLocation(world), origin);
@@ -745,13 +806,13 @@ public class TreeFellerListener implements Listener {
      * to those leaves (chain reaction), matching the reference implementation's behavior.
      */
     private void findLeavesAroundLog(BlockPos logPos, Material logType, World world,
-                                      BlockPos origin, Map<Integer, List<BlockPos>> leavesByDistance,
-                                      Set<BlockPos> visitedLeaves) {
+                                       BlockPos origin, Map<Integer, List<BlockPos>> leavesByDistance,
+                                       Set<BlockPos> visitedLeaves) {
         if (logPos == null || world == null) {
             return;
         }
 
-        int leafRange = 6; // Reference LEAF_DETECT_RANGE default is 6
+        int leafRange = 6; // Leaf detect/break range
 
         // Use BFS to find all connected leaves (like reference getBlocks method)
         Queue<BlockPos> leafQueue = new ArrayDeque<>();

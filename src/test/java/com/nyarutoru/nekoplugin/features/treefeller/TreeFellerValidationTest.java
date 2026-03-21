@@ -255,7 +255,7 @@ class TreeFellerValidationTest {
         @DisplayName("Should have reasonable minimum leaves threshold")
         void shouldHaveReasonableMinLeaves() throws NoSuchFieldException, IllegalAccessException {
             int minLeaves = getConstant("MIN_LEAVES_FOR_TREE");
-            assertTrue(minLeaves >= 4, "MIN_LEAVES_FOR_TREE should be at least 4");
+            assertTrue(minLeaves >= 10, "MIN_LEAVES_FOR_TREE should be at least 10");
             assertTrue(minLeaves <= 50, "MIN_LEAVES_FOR_TREE should not exceed 50");
         }
 
