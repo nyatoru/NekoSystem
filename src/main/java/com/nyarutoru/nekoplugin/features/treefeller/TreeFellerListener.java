@@ -283,15 +283,19 @@ public class TreeFellerListener implements Listener {
         // Cancel the original block break (we'll handle it ourselves)
         event.setCancelled(true);
 
-        // Apply durability cost
-        if (!ItemUtils.consumeDurabilityOrDeactivate(player, tool, toolConfig.getDurabilityCost(), toolConfig.getName())) {
+        // Calculate durability cost: base cost per log × number of logs
+        int logCount = tree.getLogCount();
+        int totalDurabilityCost = toolConfig.getDurabilityCost() * logCount;
+
+        // Apply durability cost (respects Unbreaking and Unbreakable)
+        if (!ItemUtils.consumeDurabilityOrDeactivate(player, tool, totalDurabilityCost, toolConfig.getName())) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Tool would break", NamedTextColor.YELLOW));
+                player.sendMessage(Component.text("TreeFeller: Tool would break (cost: " + totalDurabilityCost + ")", NamedTextColor.YELLOW));
             }
             return;
         }
 
-        // Break the tree
+        // Break the tree (logs and leaves)
         breakTree(player, tree, tool);
 
         // Log if debug mode
@@ -311,14 +315,13 @@ public class TreeFellerListener implements Listener {
     private void breakTree(Player player, TreeStructure tree, ItemStack tool) {
         World world = player.getWorld();
 
-        // Get leaves to break
-        LeafValidator validator = new LeafValidator(tree.getTreeType());
-        Set<BlockPos> leavesToBreak = validator.findLeavesToBreak(world, tree.getLogs());
+        // Get ALL leaves associated with this tree (not limited by range)
+        Set<BlockPos> leavesToBreak = tree.getLeavesSet();
 
-        // Play animation (which also breaks blocks and plays effects)
+        // Play animation for logs (breaks them sequentially or instantly)
         animation.playAnimation(world, tree.getLogs(), effects);
 
-        // Break leaves instantly
+        // Break ALL leaves instantly (ensure no floating leaves)
         for (BlockPos leafPos : leavesToBreak) {
             Block leafBlock = leafPos.getBlock(world);
             if (leafBlock != null && leafBlock.getType() != Material.AIR) {

@@ -62,14 +62,16 @@ public final class TreeFellerConfig {
 
     /**
      * Range (in blocks) to break leaves from trunk blocks.
+     * Should match or exceed LEAF_DETECT_RANGE to ensure all detected leaves are broken.
      */
-    public static final int LEAF_BREAK_RANGE = 3;
+    public static final int LEAF_BREAK_RANGE = 6;
 
     /**
      * Allow diagonally connected logs to be detected as part of the tree.
      * If false, only orthogonally connected logs (6 directions) are detected.
+     * Set to true to support natural trees with horizontal branches.
      */
-    public static final boolean DIAGONAL_LOGS = false;
+    public static final boolean DIAGONAL_LOGS = true;
 
     /**
      * Ignore leaf block data (persistent flag).

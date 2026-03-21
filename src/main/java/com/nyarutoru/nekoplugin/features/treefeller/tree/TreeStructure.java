@@ -4,7 +4,9 @@ import com.nyarutoru.nekoplugin.utils.BlockPos;
 import org.bukkit.Location;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Represents a detected tree structure during tree felling.
@@ -69,6 +71,16 @@ public class TreeStructure {
      */
     public List<BlockPos> getLeaves() {
         return leaves;
+    }
+
+    /**
+     * Gets the set of leaf block positions in the tree.
+     * This is useful for iteration when breaking leaves.
+     *
+     * @return a set of leaf positions
+     */
+    public Set<BlockPos> getLeavesSet() {
+        return new HashSet<>(leaves);
     }
 
     /**
