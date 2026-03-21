@@ -44,47 +44,54 @@ public class TreeFellerListener implements Listener {
     private static final int MAX_STRUCTURE_BLOCKS_ALLOWED = 2;
 
     // Static offset arrays for log searching (includes multi-trunk support)
+    // Reference implementation: supports 5 blocks up and 5 blocks down
     private static final int[][] COMPACT_OFFSETS = {
-            // Vertical
-            { 0, 1, 0 }, { 0, 2, 0 },
-            { 0, -1, 0 },
+            // Vertical (5 up, 5 down - matches reference)
+            { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 }, { 0, 4, 0 }, { 0, 5, 0 },
+            { 0, -1, 0 }, { 0, -2, 0 }, { 0, -3, 0 }, { 0, -4, 0 }, { 0, -5, 0 },
             // Horizontal (1 block - for multi-trunk trees)
             { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
             { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
             // Diagonal up (+1 Y)
             { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
             { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
-            // Diagonal down (for forking trees)
+            // Diagonal down (-1 Y, for forking trees)
             { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
             { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 }
     };
 
     private static final int[][] TALL_TREE_OFFSETS = {
-            // Vertical (extended range)
-            { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
-            { 0, -1, 0 }, { 0, -2, 0 },
+            // Vertical (extended range - 5 up, 5 down)
+            { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 }, { 0, 4, 0 }, { 0, 5, 0 },
+            { 0, -1, 0 }, { 0, -2, 0 }, { 0, -3, 0 }, { 0, -4, 0 }, { 0, -5, 0 },
             // Horizontal cardinal (1-2 blocks for 2x2 trees)
             { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
             { 2, 0, 0 }, { -2, 0, 0 }, { 0, 0, 2 }, { 0, 0, -2 },
             // Horizontal diagonal (for multi-trunk)
             { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
-            // Diagonal up (+1 Y)
+            // Diagonal up (+1 to +5 Y)
             { 1, 1, 0 }, { -1, 1, 0 }, { 0, 1, 1 }, { 0, 1, -1 },
             { 1, 1, 1 }, { -1, 1, 1 }, { 1, 1, -1 }, { -1, 1, -1 },
             { 2, 1, 0 }, { -2, 1, 0 }, { 0, 1, 2 }, { 0, 1, -2 },
-            // Diagonal up (+2 Y)
             { 1, 2, 0 }, { -1, 2, 0 }, { 0, 2, 1 }, { 0, 2, -1 },
             { 1, 2, 1 }, { -1, 2, 1 }, { 1, 2, -1 }, { -1, 2, -1 },
             { 2, 2, 0 }, { -2, 2, 0 }, { 0, 2, 2 }, { 0, 2, -2 },
-            // Diagonal down (for forking)
+            { 1, 3, 0 }, { -1, 3, 0 }, { 0, 3, 1 }, { 0, 3, -1 },
+            { 1, 4, 0 }, { -1, 4, 0 }, { 0, 4, 1 }, { 0, 4, -1 },
+            { 1, 5, 0 }, { -1, 5, 0 }, { 0, 5, 1 }, { 0, 5, -1 },
+            // Diagonal down (-1 to -5 Y, for forking/hanging trees)
             { 1, -1, 0 }, { -1, -1, 0 }, { 0, -1, 1 }, { 0, -1, -1 },
-            { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 }
+            { 1, -1, 1 }, { -1, -1, 1 }, { 1, -1, -1 }, { -1, -1, -1 },
+            { 1, -2, 0 }, { -1, -2, 0 }, { 0, -2, 1 }, { 0, -2, -1 },
+            { 1, -3, 0 }, { -1, -3, 0 }, { 0, -3, 1 }, { 0, -3, -1 },
+            { 1, -4, 0 }, { -1, -4, 0 }, { 0, -4, 1 }, { 0, -4, -1 },
+            { 1, -5, 0 }, { -1, -5, 0 }, { 0, -5, 1 }, { 0, -5, -1 }
     };
 
     private static final int[][] VALIDATION_LOG_OFFSETS = {
-            // Vertical
-            { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 },
-            { 0, -1, 0 }, { 0, -2, 0 },
+            // Vertical (5 up, 5 down - matches reference)
+            { 0, 1, 0 }, { 0, 2, 0 }, { 0, 3, 0 }, { 0, 4, 0 }, { 0, 5, 0 },
+            { 0, -1, 0 }, { 0, -2, 0 }, { 0, -3, 0 }, { 0, -4, 0 }, { 0, -5, 0 },
             // Horizontal (multi-trunk support)
             { 1, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }, { 0, 0, -1 },
             { 1, 0, 1 }, { 1, 0, -1 }, { -1, 0, 1 }, { -1, 0, -1 },
