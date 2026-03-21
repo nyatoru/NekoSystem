@@ -1037,20 +1037,22 @@ public class TreeFellerListener implements Listener {
                 org.bukkit.block.Block leafBlock = leaf.getBlock(world);
                 if (leafBlock != null && leafBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves) {
                     org.bukkit.block.data.type.Leaves leafData = (org.bukkit.block.data.type.Leaves) leafBlock.getBlockData();
-                    int leafDecayDistance = leafData.getDistance(); // 1-6 from nearest log
+                    int leafDecayDistance = leafData.getDistance(); // 1-6 from nearest log in Minecraft
                     
-                    // Search for trunk blocks within the leaf's decay distance
+                    // Search for ANY trunk block within the leaf's decay distance
+                    // This finds the ACTUAL nearest log that Minecraft used to calculate the decay distance
                     BlockPos nearestTrunk = findNearestTrunk(leaf, logType, world, leafDecayDistance);
-                    if (nearestTrunk != null && !nearestTrunk.equals(ourLogPos)) {
-                        // Leaf is closer to a different trunk!
-                        int distToOtherTrunk = getDistance(nearestTrunk, leaf);
+                    if (nearestTrunk != null) {
+                        int distToNearestTrunk = getDistance(nearestTrunk, leaf);
                         int distToOurLog = getDistance(ourLogPos, leaf);
                         
-                        if (distToOtherTrunk < distToOurLog) {
+                        // If the nearest trunk is not our starting log, leaf belongs to different tree
+                        if (!nearestTrunk.equals(ourLogPos)) {
                             it.remove();
                             removedCount++;
-                            debug(null, "§7  Removed leaf §f" + leaf + " §7(closer to other trunk at " + nearestTrunk + 
-                                  ", dist=" + distToOtherTrunk + " vs our log dist=" + distToOurLog + ")");
+                            debug(null, "§7  Removed leaf §f" + leaf + " §7(nearest trunk is " + nearestTrunk + 
+                                  " at dist=" + distToNearestTrunk + ", our log is " + ourLogPos + " at dist=" + distToOurLog + 
+                                  ", leaf decay dist=" + leafDecayDistance + ")");
                             continue;
                         }
                     }
@@ -1076,6 +1078,7 @@ public class TreeFellerListener implements Listener {
     
     /**
      * Finds the nearest trunk block to a leaf position within search range.
+     * Checks ALL log types, not just the current tree's log type.
      * Returns null if no trunk found.
      */
     private BlockPos findNearestTrunk(BlockPos from, Material logType, World world, int maxSearch) {
@@ -1089,8 +1092,8 @@ public class TreeFellerListener implements Listener {
                         
                         BlockPos checkPos = from.add(dx, dy, dz);
                         Block checkBlock = checkPos.getBlock(world);
-                        if (checkBlock != null && checkBlock.getType() == logType) {
-                            return checkPos; // Found nearest trunk
+                        if (checkBlock != null && isLog(checkBlock.getType())) {
+                            return checkPos; // Found nearest trunk (any type)
                         }
                     }
                 }
