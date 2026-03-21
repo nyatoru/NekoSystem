@@ -661,7 +661,7 @@ public class TreeFellerListener implements Listener {
      * This matches reference fellTree() lines 267-321.
      */
     private void breakTreeWithLeaves(Player player, ItemStack axe, Map<Integer, List<BlockPos>> logsByDistance,
-                                      World world, Location dropLocation, BlockPos origin) {
+                                       World world, Location dropLocation, BlockPos origin) {
         if (!SchedulerUtils.isFolia()) {
             // Paper/Spigot: Break instantly
             breakTreeWithLeavesInstant(player, axe, logsByDistance, world, dropLocation, origin);
@@ -676,7 +676,7 @@ public class TreeFellerListener implements Listener {
      * Follows reference order: for each log, break nearby leaves, then the log.
      */
     private void breakTreeWithLeavesInstant(Player player, ItemStack axe, Map<Integer, List<BlockPos>> logsByDistance,
-                                             World world, Location dropLocation, BlockPos origin) {
+                                              World world, Location dropLocation, BlockPos origin) {
         ItemStack currentAxe = player.getInventory().getItemInMainHand();
         if (currentAxe == null || currentAxe.getType() != axe.getType()) {
             return; // Tool switched
@@ -695,11 +695,6 @@ public class TreeFellerListener implements Listener {
             for (BlockPos logPos : logs) {
                 // Skip origin (broken by event)
                 if (logPos.equals(origin)) continue;
-
-                // Check tool durability before breaking this log + leaves
-                if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentAxe, 1, TOOL_NAME)) {
-                    return; // Tool durability too low
-                }
 
                 // Reference line 267/311: Get leaves around THIS specific log
                 // This is the KEY difference - leaves found per-log, not all upfront!
