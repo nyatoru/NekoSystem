@@ -650,27 +650,21 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        // Break logs by distance (furthest first, like reference)
-        // On Folia, we must schedule block operations on the correct region
-        List<Integer> distances = new ArrayList<>(logsByDistance.keySet());
-        distances.sort(Collections.reverseOrder());
-
         // Collect all blocks to break for batch processing
         List<BlockPos> blocksToBreak = new ArrayList<>();
-        for (int dist : distances) {
-            for (BlockPos logPos : logsByDistance.get(dist)) {
+
+        // Add logs (skip origin as it's broken by the event)
+        for (List<BlockPos> logs : logsByDistance.values()) {
+            for (BlockPos logPos : logs) {
                 if (!logPos.equals(origin)) {
                     blocksToBreak.add(logPos);
                 }
             }
         }
 
-        // Add leaves
-        for (int dist : distances) {
-            List<BlockPos> leaves = leavesByDistance.get(dist);
-            if (leaves != null) {
-                blocksToBreak.addAll(leaves);
-            }
+        // Add ALL leaves (use leavesByDistance values directly, not log distances)
+        for (List<BlockPos> leaves : leavesByDistance.values()) {
+            blocksToBreak.addAll(leaves);
         }
 
         // Add mangrove roots
@@ -901,20 +895,13 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Validates if a leaf should be broken based on distance from log and leaf decay data.
-     * Similar to reference implementation's leafCheck and getBlocks methods.
+     * Validates if a leaf should be broken.
+     * Simplified check - only verify it's not player-placed.
+     * Reference implementation breaks ALL natural leaves without strict distance checks.
      */
     private boolean isValidLeafForTreeFelling(Block leafBlock, int maxRange) {
-        // Check leaf distance data (Minecraft's decay mechanic)
-        // Leaves have a distance property (1-7) from the nearest log
-        var leafData = leafBlock.getBlockData();
-        if (leafData instanceof org.bukkit.block.data.type.Leaves) {
-            org.bukkit.block.data.type.Leaves leaves = (org.bukkit.block.data.type.Leaves) leafData;
-            int distance = leaves.getDistance();
-            // Only break leaves within valid range (distance 1-7 from log)
-            return distance >= 1 && distance <= maxRange;
-        }
-        // If not a proper leaf block data, use distance check only
+        // Don't check decay distance - break all natural leaves
+        // The BFS chain reaction naturally limits which leaves are found
         return true;
     }
 
