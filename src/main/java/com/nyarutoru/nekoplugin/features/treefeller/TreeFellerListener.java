@@ -1003,16 +1003,17 @@ public class TreeFellerListener implements Listener {
     }
 
     /**
-     * Stricter leaf validation for trees growing very close together (≤3 blocks).
-     * Checks that each leaf is closer to OUR starting log than to any other trunk position.
-     * This prevents chain reaction when trees are adjacent.
+     * TRUE Individual Tree Detection - traces connection path to verify leaf belongs to OUR tree.
+     * For each leaf, traces the path of connected leaves back to see which trunk it reaches.
+     * Only keeps leaves whose path leads back to OUR specific starting log.
      */
     private void strictLeafCheck(Map<Integer, List<BlockPos>> foundLeaves, BlockPos ourLogPos, 
                                    Material logType, World world, int maxRange) {
         List<Integer> distances = new ArrayList<>(foundLeaves.keySet());
         Collections.sort(distances);
         
-        debug(null, "§7strictLeafCheck: Validating §f" + distances.size() + " §7distance layers from log §f" + ourLogPos);
+        debug(null, "§7§m=== Individual Tree Detection ===");
+        debug(null, "§7Validating §f" + distances.size() + " §7layers from our log §f" + ourLogPos);
         
         int removedCount = 0;
         for (int i = 0; i < distances.size(); i++) {
@@ -1023,57 +1024,103 @@ public class TreeFellerListener implements Listener {
             while (it.hasNext()) {
                 BlockPos leaf = it.next();
                 
-                // Check 1: Leaf must be within range of our log
-                int distanceFromOurLog = getDistance(ourLogPos, leaf);
-                if (distanceFromOurLog > maxRange) {
+                // INDIVIDUAL TREE DETECTION: Trace path from leaf back to trunk
+                // This finds WHICH specific trunk this leaf is connected to
+                BlockPos connectedTrunk = traceLeafPathToTrunk(leaf, world, maxRange);
+                
+                if (connectedTrunk == null) {
+                    // No trunk found - leaf is disconnected
                     it.remove();
                     removedCount++;
-                    debug(null, "§7  Removed leaf §f" + leaf + " §7(too far: " + distanceFromOurLog + " > " + maxRange + ")");
+                    debug(null, "§7✗ §f" + leaf + " §7→ No trunk (disconnected)");
                     continue;
                 }
                 
-                // Check 2: Search for ANY trunk block within leaf's Minecraft decay distance
-                // If found, leaf belongs to that tree, not ours
-                org.bukkit.block.Block leafBlock = leaf.getBlock(world);
-                if (leafBlock != null && leafBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves) {
-                    org.bukkit.block.data.type.Leaves leafData = (org.bukkit.block.data.type.Leaves) leafBlock.getBlockData();
-                    int leafDecayDistance = leafData.getDistance(); // 1-6 from nearest log in Minecraft
-                    
-                    // Search for ANY trunk block within the leaf's decay distance
-                    // This finds the ACTUAL nearest log that Minecraft used to calculate the decay distance
-                    BlockPos nearestTrunk = findNearestTrunk(leaf, logType, world, leafDecayDistance);
-                    if (nearestTrunk != null) {
-                        int distToNearestTrunk = getDistance(nearestTrunk, leaf);
-                        int distToOurLog = getDistance(ourLogPos, leaf);
-                        
-                        // If the nearest trunk is not our starting log, leaf belongs to different tree
-                        if (!nearestTrunk.equals(ourLogPos)) {
-                            it.remove();
-                            removedCount++;
-                            debug(null, "§7  Removed leaf §f" + leaf + " §7(nearest trunk is " + nearestTrunk + 
-                                  " at dist=" + distToNearestTrunk + ", our log is " + ourLogPos + " at dist=" + distToOurLog + 
-                                  ", leaf decay dist=" + leafDecayDistance + ")");
-                            continue;
-                        }
-                    }
-                }
-                
-                // Check 3: Original leafCheck validation
-                int actualDistance = distance(leaf, logType, world, d);
-                if (actualDistance < d) {
+                if (!connectedTrunk.equals(ourLogPos)) {
+                    // Path leads to DIFFERENT trunk - not our tree!
                     it.remove();
                     removedCount++;
-                    debug(null, "§7  Removed leaf §f" + leaf + " §7(BFS dist=" + d + ", actual dist=" + actualDistance + ")");
+                    debug(null, "§7✗ §f" + leaf + " §7→ Connected to §f" + connectedTrunk + " §7(NOT our log!)");
+                    continue;
                 }
+                
+                // ✓ Leaf path traces back to OUR log - keep it
+                debug(null, "§7✓ §f" + leaf + " §7→ Our log §f" + ourLogPos);
             }
             
-            // If this distance layer is now empty, all further layers are invalid
             if (i > 0 && leavesAtDistance.isEmpty()) {
                 break;
             }
         }
         
-        debug(null, "§7strictLeafCheck complete: Removed §f" + removedCount + " §7leaves");
+        debug(null, "§7Individual Tree Detection complete: Removed §f" + removedCount + " §7leaves from other trees");
+    }
+    
+    /**
+     * Traces the connected leaf path from a leaf back to its trunk.
+     * Uses reverse BFS following leaf decay distance (6→5→4→3→2→1→trunk).
+     * Returns the trunk position that this leaf is actually connected to.
+     * 
+     * This is TRUE Individual Tree Detection - each leaf is validated independently.
+     */
+    private BlockPos traceLeafPathToTrunk(BlockPos leafPos, World world, int maxRange) {
+        Block leafBlock = leafPos.getBlock(world);
+        if (!(leafBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves)) {
+            return null;
+        }
+        
+        org.bukkit.block.data.type.Leaves leafData = (org.bukkit.block.data.type.Leaves) leafBlock.getBlockData();
+        int startDistance = leafData.getDistance(); // 1-6
+        
+        // BFS backwards through leaf decay chain (from current leaf toward trunk)
+        Queue<BlockPos> queue = new ArrayDeque<>();
+        Set<BlockPos> visited = new HashSet<>();
+        queue.add(leafPos);
+        visited.add(leafPos);
+        
+        int searched = 0;
+        int maxSearch = 100; // Prevent infinite loops
+        
+        while (!queue.isEmpty() && searched < maxSearch) {
+            BlockPos current = queue.poll();
+            Block currentBlock = current.getBlock(world);
+            
+            if (currentBlock == null) continue;
+            
+            // Check if we reached a trunk block
+            if (isLog(currentBlock.getType())) {
+                return current; // Found the trunk this leaf connects to!
+            }
+            
+            // Continue BFS through leaves with LOWER decay distance (toward trunk)
+            if (currentBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves) {
+                org.bukkit.block.data.type.Leaves currentLeaf = (org.bukkit.block.data.type.Leaves) currentBlock.getBlockData();
+                int currentDist = currentLeaf.getDistance();
+                
+                // Search 6 face neighbors (cardinal directions)
+                int[][] directions = {{-1,0,0}, {1,0,0}, {0,-1,0}, {0,1,0}, {0,0,-1}, {0,0,1}};
+                for (int[] dir : directions) {
+                    BlockPos next = current.add(dir[0], dir[1], dir[2]);
+                    if (!visited.contains(next)) {
+                        Block nextBlock = next.getBlock(world);
+                        if (nextBlock != null && nextBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves) {
+                            org.bukkit.block.data.type.Leaves nextLeaf = (org.bukkit.block.data.type.Leaves) nextBlock.getBlockData();
+                            int nextDist = nextLeaf.getDistance();
+                            
+                            // Only follow leaves that are CLOSER to trunk (lower distance)
+                            if (nextDist < currentDist) {
+                                visited.add(next);
+                                queue.add(next);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            searched++;
+        }
+        
+        return null; // No trunk found within search limit
     }
     
     /**
