@@ -248,18 +248,42 @@ public class TreeFellerListener implements Listener {
 
     /**
      * Checks if debug mode is enabled for a player.
+     * Package-visible for testing.
      */
-    public boolean isDebugging(Player player) {
+    boolean isDebugging(Player player) {
         if (player == null) return false;
         return debugEnabled.getOrDefault(player.getUniqueId(), false);
     }
 
     /**
      * Sets debug mode for a player.
+     * Package-visible for testing.
      */
-    public void setDebugging(Player player, boolean enabled) {
+    void setDebugging(Player player, boolean enabled) {
         if (player == null) return;
         debugEnabled.put(player.getUniqueId(), enabled);
+    }
+
+    /**
+     * Checks if a block is player-placed.
+     * Package-visible for testing.
+     */
+    boolean isPlayerPlaced(Block block) {
+        if (block == null) {
+            return false;
+        }
+        Byte value = block.getChunk().getPersistentDataContainer().get(
+                getBlockKey(block.getLocation()),
+                PersistentDataType.BYTE);
+        return value != null && value == 1;
+    }
+
+    /**
+     * Gets the PDC key for a block location.
+     * Package-visible for testing.
+     */
+    NamespacedKey getBlockKey(Location loc) {
+        return new NamespacedKey(plugin, "pp_" + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ());
     }
 
     /**
@@ -403,31 +427,32 @@ public class TreeFellerListener implements Listener {
         return ItemUtils.isAxe(player.getInventory().getItemInMainHand());
     }
 
-    private boolean isLog(Material material) {
+    /**
+     * Checks if material is a log.
+     * Package-visible for testing.
+     */
+    boolean isLog(Material material) {
         return LOGS.contains(material);
     }
 
-    private boolean isLeaf(Material material) {
+    /**
+     * Checks if material is a leaf.
+     * Package-visible for testing.
+     */
+    boolean isLeaf(Material material) {
         return LEAVES.contains(material);
     }
 
-    private boolean isMangroveRoot(Material material) {
+    /**
+     * Checks if material is a mangrove root.
+     * Package-visible for testing.
+     */
+    boolean isMangroveRoot(Material material) {
         return MANGROVE_ROOTS.contains(material);
     }
 
     private boolean isStructureBlock(Material material) {
         return STRUCTURE_BLOCKS.contains(material);
-    }
-
-    private NamespacedKey getBlockKey(Location loc) {
-        return new NamespacedKey(plugin, "pp_" + loc.getBlockX() + "_" + loc.getBlockY() + "_" + loc.getBlockZ());
-    }
-
-    private boolean isPlayerPlaced(Block block) {
-        Byte value = block.getChunk().getPersistentDataContainer().get(
-                getBlockKey(block.getLocation()),
-                PersistentDataType.BYTE);
-        return value != null && value == 1;
     }
 
     private void removePlayerPlacedMark(BlockPos pos, World world) {
@@ -465,8 +490,9 @@ public class TreeFellerListener implements Listener {
      * Advanced structure detection - checks if log is part of a player-built
      * structure.
      * Looks for structural elements like fences, stairs, slabs, doors, etc. nearby.
+     * Package-visible for testing.
      */
-    private boolean isPartOfStructure(Block startLog) {
+    boolean isPartOfStructure(Block startLog) {
         if (startLog == null) {
             return false;
         }
@@ -523,8 +549,9 @@ public class TreeFellerListener implements Listener {
     /**
      * Checks if this log is part of an actual tree using optimized BlockPos BFS.
      * Includes multi-trunk detection for forked and branching trees.
+     * Package-visible for testing.
      */
-    private boolean isActualTree(Block startLog, Material logType) {
+    boolean isActualTree(Block startLog, Material logType) {
         if (startLog == null || logType == null) {
             return false;
         }

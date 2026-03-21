@@ -6,6 +6,10 @@ plugins {
 group = 'com.nyarutoru.nekoplugin'
 version = '1.0.0-SNAPSHOT'
 
+repositories {
+    mavenCentral()
+}
+
 
 dependencies {
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
