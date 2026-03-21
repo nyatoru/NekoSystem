@@ -67,9 +67,12 @@ public final class TreeDetector {
      * <p>
      * Uses BFS to traverse all connected log blocks and identifies
      * the tree type based on the log material.
+     * <p>
+     * Supports root detection: if the origin is a root block (e.g., mangrove roots),
+     * searches for connected trunk blocks within ROOT_DISTANCE.
      *
      * @param world the world containing the tree
-     * @param origin the starting block position (the broken log)
+     * @param origin the starting block position (the broken log or root)
      * @return the detected tree structure, or null if no valid tree found
      */
     public TreeStructure detect(World world, BlockPos origin) {
@@ -81,6 +84,14 @@ public final class TreeDetector {
         Block originBlock = origin.getBlock(world);
         if (originBlock == null) {
             return null;
+        }
+
+        // Check if this is a root block (mangrove-style detection)
+        BlockPos trunkPos = findTrunkFromRoot(world, origin);
+        if (trunkPos != null) {
+            // Start detection from the trunk instead of the root
+            origin = trunkPos;
+            originBlock = trunkPos.getBlock(world);
         }
 
         // Find the matching tree type for this log
@@ -100,6 +111,72 @@ public final class TreeDetector {
 
         // Create and return the tree structure
         return new TreeStructure(logs, leaves, origin, treeType);
+    }
+
+    /**
+     * Searches for a trunk block from a root block (e.g., mangrove roots).
+     * Matches ThizThizzyDizzy/tree-feller root detection behavior.
+     *
+     * @param world the world containing the tree
+     * @param rootPos the root block position
+     * @return the nearest trunk block position, or null if no trunk found
+     */
+    private BlockPos findTrunkFromRoot(World world, BlockPos rootPos) {
+        int rootDistance = TreeFellerConfig.ROOT_DISTANCE;
+        
+        // BFS to find nearest trunk block within root distance
+        Queue<BlockPos> queue = new ArrayDeque<>();
+        Set<BlockPos> visited = new HashSet<>();
+        
+        queue.add(rootPos);
+        visited.add(rootPos);
+        
+        int distance = 0;
+        while (!queue.isEmpty() && distance < rootDistance) {
+            int levelSize = queue.size();
+            
+            for (int i = 0; i < levelSize; i++) {
+                BlockPos current = queue.poll();
+                Block block = current.getBlock(world);
+                
+                if (block != null && isTrunkBlock(block.getType())) {
+                    return current; // Found trunk
+                }
+                
+                // Check 6 directions
+                for (BlockPos offset : CARDINAL_OFFSETS) {
+                    BlockPos neighbor = new BlockPos(
+                        current.x() + offset.x(),
+                        current.y() + offset.y(),
+                        current.z() + offset.z()
+                    );
+                    
+                    if (!visited.contains(neighbor)) {
+                        visited.add(neighbor);
+                        queue.add(neighbor);
+                    }
+                }
+            }
+            
+            distance++;
+        }
+        
+        return null; // No trunk found within range
+    }
+
+    /**
+     * Checks if a material is a trunk/log block (not a root).
+     *
+     * @param material the material to check
+     * @return true if the material is a trunk block, false if it's a root
+     */
+    private boolean isTrunkBlock(org.bukkit.Material material) {
+        // Roots are not trunks
+        if (material == org.bukkit.Material.MANGROVE_ROOTS) {
+            return false;
+        }
+        // All other log materials are trunks
+        return findTreeType(material) != null;
     }
 
     /**
@@ -163,8 +240,8 @@ public final class TreeDetector {
      * Searches for leaf blocks within the configured detection range
      * of any log block in the tree.
      * <p>
-     * Individual Tree Detection is achieved through log connectivity (BFS).
-     * Leaves are associated with the tree if they're within range of the tree's logs.
+     * Individual Tree Detection: Only breaks leaves that match the tree's leaf type
+     * and are within range of the tree's logs. Uses a set to avoid duplicates.
      *
      * @param world the world containing the tree
      * @param logs the list of log positions
@@ -172,12 +249,12 @@ public final class TreeDetector {
      * @return list of all detected leaf positions
      */
     private List<BlockPos> detectLeaves(World world, List<BlockPos> logs, TreeType treeType) {
-        List<BlockPos> leaves = new ArrayList<>();
-        Set<BlockPos> visited = new HashSet<>();
+        Set<BlockPos> leavesSet = new HashSet<>();
         int detectRange = TreeFellerConfig.LEAF_DETECT_RANGE;
         int detectRangeSquared = detectRange * detectRange;
 
-        // Search around each log for leaves
+        // Search around each log for matching leaves
+        // This matches ThizThizzyDizzy/tree-feller's approach
         for (BlockPos logPos : logs) {
             // Search in a cube around the log
             for (int dx = -detectRange; dx <= detectRange; dx++) {
@@ -191,8 +268,8 @@ public final class TreeDetector {
 
                         BlockPos checkPos = new BlockPos(logPos.x() + dx, logPos.y() + dy, logPos.z() + dz);
 
-                        // Skip if already visited
-                        if (visited.contains(checkPos)) {
+                        // Skip if already added
+                        if (leavesSet.contains(checkPos)) {
                             continue;
                         }
 
@@ -201,17 +278,17 @@ public final class TreeDetector {
                             continue;
                         }
 
-                        // Check if this is a matching leaf block
+                        // Check if this is a matching leaf block for THIS tree type
+                        // This prevents breaking leaves from nearby trees of different types
                         if (treeType.isLeafBlock(block.getType())) {
-                            visited.add(checkPos);
-                            leaves.add(checkPos);
+                            leavesSet.add(checkPos);
                         }
                     }
                 }
             }
         }
 
-        return leaves;
+        return new ArrayList<>(leavesSet);
     }
 
     /**

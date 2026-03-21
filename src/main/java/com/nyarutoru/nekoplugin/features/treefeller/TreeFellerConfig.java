@@ -130,6 +130,21 @@ public final class TreeFellerConfig {
      */
     public static final boolean CASCADE = false;
 
+    /**
+     * Should trees be able to be partially cut down if the tree is too large?
+     * If true, trees exceeding MAX_TREE_SIZE will be partially felled up to the limit.
+     * If false, trees exceeding MAX_TREE_SIZE will not be felled at all.
+     * Matches reference implementation default (allow-partial: false).
+     */
+    public static final boolean ALLOW_PARTIAL = true;
+
+    /**
+     * How far away from roots should the plugin search for connected trunks?
+     * Used for mangrove-style root detection.
+     * Matches reference implementation default (root-distance: 6).
+     */
+    public static final int ROOT_DISTANCE = 6;
+
     // =========================================================================
     // Animation Settings
     // =========================================================================
