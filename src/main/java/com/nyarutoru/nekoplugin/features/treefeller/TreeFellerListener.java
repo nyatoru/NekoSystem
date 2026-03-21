@@ -982,12 +982,14 @@ public class TreeFellerListener implements Listener {
         int leavesBeforeCheck = foundLeaves.values().stream().mapToInt(List::size).sum();
         debug(null, "§7Leaves found before validation: §f" + leavesBeforeCheck);
         
-        leafCheck(foundLeaves, logType, world);
+        // Stricter validation: Check each leaf is actually connected to OUR tree
+        // For trees very close together (≤3 blocks), leaf decay data can be unreliable
+        strictLeafCheck(foundLeaves, logPos, logType, world, leafRange);
         
         int leavesAfterCheck = foundLeaves.values().stream().mapToInt(List::size).sum();
         int removed = leavesBeforeCheck - leavesAfterCheck;
         if (removed > 0) {
-            debug(null, "§7leafCheck removed §f" + removed + " §7leaves (from other trees)");
+            debug(null, "§7strictLeafCheck removed §f" + removed + " §7leaves (from other trees)");
         }
         
         // Add found leaves to results
@@ -1000,6 +1002,103 @@ public class TreeFellerListener implements Listener {
         }
     }
 
+    /**
+     * Stricter leaf validation for trees growing very close together (≤3 blocks).
+     * Checks that each leaf is closer to OUR starting log than to any other trunk position.
+     * This prevents chain reaction when trees are adjacent.
+     */
+    private void strictLeafCheck(Map<Integer, List<BlockPos>> foundLeaves, BlockPos ourLogPos, 
+                                   Material logType, World world, int maxRange) {
+        List<Integer> distances = new ArrayList<>(foundLeaves.keySet());
+        Collections.sort(distances);
+        
+        debug(null, "§7strictLeafCheck: Validating §f" + distances.size() + " §7distance layers from log §f" + ourLogPos);
+        
+        int removedCount = 0;
+        for (int i = 0; i < distances.size(); i++) {
+            int d = distances.get(i);
+            List<BlockPos> leavesAtDistance = foundLeaves.get(d);
+            
+            Iterator<BlockPos> it = leavesAtDistance.iterator();
+            while (it.hasNext()) {
+                BlockPos leaf = it.next();
+                
+                // Check 1: Leaf must be within range of our log
+                int distanceFromOurLog = getDistance(ourLogPos, leaf);
+                if (distanceFromOurLog > maxRange) {
+                    it.remove();
+                    removedCount++;
+                    debug(null, "§7  Removed leaf §f" + leaf + " §7(too far: " + distanceFromOurLog + " > " + maxRange + ")");
+                    continue;
+                }
+                
+                // Check 2: Search for ANY trunk block within leaf's Minecraft decay distance
+                // If found, leaf belongs to that tree, not ours
+                org.bukkit.block.Block leafBlock = leaf.getBlock(world);
+                if (leafBlock != null && leafBlock.getBlockData() instanceof org.bukkit.block.data.type.Leaves) {
+                    org.bukkit.block.data.type.Leaves leafData = (org.bukkit.block.data.type.Leaves) leafBlock.getBlockData();
+                    int leafDecayDistance = leafData.getDistance(); // 1-6 from nearest log
+                    
+                    // Search for trunk blocks within the leaf's decay distance
+                    BlockPos nearestTrunk = findNearestTrunk(leaf, logType, world, leafDecayDistance);
+                    if (nearestTrunk != null && !nearestTrunk.equals(ourLogPos)) {
+                        // Leaf is closer to a different trunk!
+                        int distToOtherTrunk = getDistance(nearestTrunk, leaf);
+                        int distToOurLog = getDistance(ourLogPos, leaf);
+                        
+                        if (distToOtherTrunk < distToOurLog) {
+                            it.remove();
+                            removedCount++;
+                            debug(null, "§7  Removed leaf §f" + leaf + " §7(closer to other trunk at " + nearestTrunk + 
+                                  ", dist=" + distToOtherTrunk + " vs our log dist=" + distToOurLog + ")");
+                            continue;
+                        }
+                    }
+                }
+                
+                // Check 3: Original leafCheck validation
+                int actualDistance = distance(leaf, logType, world, d);
+                if (actualDistance < d) {
+                    it.remove();
+                    removedCount++;
+                    debug(null, "§7  Removed leaf §f" + leaf + " §7(BFS dist=" + d + ", actual dist=" + actualDistance + ")");
+                }
+            }
+            
+            // If this distance layer is now empty, all further layers are invalid
+            if (i > 0 && leavesAtDistance.isEmpty()) {
+                break;
+            }
+        }
+        
+        debug(null, "§7strictLeafCheck complete: Removed §f" + removedCount + " §7leaves");
+    }
+    
+    /**
+     * Finds the nearest trunk block to a leaf position within search range.
+     * Returns null if no trunk found.
+     */
+    private BlockPos findNearestTrunk(BlockPos from, Material logType, World world, int maxSearch) {
+        // Search in expanding spheres from the leaf position
+        for (int dist = 1; dist <= maxSearch; dist++) {
+            for (int dx = -dist; dx <= dist; dx++) {
+                for (int dy = -dist; dy <= dist; dy++) {
+                    for (int dz = -dist; dz <= dist; dz++) {
+                        // Skip if not at exact distance (Manhattan)
+                        if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) != dist) continue;
+                        
+                        BlockPos checkPos = from.add(dx, dy, dz);
+                        Block checkBlock = checkPos.getBlock(world);
+                        if (checkBlock != null && checkBlock.getType() == logType) {
+                            return checkPos; // Found nearest trunk
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
     /**
      * Reference implementation leafCheck() - validates leaves are connected to trunk.
      * Removes leaves that can reach ANY trunk block in fewer steps than their BFS distance.
