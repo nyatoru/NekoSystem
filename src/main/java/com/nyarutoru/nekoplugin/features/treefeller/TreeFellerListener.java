@@ -42,7 +42,7 @@ import java.util.Set;
 /**
  * Event listener for the TreeFeller feature.
  * <p>
- * Handles tree felling using shift-activation (10 shifts within 3 seconds).
+ * Handles tree felling using shift-activation (10 shifts within 5 seconds).
  * Uses ActiveToolAPI for activation tracking.
  *
  * @author Redstone Agents

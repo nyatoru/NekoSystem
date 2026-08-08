@@ -17,7 +17,7 @@ import java.util.function.Predicate;
  * Handles shift-activation, persistent action bars, and proper cancellation.
  * <p>
  * Features:
- * - Rapid shift activation (10 shifts within 3 seconds)
+ * - Rapid shift activation (10 shifts within 5 seconds)
  * - Prevents re-activation while already active
  * - Persistent action bar while active
  * - Cancels on: item swap, tool break, death, teleport, logout
@@ -26,7 +26,8 @@ import java.util.function.Predicate;
 public class ActiveToolAPI {
 
     private static final int SHIFTS_REQUIRED = 10;
-    private static final long SHIFT_TIMEOUT_MS = 3000;
+    private static final int SHIFT_TIMEOUT_SECONDS = 5;
+    private static final long SHIFT_TIMEOUT_MS = SHIFT_TIMEOUT_SECONDS * 1000L;
     private static final long ACTION_BAR_REFRESH_TICKS = 20L;
     private static ActiveToolAPI instance;
     // Player activation state (keyed by UUID:toolName for tool-specific tracking)
@@ -104,7 +105,7 @@ public class ActiveToolAPI {
                     player.sendActionBar(ComponentUtils.timeoutMessage());
                 }
             }
-        }, SchedulerUtils.secondsToTicks(3));
+        }, SchedulerUtils.secondsToTicks(SHIFT_TIMEOUT_SECONDS));
     }
 
     private void resetShiftCount(String key) {
