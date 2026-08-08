@@ -221,7 +221,8 @@ public final class TreeDetector {
         Set<BlockPos> ownLogSet = new HashSet<>(ownLogs);
         Set<BlockPos> candidateTrunks = new LinkedHashSet<>();
         Queue<BlockPos> queue = new ArrayDeque<>(ownLeaves.distances().keySet());
-        Map<BlockPos, Integer> extendedDistances = new HashMap<>(ownLeaves.distances());
+        Map<BlockPos, Integer> extendedDistances = new HashMap<>();
+        ownLeaves.distances().keySet().forEach(leaf -> extendedDistances.put(leaf, 0));
 
         while (!queue.isEmpty()) {
             BlockPos current = queue.poll();

@@ -3,7 +3,6 @@ package com.nyarutoru.nekoplugin.features.treefeller;
 import com.nyarutoru.nekoplugin.features.treefeller.tool.ToolConfig;
 import com.nyarutoru.nekoplugin.features.treefeller.tree.TreeType;
 import org.bukkit.Material;
-import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
@@ -190,7 +189,7 @@ public final class TreeFellerConfig {
     /**
      * Sound played when a tree is felled.
      */
-    public static final org.bukkit.Sound FELL_SOUND = org.bukkit.Sound.BLOCK_WOOD_BREAK;
+    public static final String FELL_SOUND = "minecraft:block.wood.break";
 
     /**
      * Volume of the felling sound (0.0 to 1.0).
