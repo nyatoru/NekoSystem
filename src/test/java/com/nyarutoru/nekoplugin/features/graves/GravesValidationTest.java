@@ -22,6 +22,19 @@ class GravesValidationTest {
     }
 
     @Test
+    void commandsUsePaperBasicCommandApi() throws Exception {
+        assertTrue(io.papermc.paper.command.brigadier.BasicCommand.class
+            .isAssignableFrom(GraveCommands.class.getDeclaredMethod("playerCommand").getReturnType()));
+        assertTrue(io.papermc.paper.command.brigadier.BasicCommand.class
+            .isAssignableFrom(GraveCommands.class.getDeclaredMethod("adminCommand").getReturnType()));
+        assertArrayEquals(new Class<?>[]{String.class, String.class, java.util.Collection.class,
+                io.papermc.paper.command.brigadier.BasicCommand.class},
+            java.util.Arrays.stream(com.nyarutoru.nekoplugin.NekoPlugin.class.getMethod("registerCommand",
+                    String.class, String.class, java.util.Collection.class,
+                    io.papermc.paper.command.brigadier.BasicCommand.class).getParameterTypes()).toArray());
+    }
+
+    @Test
     void locationReservationsAreAtomicAndReleasable() {
         GraveLocationReservations reservations = new GraveLocationReservations();
         GravePosition position = position(1);

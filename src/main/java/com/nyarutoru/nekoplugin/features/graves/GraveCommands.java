@@ -1,75 +1,82 @@
 package com.nyarutoru.nekoplugin.features.graves;
 
-import com.nyarutoru.nekoplugin.NekoPlugin;
+import io.papermc.paper.command.brigadier.BasicCommand;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.PluginCommand;
 import org.bukkit.entity.Player;
 
 import java.util.List;
 import java.util.UUID;
 
-public final class GraveCommands implements CommandExecutor {
-    private final NekoPlugin plugin;
+public final class GraveCommands {
     private final GraveManager manager;
 
-    GraveCommands(NekoPlugin plugin, GraveManager manager) {
-        this.plugin = plugin;
+    GraveCommands(GraveManager manager) {
         this.manager = manager;
     }
 
-    void register() {
-        command("grave").setExecutor(this);
-        command("graveadmin").setExecutor(this);
-    }
-
-    void unregister() {
-        command("grave").setExecutor(null);
-        command("graveadmin").setExecutor(null);
-    }
-
-    private PluginCommand command(String name) {
-        PluginCommand command = plugin.getCommand(name);
-        if (command == null) throw new IllegalStateException("Missing command declaration: " + name);
-        return command;
-    }
-
-    @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (command.getName().equals("grave")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage(Component.text("Only players can use this command.", NamedTextColor.RED));
-                return true;
+    BasicCommand playerCommand() {
+        return new BasicCommand() {
+            @Override
+            public void execute(CommandSourceStack source, String[] args) {
+                handlePlayerCommand(source.getSender());
             }
-            list(sender, manager.getForPlayer(player.getUniqueId()));
-            return true;
+
+            @Override
+            public String permission() {
+                return "nekoplugin.grave.use";
+            }
+        };
+    }
+
+    BasicCommand adminCommand() {
+        return new BasicCommand() {
+            @Override
+            public void execute(CommandSourceStack source, String[] args) {
+                handleAdminCommand(source.getSender(), args);
+            }
+
+            @Override
+            public String permission() {
+                return "nekoplugin.grave.admin";
+            }
+        };
+    }
+
+    private void handlePlayerCommand(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can use this command.", NamedTextColor.RED));
+            return;
         }
-        if (!sender.hasPermission("nekoplugin.grave.admin")) {
-            sender.sendMessage(Component.text("You do not have permission.", NamedTextColor.RED));
-            return true;
-        }
+        list(sender, manager.getForPlayer(player.getUniqueId()));
+    }
+
+    private void handleAdminCommand(CommandSender sender, String[] args) {
         if (args.length == 0 || args[0].equalsIgnoreCase("list")) {
             list(sender, List.copyOf(manager.getAll()));
-            return true;
+            return;
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("delete")) {
             try {
-                Grave grave = manager.getAll().stream().filter(candidate -> candidate.getId().equals(UUID.fromString(args[1]))).findFirst().orElse(null);
-                if (grave == null) sender.sendMessage(Component.text("Grave not found.", NamedTextColor.RED));
-                else {
+                UUID graveId = UUID.fromString(args[1]);
+                Grave grave = manager.getAll().stream()
+                    .filter(candidate -> candidate.getId().equals(graveId))
+                    .findFirst()
+                    .orElse(null);
+                if (grave == null) {
+                    sender.sendMessage(Component.text("Grave not found.", NamedTextColor.RED));
+                } else {
                     manager.remove(grave, true);
                     sender.sendMessage(Component.text("Grave deleted and its contents dropped.", NamedTextColor.GREEN));
                 }
             } catch (IllegalArgumentException exception) {
                 sender.sendMessage(Component.text("Invalid grave ID.", NamedTextColor.RED));
             }
-            return true;
+            return;
         }
         sender.sendMessage(Component.text("Usage: /graveadmin [list|delete <grave-id>]", NamedTextColor.YELLOW));
-        return true;
     }
 
     private static void list(CommandSender sender, List<Grave> graves) {

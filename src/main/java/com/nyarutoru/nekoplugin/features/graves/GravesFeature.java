@@ -5,7 +5,6 @@ import com.nyarutoru.nekoplugin.core.AbstractFeature;
 
 public final class GravesFeature extends AbstractFeature {
     private GraveManager manager;
-    private GraveCommands commands;
 
     public GravesFeature() {
         super("graves", "Grave");
@@ -16,8 +15,9 @@ public final class GravesFeature extends AbstractFeature {
         manager = new GraveManager(plugin);
         if (!manager.start()) throw new IllegalStateException("Grave persistence could not be initialized");
         try {
-            commands = new GraveCommands(plugin, manager);
-            commands.register();
+            GraveCommands commands = new GraveCommands(manager);
+            plugin.registerCommand("grave", "Lists your active graves", java.util.List.of("graves"), commands.playerCommand());
+            plugin.registerCommand("graveadmin", "Manages active graves", commands.adminCommand());
             registerListener(new GraveListener(manager), plugin);
             super.onEnable(plugin);
         } catch (RuntimeException exception) {
@@ -28,7 +28,6 @@ public final class GravesFeature extends AbstractFeature {
 
     @Override
     protected void cleanup() {
-        if (commands != null) commands.unregister();
         if (manager != null) manager.stop();
     }
 
