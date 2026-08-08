@@ -362,6 +362,15 @@ public final class TreeFellerConfig {
                 50,
                 10
         ));
+
+        // Pale Oak Tree
+        TREE_TYPES.add(new TreeType(
+                "pale_oak",
+                Material.PALE_OAK_LOG,
+                Material.PALE_OAK_LEAVES,
+                50,
+                15
+        ));
     }
 
     /**

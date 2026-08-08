@@ -65,6 +65,7 @@ public class TreeFellerListener implements Listener {
             Material.DARK_OAK_LOG, Material.DARK_OAK_WOOD,
             Material.MANGROVE_LOG, Material.MANGROVE_WOOD, Material.MANGROVE_ROOTS,
             Material.CHERRY_LOG, Material.CHERRY_WOOD,
+            Material.PALE_OAK_LOG, Material.PALE_OAK_WOOD,
             // Stripped variants
             Material.STRIPPED_OAK_LOG, Material.STRIPPED_OAK_WOOD,
             Material.STRIPPED_SPRUCE_LOG, Material.STRIPPED_SPRUCE_WOOD,
@@ -73,7 +74,8 @@ public class TreeFellerListener implements Listener {
             Material.STRIPPED_ACACIA_LOG, Material.STRIPPED_ACACIA_WOOD,
             Material.STRIPPED_DARK_OAK_LOG, Material.STRIPPED_DARK_OAK_WOOD,
             Material.STRIPPED_MANGROVE_LOG, Material.STRIPPED_MANGROVE_WOOD,
-            Material.STRIPPED_CHERRY_LOG, Material.STRIPPED_CHERRY_WOOD
+            Material.STRIPPED_CHERRY_LOG, Material.STRIPPED_CHERRY_WOOD,
+            Material.STRIPPED_PALE_OAK_LOG, Material.STRIPPED_PALE_OAK_WOOD
     );
 
     private final TreeDetector treeDetector;
@@ -575,6 +577,7 @@ public class TreeFellerListener implements Listener {
             case DARK_OAK_LOG, DARK_OAK_WOOD, STRIPPED_DARK_OAK_LOG, STRIPPED_DARK_OAK_WOOD -> Material.DARK_OAK_SAPLING;
             case MANGROVE_LOG, MANGROVE_WOOD, STRIPPED_MANGROVE_LOG, STRIPPED_MANGROVE_WOOD -> Material.MANGROVE_PROPAGULE;
             case CHERRY_LOG, CHERRY_WOOD, STRIPPED_CHERRY_LOG, STRIPPED_CHERRY_WOOD -> Material.CHERRY_SAPLING;
+            case PALE_OAK_LOG, PALE_OAK_WOOD, STRIPPED_PALE_OAK_LOG, STRIPPED_PALE_OAK_WOOD -> Material.PALE_OAK_SAPLING;
             default -> null;
         };
     }

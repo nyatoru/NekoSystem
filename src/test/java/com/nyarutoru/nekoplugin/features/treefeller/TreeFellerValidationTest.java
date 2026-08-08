@@ -66,7 +66,7 @@ class TreeFellerValidationTest {
     @Test
     void testTreeTypesConfigured() {
         // Note: Cannot test TreeFellerConfig.TREE_TYPES directly due to Bukkit enum dependencies
-        // Tree types are verified manually in TreeFellerConfig.java (8 tree types)
+        // Tree types are verified manually in TreeFellerConfig.java (9 tree types)
         assertTrue(true, "Tree types verified in source code");
     }
 
@@ -113,7 +113,7 @@ class TreeFellerValidationTest {
     void testAllWoodTypesPresent() {
         // Note: Cannot test TreeFellerConfig.TREE_TYPES directly due to Bukkit enum dependencies
         // Wood types verified manually in TreeFellerConfig.java:
-        // Oak, Spruce, Birch, Jungle, Acacia, Dark Oak, Mangrove, Cherry (8 types)
+        // Oak, Spruce, Birch, Jungle, Acacia, Dark Oak, Mangrove, Cherry, Pale Oak (9 types)
         assertTrue(true, "Wood types verified in source code");
     }
 
