@@ -5,13 +5,14 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.RecipeChoice;
 import org.bukkit.inventory.StonecuttingRecipe;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Creates stonecutter recipes for wood processing.
@@ -68,36 +69,12 @@ public class WoodOnStoneCutter {
         
         int recipeCount = 0;
         int skippedCount = 0;
-        int duplicateCount = 0;
+        Map<String, List<Material>> inputsByWoodType = groupInputsByWoodType(Tag.LOGS.getValues());
 
-        // Track processed wood types to prevent duplicates
-        // Tag.LOGS contains both OAK_LOG and OAK_WOOD, which would create duplicate recipes
-        Set<String> processedWoodTypes = new HashSet<>();
+        for (Map.Entry<String, List<Material>> entry : inputsByWoodType.entrySet()) {
+            String woodType = entry.getKey();
+            RecipeChoice.MaterialChoice input = new RecipeChoice.MaterialChoice(entry.getValue());
 
-        for (Material log : Tag.LOGS.getValues()) {
-            // Skip stripped logs as input
-            if (log.name().contains("STRIPPED")) {
-                skippedCount++;
-                continue;
-            }
-
-            // Get wood type prefix (e.g., "OAK" from "OAK_LOG" or "OAK_WOOD")
-            String woodType = getWoodType(log);
-            if (woodType == null) {
-                plugin.getLogger().warning("Failed to detect wood type for: " + log.name());
-                skippedCount++;
-                continue;
-            }
-
-            // Skip if we already processed this wood type (prevents duplicate recipes)
-            if (processedWoodTypes.contains(woodType)) {
-                plugin.getLogger().fine("Skipping duplicate wood type: " + woodType + " (from " + log.name() + ")");
-                duplicateCount++;
-                continue;
-            }
-            processedWoodTypes.add(woodType);
-
-            // Create recipes for each wood item type
             for (String itemType : WOOD_ITEMS) {
                 int outputAmount = OUTPUT_AMOUNTS.getOrDefault(itemType, 1);
                 Material outputMaterial = getMaterial(woodType, itemType);
@@ -105,18 +82,21 @@ public class WoodOnStoneCutter {
                 if (outputMaterial != null && outputMaterial.isItem()) {
                     NamespacedKey key = new NamespacedKey(plugin, "wood_" + woodType.toLowerCase() + "_" + itemType.toLowerCase());
                     ItemStack result = new ItemStack(outputMaterial, outputAmount);
-                    StonecuttingRecipe recipe = new StonecuttingRecipe(key, result, log);
+                    StonecuttingRecipe recipe = new StonecuttingRecipe(key, result, input);
                     recipe.setGroup("woodcutting_" + woodType.toLowerCase());
 
-                    plugin.getServer().addRecipe(recipe);
-                    recipeKeys.add(key);
-                    recipeCount++;
+                    if (plugin.getServer().addRecipe(recipe)) {
+                        recipeKeys.add(key);
+                        recipeCount++;
+                    } else {
+                        skippedCount++;
+                        plugin.getLogger().warning("Failed to register woodcutting recipe: " + key);
+                    }
                 }
             }
         }
 
-        plugin.getLogger().info("Registered " + recipeCount + " wood stonecutter recipes" + 
-            (duplicateCount > 0 ? " (skipped " + duplicateCount + " duplicates)" : "") +
+        plugin.getLogger().info("Registered " + recipeCount + " wood stonecutter recipes" +
             (skippedCount > 0 ? " (skipped " + skippedCount + " invalid)" : ""));
     }
 
@@ -137,11 +117,28 @@ public class WoodOnStoneCutter {
         }
     }
 
+    static Map<String, List<Material>> groupInputsByWoodType(Iterable<Material> logs) {
+        Map<String, List<Material>> inputsByWoodType = new TreeMap<>();
+        for (Material log : logs) {
+            if (log.name().startsWith("STRIPPED_")) {
+                continue;
+            }
+
+            String woodType = getWoodType(log);
+            if (woodType != null) {
+                inputsByWoodType.computeIfAbsent(woodType, ignored -> new ArrayList<>()).add(log);
+            }
+        }
+
+        inputsByWoodType.values().forEach(inputs -> inputs.sort(Comparator.comparing(Material::name)));
+        return inputsByWoodType;
+    }
+
     /**
      * Extract wood type from log material name.
      * Handles: LOG, WOOD, STEM, HYPHAE, and STRIPPED_* variants.
      */
-    private String getWoodType(Material log) {
+    static String getWoodType(Material log) {
         String name = log.name();
 
         // Handle special nether wood cases

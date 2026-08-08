@@ -1,6 +1,10 @@
 package com.nyarutoru.nekoplugin.features.woodcutting;
 
+import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -57,17 +61,30 @@ class WoodcuttingValidationTest {
 
     @Test
     void testWoodTypeExtraction() {
-        // Test wood type extraction logic
-        assertEquals("OAK", extractWoodType("OAK_LOG"));
-        assertEquals("OAK", extractWoodType("OAK_WOOD"));
-        assertEquals("DARK_OAK", extractWoodType("DARK_OAK_LOG"));
-        assertEquals("DARK_OAK", extractWoodType("DARK_OAK_WOOD"));
-        assertEquals("CRIMSON", extractWoodType("CRIMSON_STEM"));
-        assertEquals("CRIMSON", extractWoodType("CRIMSON_HYPHAE"));
-        assertEquals("WARPED", extractWoodType("WARPED_STEM"));
-        assertEquals("WARPED", extractWoodType("WARPED_HYPHAE"));
-        assertEquals("OAK", extractWoodType("STRIPPED_OAK_LOG"));
-        assertEquals("OAK", extractWoodType("STRIPPED_OAK_WOOD"));
+        assertEquals("OAK", WoodOnStoneCutter.getWoodType(Material.OAK_LOG));
+        assertEquals("OAK", WoodOnStoneCutter.getWoodType(Material.OAK_WOOD));
+        assertEquals("DARK_OAK", WoodOnStoneCutter.getWoodType(Material.DARK_OAK_LOG));
+        assertEquals("DARK_OAK", WoodOnStoneCutter.getWoodType(Material.DARK_OAK_WOOD));
+        assertEquals("CRIMSON", WoodOnStoneCutter.getWoodType(Material.CRIMSON_STEM));
+        assertEquals("CRIMSON", WoodOnStoneCutter.getWoodType(Material.CRIMSON_HYPHAE));
+        assertEquals("WARPED", WoodOnStoneCutter.getWoodType(Material.WARPED_STEM));
+        assertEquals("WARPED", WoodOnStoneCutter.getWoodType(Material.WARPED_HYPHAE));
+    }
+
+    @Test
+    void testRecipeInputsIncludeLogsAndWoodRegardlessOfOrder() {
+        List<Material> logs = List.of(
+                Material.OAK_WOOD,
+                Material.STRIPPED_OAK_LOG,
+                Material.CRIMSON_HYPHAE,
+                Material.OAK_LOG,
+                Material.CRIMSON_STEM,
+                Material.STRIPPED_CRIMSON_HYPHAE);
+
+        Map<String, List<Material>> grouped = WoodOnStoneCutter.groupInputsByWoodType(logs);
+
+        assertEquals(List.of(Material.OAK_LOG, Material.OAK_WOOD), grouped.get("OAK"));
+        assertEquals(List.of(Material.CRIMSON_HYPHAE, Material.CRIMSON_STEM), grouped.get("CRIMSON"));
     }
 
     @Test
@@ -83,10 +100,8 @@ class WoodcuttingValidationTest {
 
     @Test
     void testDuplicatePreventionLogic() {
-        // Test that duplicate wood types would be prevented
-        // OAK_LOG and OAK_WOOD should both resolve to "OAK"
-        String oakFromLog = extractWoodType("OAK_LOG");
-        String oakFromWood = extractWoodType("OAK_WOOD");
+        String oakFromLog = WoodOnStoneCutter.getWoodType(Material.OAK_LOG);
+        String oakFromWood = WoodOnStoneCutter.getWoodType(Material.OAK_WOOD);
         assertEquals(oakFromLog, oakFromWood, "OAK_LOG and OAK_WOOD should resolve to same wood type");
     }
 
@@ -106,59 +121,27 @@ class WoodcuttingValidationTest {
     }
 
     @Test
-    void testStrippedLogHandling() {
-        // Verify stripped logs are handled correctly
-        String strippedOak = extractWoodType("STRIPPED_OAK_LOG");
-        String regularOak = extractWoodType("OAK_LOG");
-        assertEquals(regularOak, strippedOak, "Stripped and regular oak should resolve to same type");
+    void testStrippedLogsAreExcludedFromRecipeInputs() {
+        Map<String, List<Material>> grouped = WoodOnStoneCutter.groupInputsByWoodType(List.of(
+                Material.STRIPPED_OAK_LOG,
+                Material.STRIPPED_OAK_WOOD,
+                Material.OAK_LOG));
+
+        assertEquals(List.of(Material.OAK_LOG), grouped.get("OAK"));
     }
 
     @Test
     void testNetherWoodHandling() {
-        // Verify nether wood types are handled
-        assertEquals("CRIMSON", extractWoodType("CRIMSON_STEM"));
-        assertEquals("CRIMSON", extractWoodType("CRIMSON_HYPHAE"));
-        assertEquals("WARPED", extractWoodType("WARPED_STEM"));
-        assertEquals("WARPED", extractWoodType("WARPED_HYPHAE"));
+        assertEquals("CRIMSON", WoodOnStoneCutter.getWoodType(Material.CRIMSON_STEM));
+        assertEquals("CRIMSON", WoodOnStoneCutter.getWoodType(Material.CRIMSON_HYPHAE));
+        assertEquals("WARPED", WoodOnStoneCutter.getWoodType(Material.WARPED_STEM));
+        assertEquals("WARPED", WoodOnStoneCutter.getWoodType(Material.WARPED_HYPHAE));
     }
 
     @Test
-    void testMangroveAndCherryWood() {
-        // Verify mangrove and cherry wood types
-        assertEquals("MANGROVE", extractWoodType("MANGROVE_LOG"));
-        assertEquals("MANGROVE", extractWoodType("MANGROVE_WOOD"));
-        assertEquals("CHERRY", extractWoodType("CHERRY_LOG"));
-        assertEquals("CHERRY", extractWoodType("CHERRY_WOOD"));
-    }
-
-    private String extractWoodType(String materialName) {
-        // Simplified version of getWoodType for testing
-        String name = materialName;
-        
-        if (name.equals("CRIMSON_STEM") || name.equals("CRIMSON_HYPHAE")) {
-            return "CRIMSON";
-        }
-        if (name.equals("WARPED_STEM") || name.equals("WARPED_HYPHAE")) {
-            return "WARPED";
-        }
-        
-        if (name.startsWith("STRIPPED_")) {
-            name = name.substring(9);
-        }
-        
-        if (name.endsWith("_LOG")) {
-            return name.substring(0, name.length() - 4);
-        }
-        if (name.endsWith("_WOOD")) {
-            return name.substring(0, name.length() - 5);
-        }
-        if (name.endsWith("_STEM")) {
-            return name.substring(0, name.length() - 5);
-        }
-        if (name.endsWith("_HYPHAE")) {
-            return name.substring(0, name.length() - 7);
-        }
-        
-        return null;
+    void testModernWoodTypes() {
+        assertEquals("MANGROVE", WoodOnStoneCutter.getWoodType(Material.MANGROVE_LOG));
+        assertEquals("CHERRY", WoodOnStoneCutter.getWoodType(Material.CHERRY_LOG));
+        assertEquals("PALE_OAK", WoodOnStoneCutter.getWoodType(Material.PALE_OAK_LOG));
     }
 }

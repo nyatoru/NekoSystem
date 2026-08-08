@@ -12,15 +12,25 @@ import com.nyarutoru.nekoplugin.core.AbstractFeature;
  */
 public class WoodcuttingFeature extends AbstractFeature {
 
+    private WoodOnStoneCutter woodOnStoneCutter;
+
     public WoodcuttingFeature() {
         super("woodcutting", "Woodcutting");
     }
 
     @Override
     public void onEnable(NekoPlugin plugin) {
-        WoodOnStoneCutter woodOnStoneCutter = new WoodOnStoneCutter(plugin);
+        woodOnStoneCutter = new WoodOnStoneCutter(plugin);
         woodOnStoneCutter.registerRecipes();
         super.onEnable(plugin);
         plugin.getLogger().info("Woodcutting feature enabled");
+    }
+
+    @Override
+    protected void cleanup() {
+        if (woodOnStoneCutter != null) {
+            woodOnStoneCutter.removeRecipes();
+            woodOnStoneCutter = null;
+        }
     }
 }
