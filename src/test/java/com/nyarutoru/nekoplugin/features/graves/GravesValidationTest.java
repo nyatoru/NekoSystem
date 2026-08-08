@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GravesValidationTest {
@@ -143,6 +144,21 @@ class GravesValidationTest {
         assertTrue(GraveManager.applyMarkerProfile(skull, profile));
         assertSame(profile, appliedProfile.get());
         assertTrue(updated.get());
+    }
+
+    @Test
+    void graveDisplayShowsOwnerItemsAndRemainingTime() {
+        Grave grave = grave(List.of(), 7);
+
+        assertEquals("Grave of Neko\n0 item stacks\nExpires in 0m 1s",
+            plainText().serialize(GraveDisplayManager.text(grave, 1500L)));
+    }
+
+    @Test
+    void graveDisplayRoundsRemainingTimeUp() {
+        assertEquals("0m 1s", GraveDisplayManager.formatRemaining(1L));
+        assertEquals("1m 1s", GraveDisplayManager.formatRemaining(60_001L));
+        assertEquals("0m 0s", GraveDisplayManager.formatRemaining(-1L));
     }
 
     @SuppressWarnings("unchecked")

@@ -28,6 +28,7 @@ import java.util.function.Consumer;
 public final class GraveManager {
     private final NekoPlugin plugin;
     private final GraveRepository repository;
+    private final GraveDisplayManager displayManager;
     private final GravePersistenceQueue persistence = new GravePersistenceQueue();
     private final GraveLocationReservations reservations = new GraveLocationReservations();
     private final Map<UUID, Grave> graves = new ConcurrentHashMap<>();
@@ -36,7 +37,11 @@ public final class GraveManager {
     private BukkitTask paperTask;
     private ScheduledTask foliaTask;
 
-    public GraveManager(NekoPlugin plugin) { this.plugin = plugin; this.repository = new GraveRepository(plugin); }
+    public GraveManager(NekoPlugin plugin) {
+        this.plugin = plugin;
+        this.repository = new GraveRepository(plugin);
+        this.displayManager = new GraveDisplayManager(plugin, this);
+    }
 
     public boolean start() {
         if (!repository.initialize()) return false;
@@ -44,6 +49,7 @@ public final class GraveManager {
             addToIndexes(grave);
             resume(grave);
         }
+        displayManager.start();
         if (SchedulerUtils.isFolia()) foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
             task -> checkExpired(), GraveConfig.GRAVE_CHECK_INTERVAL_TICKS, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS);
         else paperTask = plugin.getServer().getScheduler().runTaskTimer(plugin,
@@ -54,6 +60,7 @@ public final class GraveManager {
     public void stop() {
         if (paperTask != null) paperTask.cancel();
         if (foliaTask != null) foliaTask.cancel();
+        displayManager.stop();
         persistence.close();
         viewers.clear(); graves.clear(); locations.clear(); repository.close();
     }
@@ -73,6 +80,7 @@ public final class GraveManager {
         Grave grave = Grave.create(player.getUniqueId(), player.getName(), GravePosition.from(deathLocation),
             markerPosition, items, experience, System.currentTimeMillis());
         addToIndexes(grave);
+        displayManager.reconcile(grave, markerLocation);
         save(grave, success -> {
             if (!success) failInitialPersistence(grave); else enforceLimit(grave.getOwnerId());
         });
@@ -83,6 +91,11 @@ public final class GraveManager {
         UUID id = locations.get(GravePosition.from(location).key());
         return id == null ? null : graves.get(id);
     }
+
+    Grave get(UUID id) { return graves.get(id); }
+
+    void reconcileDisplays(Collection<org.bukkit.entity.Entity> entities) { displayManager.reconcileLoaded(entities); }
+    void unloadDisplays(Collection<org.bukkit.entity.Entity> entities) { displayManager.unloaded(entities); }
 
     public boolean isGrave(Location location) { return get(location) != null; }
 
@@ -166,6 +179,7 @@ public final class GraveManager {
         if (location == null) return;
         SchedulerUtils.runAtLocation(location, () -> {
             if (grave.getDisposition() == Grave.Disposition.DROP) dropContentsAndExperience(grave, location);
+            displayManager.remove(grave, location);
             removeMarker(location);
             grave.markDisposed();
             save(grave, disposed -> {
@@ -183,6 +197,7 @@ public final class GraveManager {
         if (location == null) return;
         SchedulerUtils.runAtLocation(location, () -> {
             dropContentsAndExperience(grave, location);
+            displayManager.remove(grave, location);
             removeMarker(location);
             finalizeRemoval(grave);
         });
@@ -218,6 +233,7 @@ public final class GraveManager {
     private void restoreMarker(Grave grave) {
         Location location = grave.getGravePosition().resolve(plugin.getServer());
         if (location != null) SchedulerUtils.runAtLocation(location, () -> {
+            if (grave.getState() != Grave.State.ACTIVE || graves.get(grave.getId()) != grave) return;
             Block block = location.getBlock();
             if (block.getType().isAir()) block.setType(Material.PLAYER_HEAD);
             if (block.getType() == Material.PLAYER_HEAD) {
@@ -226,6 +242,7 @@ public final class GraveManager {
                     .name(grave.getOwnerName())
                     .build();
                 applyMarkerProfile(block, profile);
+                displayManager.reconcile(grave, location);
             }
         });
     }
