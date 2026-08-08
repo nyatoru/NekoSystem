@@ -161,6 +161,17 @@ class GravesValidationTest {
         assertEquals("0m 0s", GraveDisplayManager.formatRemaining(-1L));
     }
 
+    @Test
+    void graveListenerProtectsEnvironmentalMutationEvents() throws Exception {
+        assertEquals(void.class, GraveListener.class.getMethod("onFlow", org.bukkit.event.block.BlockFromToEvent.class).getReturnType());
+        assertEquals(void.class, GraveListener.class.getMethod("onBucketEmpty", org.bukkit.event.player.PlayerBucketEmptyEvent.class).getReturnType());
+        assertEquals(void.class, GraveListener.class.getMethod("onPistonExtend", org.bukkit.event.block.BlockPistonExtendEvent.class).getReturnType());
+        assertEquals(void.class, GraveListener.class.getMethod("onPistonRetract", org.bukkit.event.block.BlockPistonRetractEvent.class).getReturnType());
+        assertEquals(void.class, GraveListener.class.getMethod("onEntityChangeBlock", org.bukkit.event.entity.EntityChangeBlockEvent.class).getReturnType());
+        assertEquals(void.class, GraveListener.class.getMethod("onBlockDestroy", com.destroystokyo.paper.event.block.BlockDestroyEvent.class).getReturnType());
+        assertEquals(void.class, GraveListener.class.getMethod("onPhysics", org.bukkit.event.block.BlockPhysicsEvent.class).getReturnType());
+    }
+
     @SuppressWarnings("unchecked")
     private static <T> T proxy(Class<T> type, java.lang.reflect.InvocationHandler handler) {
         return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
