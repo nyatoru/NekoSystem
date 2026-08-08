@@ -4,3 +4,20 @@ main: com.nyarutoru.nekoplugin.NekoPlugin
 description: A plugin for PaperMC server
 api-version: '26.2'
 folia-supported: true
+commands:
+  grave:
+    description: Lists your active graves
+    usage: /grave
+    aliases: [graves]
+    permission: nekoplugin.grave.use
+  graveadmin:
+    description: Manages active graves
+    usage: /graveadmin [list|delete <grave-id>]
+    permission: nekoplugin.grave.admin
+permissions:
+  nekoplugin.grave.use:
+    description: Allows players to list and open their graves
+    default: true
+  nekoplugin.grave.admin:
+    description: Allows access to and management of all graves
+    default: op

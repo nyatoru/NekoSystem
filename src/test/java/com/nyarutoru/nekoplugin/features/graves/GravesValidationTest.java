@@ -1,187 +1,113 @@
 package com.nyarutoru.nekoplugin.features.graves;
 
+import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.TimeUnit;
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Unit tests for Graves feature validation.
- * Tests avoid direct Material/Location usage to prevent Bukkit initialization requirements.
- */
 class GravesValidationTest {
+    private static final UUID WORLD = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID OWNER = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     @Test
-    void testFeatureConstants() {
+    void featureUsesStableIdAndSingularName() {
         GravesFeature feature = new GravesFeature();
         assertEquals("graves", feature.getId());
-        assertEquals("Graves", feature.getName());
-    }
-
-    @Test
-    void testFeatureClassExists() {
-        assertNotNull(GravesFeature.class);
-    }
-
-    @Test
-    void testGraveClassExists() {
-        assertNotNull(Grave.class);
-    }
-
-    @Test
-    void testGraveManagerClassExists() {
-        assertNotNull(GraveManager.class);
-    }
-
-    @Test
-    void testGraveListenerClassExists() {
-        assertNotNull(GraveListener.class);
-    }
-
-    @Test
-    void testGraveCommandsClassExists() {
-        assertNotNull(GraveCommands.class);
-    }
-
-    @Test
-    void testGraveConfigExists() {
-        assertNotNull(GraveConfig.class);
-    }
-
-    @Test
-    void testFeatureImplementation() {
-        GravesFeature feature = new GravesFeature();
-        
-        assertEquals("graves", feature.getId());
-        assertEquals("Graves", feature.getName());
-        assertFalse(feature.isEnabled()); // Should be false before enable
-    }
-
-    @Test
-    void testGraveLifetime() {
-        // Verify grave lifetime is 20 minutes
-        assertEquals(20 * 60 * 1000, GraveConfig.GRAVE_LIFETIME_MS);
-        assertEquals(TimeUnit.MINUTES.toMillis(20), GraveConfig.GRAVE_LIFETIME_MS);
-    }
-
-    @Test
-    void testGraveCheckInterval() {
-        // Verify check interval is 1 minute (1200 ticks)
-        assertEquals(1200, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS);
-    }
-
-    @Test
-    void testMaxGravesPerPlayer() {
-        // Verify max graves per player is 3
-        assertEquals(3, GraveConfig.MAX_GRAVES_PER_PLAYER);
-    }
-
-    @Test
-    void testIndestructibleGraves() {
-        // Verify graves are indestructible by default
-        assertTrue(GraveConfig.INDESTRUCTIBLE_GRAVES);
-    }
-
-    @Test
-    void testOPBypassProtection() {
-        // Verify OPs can bypass grave protection
-        assertTrue(GraveConfig.OPS_BYPASS_PROTECTION);
-    }
-
-    @Test
-    void testGraveCosmetics() {
-        // Verify cosmetics are enabled
-        assertTrue(GraveConfig.SPAWN_PARTICLES_ON_CREATE);
-        assertTrue(GraveConfig.PLAY_SOUND_ON_CREATE);
-        assertTrue(GraveConfig.SPAWN_PARTICLES_ON_RETRIEVE);
-        assertTrue(GraveConfig.PLAY_SOUND_ON_RETRIEVE);
-    }
-
-    @Test
-    void testDeathMessageConfig() {
-        // Verify death message settings
-        assertTrue(GraveConfig.SHOW_DEATH_COORDINATES);
-        assertFalse(GraveConfig.BROADCAST_DEATH_MESSAGES);
-    }
-
-    @Test
-    void testSafeLocationSearchRadius() {
-        // Verify safe location search radius
-        assertEquals(10, GraveConfig.MAX_SAFE_LOCATION_SEARCH_RADIUS);
-    }
-
-    @Test
-    void testWorldConfig() {
-        // Verify world settings
-        assertTrue(GraveConfig.GRAVES_IN_ALL_WORLDS);
-        assertNotNull(GraveConfig.GRAVE_DISABLED_WORLDS);
-    }
-
-    @Test
-    void testDatabasePersistence() {
-        // Verify database persistence is enabled
-        assertTrue(GraveConfig.PERSIST_GRAVES);
-    }
-
-    @Test
-    void testFeatureInterfaceImplementation() {
-        // Verify GravesFeature implements Feature interface
-        assertTrue(com.nyarutoru.nekoplugin.core.Feature.class.isAssignableFrom(GravesFeature.class));
-    }
-
-    @Test
-    void testGraveCommandsImplementsInterfaces() {
-        // Verify GraveCommands implements required interfaces
-        assertTrue(org.bukkit.command.CommandExecutor.class.isAssignableFrom(GraveCommands.class));
-        assertTrue(org.bukkit.command.TabCompleter.class.isAssignableFrom(GraveCommands.class));
-    }
-
-    @Test
-    void testGraveListenerImplementsListener() {
-        // Verify GraveListener implements Listener interface
-        assertTrue(org.bukkit.event.Listener.class.isAssignableFrom(GraveListener.class));
-    }
-
-    @Test
-    void testTimeUnitConversion() {
-        // Verify time unit conversions are correct
-        assertEquals(1200000, TimeUnit.MINUTES.toMillis(20));
-        assertEquals(60000, TimeUnit.MINUTES.toMillis(1));
-        assertEquals(1000, TimeUnit.SECONDS.toMillis(1));
-    }
-
-    @Test
-    void testGraveConfigurationValues() {
-        // Verify all configuration values are reasonable
-        assertTrue(GraveConfig.GRAVE_LIFETIME_MS > 0, "Grave lifetime should be positive");
-        assertTrue(GraveConfig.GRAVE_CHECK_INTERVAL_TICKS > 0, "Check interval should be positive");
-        assertTrue(GraveConfig.MAX_GRAVES_PER_PLAYER > 0, "Max graves should be positive");
-        assertTrue(GraveConfig.MAX_SAFE_LOCATION_SEARCH_RADIUS > 0, "Search radius should be positive");
-    }
-
-    @Test
-    void testFeatureLifecycle() {
-        GravesFeature feature = new GravesFeature();
-        
-        // Initial state
+        assertEquals("Grave", feature.getName());
         assertFalse(feature.isEnabled());
-        
-        // Note: We can't test onEnable/onDisable without a plugin instance
-        // But we verify the feature object can be created
-        assertNotNull(feature);
     }
 
     @Test
-    void testGraveFeaturesSummary() {
-        // Summary test to verify all grave features are present
-        GravesFeature feature = new GravesFeature();
-        
-        assertEquals("graves", feature.getId());
-        assertEquals("Graves", feature.getName());
-        
-        // Verify config is accessible
-        assertNotNull(GraveConfig.GRAVE_LIFETIME_MS);
-        assertNotNull(GraveConfig.MAX_GRAVES_PER_PLAYER);
+    void locationReservationsAreAtomicAndReleasable() {
+        GraveLocationReservations reservations = new GraveLocationReservations();
+        GravePosition position = position(1);
+        assertTrue(reservations.reserve(position));
+        assertFalse(reservations.reserve(position));
+        reservations.release(position);
+        assertTrue(reservations.reserve(position));
     }
+
+    @Test
+    void actualGraveRejectsClaimsWhileRemovalIsPending() {
+        Grave grave = grave(List.of(), 7);
+        assertTrue(grave.beginRemoval(Grave.Disposition.DROP));
+        assertNull(grave.claimItem(0));
+        grave.cancelRemoval();
+        assertEquals(Grave.State.ACTIVE, grave.getState());
+    }
+
+    @Test
+    void graveClaimApiExposesExplicitCommitAndRollback() throws Exception {
+        assertEquals(boolean.class, Grave.class.getMethod("commitClaim", Grave.ItemClaim.class).getReturnType());
+        assertEquals(boolean.class, Grave.class.getMethod("rollbackClaim", Grave.ItemClaim.class).getReturnType());
+        assertEquals(boolean.class, Grave.class.getMethod("hasPendingClaim").getReturnType());
+    }
+
+    @Test
+    void removalStateRecordsDispositionAndPhase() {
+        Grave grave = grave(List.of(), 7);
+        assertTrue(grave.beginRemoval(Grave.Disposition.DROP));
+        assertEquals(Grave.State.REMOVING, grave.getState());
+        assertEquals(Grave.Disposition.DROP, grave.getDisposition());
+        grave.markDisposed();
+        assertEquals(Grave.State.DISPOSED, grave.getState());
+    }
+
+    @Test
+    void experienceConsumptionIsIdempotentAndRestorable() {
+        Grave grave = grave(List.of(), 13);
+        assertEquals(13, grave.consumeExperience());
+        assertEquals(0, grave.consumeExperience());
+        grave.restoreExperience(13);
+        assertEquals(13, grave.getExperience());
+    }
+
+    @Test
+    void positionKeyUsesWorldIdentityAndBlockCoordinates() {
+        GravePosition first = new GravePosition(WORLD, "world", 1, 64, -2);
+        GravePosition renamed = new GravePosition(WORLD, "renamed", 1, 64, -2);
+        assertEquals(first.key(), renamed.key());
+        assertNotEquals(first.key(), position(2).key());
+    }
+
+    @Test
+    void accessPolicyRequiresUsePermissionForOwnerOrAdminPermission() {
+        UUID stranger = UUID.randomUUID();
+        assertTrue(GraveAccessPolicy.canAccess(OWNER, OWNER, true, false));
+        assertFalse(GraveAccessPolicy.canAccess(OWNER, OWNER, false, false));
+        assertFalse(GraveAccessPolicy.canAccess(OWNER, stranger, true, false));
+        assertTrue(GraveAccessPolicy.canAccess(OWNER, stranger, false, true));
+    }
+
+    @Test
+    void snapshotCopiesEncodedPayload() {
+        byte[] payload = {1, 2, 3};
+        GraveSnapshot snapshot = new GraveSnapshot(UUID.randomUUID(), OWNER, "Neko", position(1), position(1),
+            payload, 2, 3, 4, Grave.State.ACTIVE, Grave.Disposition.NONE);
+        payload[0] = 9;
+        assertArrayEquals(new byte[]{1, 2, 3}, snapshot.items());
+        byte[] returned = snapshot.items();
+        returned[1] = 9;
+        assertArrayEquals(new byte[]{1, 2, 3}, snapshot.items());
+    }
+
+    @Test
+    void itemCodecUsesPaperFullFidelityByteApis() throws Exception {
+        Method encode = GraveItemCodec.class.getDeclaredMethod("encode", List.class);
+        Method decode = GraveItemCodec.class.getDeclaredMethod("decode", byte[].class);
+        assertEquals(byte[].class, encode.getReturnType());
+        assertEquals(List.class, decode.getReturnType());
+        assertEquals(byte[].class, ItemStack.class.getMethod("serializeItemsAsBytes", java.util.Collection.class).getReturnType());
+    }
+
+    private static Grave grave(List<ItemStack> items, int experience) {
+        GravePosition position = position(1);
+        return new Grave(UUID.randomUUID(), OWNER, "Neko", position, position, items, experience, 1000L, 2000L);
+    }
+
+    private static GravePosition position(int x) { return new GravePosition(WORLD, "world", x, 64, -2); }
 }

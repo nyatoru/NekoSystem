@@ -1,439 +1,271 @@
 package com.nyarutoru.nekoplugin.features.graves;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.NamespacedKey;
-import org.bukkit.OfflinePlayer;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitTask;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
-/**
- * Manages grave storage, retrieval, and database operations.
- * Thread-safe implementation using ConcurrentHashMap.
- */
-public class GraveManager {
-
-    private static GraveManager instance;
-    
+public final class GraveManager {
     private final NekoPlugin plugin;
-    private final Map<String, Grave> gravesByLocation;
-    private final Map<UUID, List<UUID>> gravesByPlayer;
-    private NamespacedKey graveKey;
-    private boolean databaseInitialized = false;
+    private final GraveRepository repository;
+    private final GravePersistenceQueue persistence = new GravePersistenceQueue();
+    private final GraveLocationReservations reservations = new GraveLocationReservations();
+    private final Map<UUID, Grave> graves = new ConcurrentHashMap<>();
+    private final Map<String, UUID> locations = new ConcurrentHashMap<>();
+    private final Set<UUID> viewers = ConcurrentHashMap.newKeySet();
+    private BukkitTask paperTask;
+    private ScheduledTask foliaTask;
 
-    private GraveManager(NekoPlugin plugin) {
-        this.plugin = plugin;
-        this.gravesByLocation = new ConcurrentHashMap<>();
-        this.gravesByPlayer = new ConcurrentHashMap<>();
-    }
+    public GraveManager(NekoPlugin plugin) { this.plugin = plugin; this.repository = new GraveRepository(plugin); }
 
-    /**
-     * Initializes the GraveManager instance.
-     *
-     * @param plugin The plugin instance
-     * @return The GraveManager instance
-     */
-    public static GraveManager init(NekoPlugin plugin) {
-        instance = new GraveManager(plugin);
-        instance.graveKey = new NamespacedKey(plugin, "grave_id");
-        return instance;
-    }
-
-    /**
-     * Gets the GraveManager instance.
-     *
-     * @return The GraveManager instance
-     */
-
-    /**
-     * Creates a unique key for a location.
-     * Replaces deprecated toBlockKey() method.
-     *
-     * @param location The location
-     * @return A unique string key for the location
-     */
-    private String getLocationKey(Location location) {
-        if (location == null || location.getWorld() == null) {
-            return "null";
+    public boolean start() {
+        if (!repository.initialize()) return false;
+        for (Grave grave : repository.loadAll()) {
+            addToIndexes(grave);
+            resume(grave);
         }
-        return location.getWorld().getName() + ":" +
-               location.getBlockX() + ":" +
-               location.getBlockY() + ":" +
-               location.getBlockZ();
-    }
-
-    public static GraveManager getInstance() {
-        if (instance == null) {
-            throw new IllegalStateException("GraveManager not initialized");
-        }
-        return instance;
-    }
-
-    /**
-     * Starts the grave manager and loads existing graves from database.
-     */
-    public void start() {
-        if (GraveConfig.PERSIST_GRAVES) {
-            loadGravesFromDatabase();
-        }
-        
-        // Start periodic grave expiry check
-        plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
-            plugin,
-            (task) -> this.checkExpiredGraves(),
-            GraveConfig.GRAVE_CHECK_INTERVAL_TICKS,
-            GraveConfig.GRAVE_CHECK_INTERVAL_TICKS
-        );
-        
-        plugin.getLogger().info("GraveManager started with " + gravesByLocation.size() + " active graves");
-    }
-
-    /**
-     * Stops the grave manager and saves all graves to database.
-     */
-    public void stop() {
-        if (GraveConfig.PERSIST_GRAVES) {
-            saveAllGravesToDatabase();
-        }
-        gravesByLocation.clear();
-        gravesByPlayer.clear();
-        plugin.getLogger().info("GraveManager stopped");
-    }
-
-    /**
-     * Creates a grave for a deceased player.
-     *
-     * @param player The deceased player
-     * @param deathLocation Where the player died
-     * @param items Items to store in the grave
-     * @return The created grave, or null if creation failed
-     */
-    public Grave createGrave(OfflinePlayer player, Location deathLocation, List<ItemStack> items) {
-        if (deathLocation == null || deathLocation.getWorld() == null) {
-            return null;
-        }
-
-        // Find safe location for grave
-        Location safeLocation = findSafeLocation(deathLocation);
-        if (safeLocation == null) {
-            plugin.getLogger().warning("Could not find safe location for grave at " + deathLocation);
-            return null;
-        }
-
-        // Create the grave
-        Grave grave = new Grave(player, deathLocation, safeLocation, items);
-        
-        // Remove oldest grave if player exceeds limit
-        enforceGraveLimit(player.getUniqueId());
-        
-        // Store the grave
-        gravesByLocation.put(getLocationKey(safeLocation), grave);
-        gravesByPlayer.computeIfAbsent(player.getUniqueId(), k -> new ArrayList<>()).add(grave.getGraveId());
-        
-        // Place grave block (player head)
-        placeGraveBlock(safeLocation, player);
-        
-        // Save to database if persistence enabled
-        if (GraveConfig.PERSIST_GRAVES) {
-            saveGraveToDatabase(grave);
-        }
-        
-        return grave;
-    }
-
-    /**
-     * Gets a grave by its location.
-     *
-     * @param location The grave location
-     * @return The grave, or null if not found
-     */
-    public Grave getGrave(Location location) {
-        if (location == null) {
-            return null;
-        }
-        return gravesByLocation.get(getLocationKey(location));
-    }
-
-    /**
-     * Gets all graves for a player.
-     *
-     * @param playerUuid The player's UUID
-     * @return List of graves (may be empty)
-     */
-    public List<Grave> getPlayerGraves(UUID playerUuid) {
-        List<UUID> graveIds = gravesByPlayer.get(playerUuid);
-        if (graveIds == null) {
-            return Collections.emptyList();
-        }
-        
-        List<Grave> playerGraves = new ArrayList<>();
-        for (UUID graveId : graveIds) {
-            for (Grave grave : gravesByLocation.values()) {
-                if (grave.getGraveId().equals(graveId)) {
-                    playerGraves.add(grave);
-                    break;
-                }
-            }
-        }
-        return playerGraves;
-    }
-
-    /**
-     * Gets the total number of active graves.
-     *
-     * @return Grave count
-     */
-    public int getGraveCount() {
-        return gravesByLocation.size();
-    }
-
-    /**
-     * Gets the total number of graves for a player.
-     *
-     * @param playerUuid The player's UUID
-     * @return Grave count
-     */
-    public int getPlayerGraveCount(UUID playerUuid) {
-        List<UUID> graves = gravesByPlayer.get(playerUuid);
-        return graves != null ? graves.size() : 0;
-    }
-
-    /**
-     * Removes a grave and drops its items.
-     *
-     * @param grave The grave to remove
-     * @param dropItems Whether to drop items on ground
-     */
-    public void removeGrave(Grave grave, boolean dropItems) {
-        if (grave == null) {
-            return;
-        }
-        
-        Location graveLocation = grave.getGraveLocation();
-        World world = graveLocation.getWorld();
-        
-        if (world != null && dropItems && !grave.isEmpty()) {
-            // Drop items at grave location
-            for (ItemStack item : grave.getItems()) {
-                if (item != null && !item.getType().isAir()) {
-                    world.dropItemNaturally(graveLocation.clone().add(0.5, 0.5, 0.5), item);
-                }
-            }
-        }
-        
-        // Remove grave block
-        graveLocation.getBlock().setType(org.bukkit.Material.AIR);
-        
-        // Remove from storage
-        gravesByLocation.remove(getLocationKey(graveLocation));
-        
-        List<UUID> playerGraves = gravesByPlayer.get(grave.getPlayerUuid());
-        if (playerGraves != null) {
-            playerGraves.remove(grave.getGraveId());
-            if (playerGraves.isEmpty()) {
-                gravesByPlayer.remove(grave.getPlayerUuid());
-            }
-        }
-        
-        // Remove from database
-        if (GraveConfig.PERSIST_GRAVES) {
-            deleteGraveFromDatabase(grave.getGraveId());
-        }
-    }
-
-    /**
-     * Checks if a player can access a grave.
-     *
-     * @param player The player trying to access
-     * @param grave The grave to access
-     * @return true if access is allowed, false otherwise
-     */
-    public boolean canAccessGrave(Player player, Grave grave) {
-        if (player == null || grave == null) {
-            return false;
-        }
-        
-        // Player can access their own grave
-        if (player.getUniqueId().equals(grave.getPlayerUuid())) {
-            return true;
-        }
-        
-        // OPs can access if configured
-        if (GraveConfig.OPS_BYPASS_PROTECTION && player.isOp()) {
-            return true;
-        }
-        
-        return false;
-    }
-
-    /**
-     * Gets all active graves.
-     *
-     * @return Collection of all graves
-     */
-    public Collection<Grave> getAllGraves() {
-        return Collections.unmodifiableCollection(gravesByLocation.values());
-    }
-
-    /**
-     * Finds a safe location for placing a grave.
-     *
-     * @param deathLocation The death location
-     * @return Safe location, or null if none found
-     */
-    private Location findSafeLocation(Location deathLocation) {
-        World world = deathLocation.getWorld();
-        if (world == null) {
-            return null;
-        }
-
-        int x = deathLocation.getBlockX();
-        int y = deathLocation.getBlockY();
-        int z = deathLocation.getBlockZ();
-
-        // Check if death location is safe
-        if (isSafeLocation(world, x, y, z)) {
-            return new Location(world, x + 0.5, y, z + 0.5, deathLocation.getYaw(), deathLocation.getPitch());
-        }
-
-        // Search for safe location in expanding radius
-        int radius = GraveConfig.MAX_SAFE_LOCATION_SEARCH_RADIUS;
-        for (int r = 1; r <= radius; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    for (int dy = -r; dy <= r; dy++) {
-                        if (isSafeLocation(world, x + dx, y + dy, z + dz)) {
-                            return new Location(world, x + dx + 0.5, y + dy, z + dz, deathLocation.getYaw(), deathLocation.getPitch());
-                        }
-                    }
-                }
-            }
-        }
-
-        // No safe location found, return original anyway
-        return new Location(world, x + 0.5, y, z + 0.5, deathLocation.getYaw(), deathLocation.getPitch());
-    }
-
-    /**
-     * Checks if a location is safe for grave placement.
-     */
-    private boolean isSafeLocation(World world, int x, int y, int z) {
-        // Must be in loaded chunk
-        if (!world.isChunkLoaded(x >> 4, z >> 4)) {
-            return false;
-        }
-
-        Block block = world.getBlockAt(x, y, z);
-        Block above = world.getBlockAt(x, y + 1, z);
-
-        // Block must be air or replaceable
-        if (!block.getType().isAir() && !block.isPassable()) {
-            return false;
-        }
-
-        // Space above must be clear
-        if (!above.getType().isAir() && !above.isPassable()) {
-            return false;
-        }
-
-        // Not in lava or fire
-        if (block.getType() == org.bukkit.Material.LAVA || block.getType() == org.bukkit.Material.FIRE) {
-            return false;
-        }
-
+        if (SchedulerUtils.isFolia()) foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
+            task -> checkExpired(), GraveConfig.GRAVE_CHECK_INTERVAL_TICKS, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS);
+        else paperTask = plugin.getServer().getScheduler().runTaskTimer(plugin,
+            this::checkExpired, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS);
         return true;
     }
 
-    /**
-     * Places a player head at the grave location.
-     */
-    private void placeGraveBlock(Location location, OfflinePlayer player) {
-        Block block = location.getBlock();
-        
-        // Set to player head
-        block.setType(org.bukkit.Material.PLAYER_HEAD);
-        
-        // Set head texture to player's skin
-        if (block.getBlockData() instanceof org.bukkit.block.data.Directional directional) {
-            directional.setFacing(org.bukkit.block.BlockFace.NORTH);
-            block.setBlockData(directional);
-        }
-        
-        // Store grave ID in PDC for retrieval
-        if (location.getWorld() != null) {
-            // Note: PDC on blocks requires Paper 1.20.5+
-            // This is a placeholder for future implementation
-        }
+    public void stop() {
+        if (paperTask != null) paperTask.cancel();
+        if (foliaTask != null) foliaTask.cancel();
+        persistence.close();
+        viewers.clear(); graves.clear(); locations.clear(); repository.close();
     }
 
-    /**
-     * Enforces the maximum grave limit per player.
-     */
-    private void enforceGraveLimit(UUID playerUuid) {
-        List<UUID> playerGraveIds = gravesByPlayer.get(playerUuid);
-        if (playerGraveIds == null || playerGraveIds.size() < GraveConfig.MAX_GRAVES_PER_PLAYER) {
+    public Grave create(Player player, Location deathLocation, List<ItemStack> items, int experience) {
+        Location markerLocation = reserveSafeLocation(deathLocation);
+        if (markerLocation == null) return null;
+        GravePosition markerPosition = GravePosition.from(markerLocation);
+        Block block = markerLocation.getBlock();
+        if (!Bukkit.isOwnedByCurrentRegion(block) || !block.getType().isAir()) {
+            reservations.release(markerPosition); return null;
+        }
+        block.setType(Material.PLAYER_HEAD);
+        if (block.getType() != Material.PLAYER_HEAD) {
+            reservations.release(markerPosition); return null;
+        }
+        Grave grave = Grave.create(player.getUniqueId(), player.getName(), GravePosition.from(deathLocation),
+            markerPosition, items, experience, System.currentTimeMillis());
+        addToIndexes(grave);
+        save(grave, success -> {
+            if (!success) failInitialPersistence(grave); else enforceLimit(grave.getOwnerId());
+        });
+        return grave;
+    }
+
+    public Grave get(Location location) {
+        UUID id = locations.get(GravePosition.from(location).key());
+        return id == null ? null : graves.get(id);
+    }
+
+    public boolean isGrave(Location location) { return get(location) != null; }
+
+    public List<Grave> getForPlayer(UUID ownerId) {
+        return graves.values().stream().filter(grave -> grave.getOwnerId().equals(ownerId) && grave.getState() == Grave.State.ACTIVE)
+            .sorted(Comparator.comparingLong(Grave::getCreatedAt)).toList();
+    }
+
+    public Collection<Grave> getAll() { return List.copyOf(graves.values()); }
+
+    public boolean canAccess(Player player, Grave grave) {
+        return grave.getState() == Grave.State.ACTIVE && GraveAccessPolicy.canAccess(
+            grave.getOwnerId(), player.getUniqueId(), player.hasPermission("nekoplugin.grave.use"),
+            player.hasPermission("nekoplugin.grave.admin"));
+    }
+
+    public boolean acquireViewer(Grave grave) { return grave.getState() == Grave.State.ACTIVE && viewers.add(grave.getId()); }
+    public void releaseViewer(Grave grave) { viewers.remove(grave.getId()); }
+
+    public boolean claimItem(Grave grave, int index, Player player, Consumer<Boolean> completion) {
+        Grave.ItemClaim claim = grave.claimItem(index);
+        if (claim == null) return false;
+        boolean finalClaim = grave.isEmpty();
+        int experience = 0;
+        if (finalClaim) {
+            if (!grave.beginRemoval(Grave.Disposition.LOOTED)) {
+                grave.rollbackClaim(claim);
+                return false;
+            }
+            experience = grave.consumeExperience();
+        }
+        int claimedExperience = experience;
+        save(grave, saved -> {
+            if (!saved) {
+                if (finalClaim) {
+                    grave.restoreExperience(claimedExperience);
+                    grave.cancelRemoval();
+                }
+                grave.rollbackClaim(claim);
+                SchedulerUtils.runAtEntity(player, () -> completion.accept(false));
+                return;
+            }
+            SchedulerUtils.runAtEntity(player, () -> deliverClaim(
+                grave, claim, claimedExperience, finalClaim, player, completion));
+        });
+        return true;
+    }
+
+    private void deliverClaim(Grave grave, Grave.ItemClaim claim, int experience, boolean finalClaim,
+                              Player player, Consumer<Boolean> completion) {
+        Map<Integer, ItemStack> overflow = player.getInventory().addItem(claim.item());
+        grave.commitClaim(claim);
+        if (!overflow.isEmpty()) {
+            if (finalClaim) {
+                grave.restoreExperience(experience);
+                grave.cancelRemoval();
+            }
+            grave.restoreItem(claim.index(), overflow.values().iterator().next());
+            save(grave, ignored -> SchedulerUtils.runAtEntity(player, () -> completion.accept(false)));
             return;
         }
+        if (finalClaim) {
+            player.giveExp(experience);
+            performDisposition(grave, player, completion);
+        } else {
+            completion.accept(true);
+        }
+    }
 
-        // Remove oldest grave (first in list)
-        UUID oldestGraveId = playerGraveIds.get(0);
-        for (Grave grave : gravesByLocation.values()) {
-            if (grave.getGraveId().equals(oldestGraveId)) {
-                removeGrave(grave, true); // Drop items
-                break;
+    public void remove(Grave grave, boolean dropContents) {
+        if (!grave.beginRemoval(dropContents ? Grave.Disposition.DROP : Grave.Disposition.LOOTED)) return;
+        viewers.remove(grave.getId());
+        save(grave, saved -> {
+            if (!saved) { grave.cancelRemoval(); return; }
+            performDisposition(grave, null, ignored -> {});
+        });
+    }
+
+    private void performDisposition(Grave grave, Player player, Consumer<Boolean> completion) {
+        Location location = grave.getGravePosition().resolve(plugin.getServer());
+        if (location == null) return;
+        SchedulerUtils.runAtLocation(location, () -> {
+            if (grave.getDisposition() == Grave.Disposition.DROP) dropContentsAndExperience(grave, location);
+            removeMarker(location);
+            grave.markDisposed();
+            save(grave, disposed -> {
+                if (!disposed) return;
+                persistence.submit(() -> repository.delete(grave.getId())).thenAccept(deleted -> {
+                    if (deleted) finalizeRemoval(grave);
+                    if (player != null) SchedulerUtils.runAtEntity(player, () -> completion.accept(deleted));
+                });
+            });
+        });
+    }
+
+    private void failInitialPersistence(Grave grave) {
+        Location location = grave.getGravePosition().resolve(plugin.getServer());
+        if (location == null) return;
+        SchedulerUtils.runAtLocation(location, () -> {
+            dropContentsAndExperience(grave, location);
+            removeMarker(location);
+            finalizeRemoval(grave);
+        });
+    }
+
+    private void resume(Grave grave) {
+        if (grave.getState() == Grave.State.ACTIVE) { restoreMarker(grave); return; }
+        if (grave.getState() == Grave.State.REMOVING) {
+            performDisposition(grave, null, ignored -> {});
+            return;
+        }
+        persistence.submit(() -> repository.delete(grave.getId())).thenAccept(deleted -> {
+            if (deleted) finalizeRemoval(grave);
+        });
+    }
+
+    private void save(Grave grave, Consumer<Boolean> completion) {
+        GraveSnapshot snapshot = grave.snapshot();
+        persistence.submit(() -> repository.save(snapshot)).thenAccept(completion);
+    }
+
+    private void finalizeRemoval(Grave grave) {
+        graves.remove(grave.getId(), grave);
+        locations.remove(grave.getGravePosition().key(), grave.getId());
+        reservations.release(grave.getGravePosition()); viewers.remove(grave.getId());
+    }
+
+    private void addToIndexes(Grave grave) {
+        graves.put(grave.getId(), grave); locations.put(grave.getGravePosition().key(), grave.getId());
+        reservations.reserve(grave.getGravePosition());
+    }
+
+    private void restoreMarker(Grave grave) {
+        Location location = grave.getGravePosition().resolve(plugin.getServer());
+        if (location != null) SchedulerUtils.runAtLocation(location, () -> {
+            if (location.getBlock().getType().isAir()) location.getBlock().setType(Material.PLAYER_HEAD);
+        });
+    }
+
+    private Location reserveSafeLocation(Location origin) {
+        World world = origin.getWorld();
+        if (world == null) return null;
+        int baseX = origin.getBlockX();
+        int baseY = Math.max(world.getMinHeight() + 1, Math.min(origin.getBlockY(), world.getMaxHeight() - 2));
+        int baseZ = origin.getBlockZ();
+        for (int radius = 0; radius <= GraveConfig.MAX_SAFE_LOCATION_SEARCH_RADIUS; radius++) {
+            for (int yOffset = -radius; yOffset <= radius; yOffset++) for (int xOffset = -radius; xOffset <= radius; xOffset++) for (int zOffset = -radius; zOffset <= radius; zOffset++) {
+                Location candidate = new Location(world, baseX + xOffset, baseY + yOffset, baseZ + zOffset);
+                if (!Bukkit.isOwnedByCurrentRegion(candidate) || !isSafe(candidate)) continue;
+                GravePosition position = GravePosition.from(candidate);
+                if (reservations.reserve(position)) return candidate;
             }
         }
+        return null;
     }
 
-    /**
-     * Checks and removes expired graves.
-     */
-    private void checkExpiredGraves() {
-        List<Grave> expiredGraves = new ArrayList<>();
-        
-        for (Grave grave : gravesByLocation.values()) {
-            if (grave.isExpired()) {
-                expiredGraves.add(grave);
-            }
-        }
-        
-        for (Grave grave : expiredGraves) {
-            plugin.getLogger().info("Grave for " + grave.getPlayerName() + " has expired, dropping items");
-            removeGrave(grave, true);
-        }
-        
-        if (!expiredGraves.isEmpty()) {
-            plugin.getLogger().fine("Removed " + expiredGraves.size() + " expired graves");
-        }
+    private boolean isSafe(Location location) {
+        World world = location.getWorld(); int y = location.getBlockY();
+        if (world == null || y <= world.getMinHeight() || y >= world.getMaxHeight() - 1) return false;
+        Block target = location.getBlock();
+        return target.getType().isAir() && target.getRelative(0, 1, 0).getType().isAir()
+            && target.getRelative(0, -1, 0).getType().isSolid();
     }
 
-    // ========== DATABASE METHODS ==========
-
-    private void loadGravesFromDatabase() {
-        // Database implementation would go here
-        // For now, this is a placeholder
-        plugin.getLogger().fine("Loading graves from database (not yet implemented)");
+    private void enforceLimit(UUID ownerId) {
+        List<Grave> ownerGraves = new ArrayList<>(getForPlayer(ownerId));
+        while (ownerGraves.size() > GraveConfig.MAX_GRAVES_PER_PLAYER) remove(ownerGraves.removeFirst(), true);
     }
 
-    private void saveGraveToDatabase(Grave grave) {
-        // Database implementation would go here
-        plugin.getLogger().fine("Saving grave " + grave.getGraveId() + " to database");
+    private void checkExpired() {
+        long now = System.currentTimeMillis();
+        graves.values().stream().filter(grave -> grave.getState() == Grave.State.ACTIVE && grave.isExpired(now))
+            .toList().forEach(grave -> remove(grave, true));
     }
 
-    private void saveAllGravesToDatabase() {
-        for (Grave grave : gravesByLocation.values()) {
-            saveGraveToDatabase(grave);
-        }
+    private static void dropContentsAndExperience(Grave grave, Location location) {
+        World world = location.getWorld();
+        if (world == null) return;
+        Location dropLocation = location.clone().add(0.5, 0.5, 0.5);
+        grave.getItems().forEach(item -> world.dropItemNaturally(dropLocation, item));
+        int experience = grave.consumeExperience();
+        if (experience > 0) world.spawn(dropLocation, ExperienceOrb.class, orb -> orb.setExperience(experience));
     }
 
-    private void deleteGraveFromDatabase(UUID graveId) {
-        // Database implementation would go here
-        plugin.getLogger().fine("Deleting grave " + graveId + " from database");
+    private static void removeMarker(Location location) {
+        if (location.getBlock().getType() == Material.PLAYER_HEAD) location.getBlock().setType(Material.AIR);
     }
 }

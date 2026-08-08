@@ -1,238 +1,145 @@
 package com.nyarutoru.nekoplugin.features.graves;
 
-import org.bukkit.Location;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
-/**
- * Represents a player's grave containing their death items.
- * Thread-safe data structure for grave information.
- */
-public class Grave {
+public final class Grave {
+    public enum State { ACTIVE, REMOVING, DISPOSED }
+    public enum Disposition { NONE, DROP, LOOTED }
 
-    private final UUID graveId;
-    private final UUID playerUuid;
-    private final String playerName;
-    private final Location deathLocation;
-    private final Location graveLocation;
+    public record ItemClaim(int index, ItemStack item) {
+        public ItemClaim {
+            item = item.clone();
+        }
+        @Override public ItemStack item() { return item.clone(); }
+    }
+
+    private final UUID id;
+    private final UUID ownerId;
+    private final String ownerName;
+    private final GravePosition deathPosition;
+    private final GravePosition gravePosition;
+    private final long createdAt;
+    private final long expiresAt;
     private final List<ItemStack> items;
-    private final long deathTime;
-    private long expiryTime;
-    private boolean accessed;
+    private int experience;
+    private State state;
+    private Disposition disposition;
+    private ItemClaim pendingClaim;
 
-    /**
-     * Creates a new grave for a deceased player.
-     *
-     * @param player The deceased player
-     * @param deathLocation Where the player died
-     * @param graveLocation Where the grave was placed (may differ if death location was unsafe)
-     * @param items Items to store in the grave
-     */
-    public Grave(OfflinePlayer player, Location deathLocation, Location graveLocation, List<ItemStack> items) {
-        this.graveId = UUID.randomUUID();
-        this.playerUuid = player.getUniqueId();
-        this.playerName = player.getName() != null ? player.getName() : "Unknown";
-        this.deathLocation = deathLocation.clone();
-        this.graveLocation = graveLocation.clone();
-        this.items = new ArrayList<>(items);
-        this.deathTime = System.currentTimeMillis();
-        this.expiryTime = this.deathTime + GraveConfig.GRAVE_LIFETIME_MS;
-        this.accessed = false;
+    public Grave(UUID id, UUID ownerId, String ownerName, GravePosition deathPosition,
+                 GravePosition gravePosition, List<ItemStack> items, int experience,
+                 long createdAt, long expiresAt) {
+        this(id, ownerId, ownerName, deathPosition, gravePosition, items, experience,
+            createdAt, expiresAt, State.ACTIVE, Disposition.NONE);
     }
 
-    /**
-     * Gets the unique grave identifier.
-     *
-     * @return Grave UUID
-     */
-    public UUID getGraveId() {
-        return graveId;
+    public Grave(UUID id, UUID ownerId, String ownerName, GravePosition deathPosition,
+                 GravePosition gravePosition, List<ItemStack> items, int experience,
+                 long createdAt, long expiresAt, State state, Disposition disposition) {
+        this.id = Objects.requireNonNull(id, "id");
+        this.ownerId = Objects.requireNonNull(ownerId, "ownerId");
+        this.ownerName = Objects.requireNonNull(ownerName, "ownerName");
+        this.deathPosition = Objects.requireNonNull(deathPosition, "deathPosition");
+        this.gravePosition = Objects.requireNonNull(gravePosition, "gravePosition");
+        this.items = cloneItems(items);
+        this.experience = Math.max(0, experience);
+        this.createdAt = createdAt;
+        this.expiresAt = expiresAt;
+        this.state = Objects.requireNonNull(state, "state");
+        this.disposition = Objects.requireNonNull(disposition, "disposition");
     }
 
-    /**
-     * Gets the deceased player's UUID.
-     *
-     * @return Player UUID
-     */
-    public UUID getPlayerUuid() {
-        return playerUuid;
+    public static Grave create(UUID ownerId, String ownerName, GravePosition deathPosition,
+                               GravePosition gravePosition, List<ItemStack> items, int experience, long now) {
+        return new Grave(UUID.randomUUID(), ownerId, ownerName, deathPosition, gravePosition,
+            items, experience, now, now + GraveConfig.GRAVE_LIFETIME_MS);
     }
 
-    /**
-     * Gets the deceased player's name.
-     *
-     * @return Player name
-     */
-    public String getPlayerName() {
-        return playerName;
+    public UUID getId() { return id; }
+    public UUID getOwnerId() { return ownerId; }
+    public String getOwnerName() { return ownerName; }
+    public GravePosition getDeathPosition() { return deathPosition; }
+    public GravePosition getGravePosition() { return gravePosition; }
+    public long getCreatedAt() { return createdAt; }
+    public long getExpiresAt() { return expiresAt; }
+
+    public synchronized List<ItemStack> getItems() { return cloneItems(items); }
+    public synchronized int getExperience() { return experience; }
+    public synchronized State getState() { return state; }
+    public synchronized Disposition getDisposition() { return disposition; }
+    public synchronized boolean hasPendingClaim() { return pendingClaim != null; }
+
+    public synchronized ItemClaim claimItem(int index) {
+        if (state != State.ACTIVE || pendingClaim != null || index < 0 || index >= items.size()) return null;
+        pendingClaim = new ItemClaim(index, items.remove(index));
+        return pendingClaim;
     }
 
-    /**
-     * Gets the location where the player died.
-     *
-     * @return Death location
-     */
-    public Location getDeathLocation() {
-        return deathLocation.clone();
+    public synchronized boolean commitClaim(ItemClaim claim) {
+        if (!sameClaim(claim)) return false;
+        pendingClaim = null;
+        return true;
     }
 
-    /**
-     * Gets the location where the grave was placed.
-     *
-     * @return Grave location
-     */
-    public Location getGraveLocation() {
-        return graveLocation.clone();
+    public synchronized boolean rollbackClaim(ItemClaim claim) {
+        if (!sameClaim(claim)) return false;
+        items.add(Math.min(claim.index(), items.size()), claim.item());
+        pendingClaim = null;
+        return true;
     }
 
-    /**
-     * Gets a copy of all items in the grave.
-     *
-     * @return List of item stacks
-     */
-    public List<ItemStack> getItems() {
-        return new ArrayList<>(items);
+    public synchronized void restoreItem(int index, ItemStack item) {
+        items.add(Math.min(Math.max(index, 0), items.size()), item.clone());
     }
 
-    /**
-     * Gets the time of death.
-     *
-     * @return Death time in milliseconds since epoch
-     */
-    public long getDeathTime() {
-        return deathTime;
+    public synchronized boolean beginRemoval(Disposition removalDisposition) {
+        if (state != State.ACTIVE || removalDisposition == Disposition.NONE) return false;
+        if (pendingClaim != null && !(removalDisposition == Disposition.LOOTED && items.isEmpty())) return false;
+        state = State.REMOVING;
+        disposition = removalDisposition;
+        return true;
     }
 
-    /**
-     * Gets the time when this grave will expire.
-     *
-     * @return Expiry time in milliseconds since epoch
-     */
-    public long getExpiryTime() {
-        return expiryTime;
+    public synchronized void cancelRemoval() {
+        state = State.ACTIVE;
+        disposition = Disposition.NONE;
     }
 
-    /**
-     * Checks if this grave has expired.
-     *
-     * @return true if expired, false otherwise
-     */
-    public boolean isExpired() {
-        return System.currentTimeMillis() >= expiryTime;
+    public synchronized void markDisposed() { state = State.DISPOSED; }
+
+    public synchronized int consumeExperience() {
+        int claimed = experience;
+        experience = 0;
+        return claimed;
     }
 
-    /**
-     * Checks if this grave has been accessed.
-     *
-     * @return true if accessed, false otherwise
-     */
-    public boolean isAccessed() {
-        return accessed;
+    public synchronized void restoreExperience(int amount) { experience += Math.max(0, amount); }
+    public synchronized boolean isEmpty() { return items.isEmpty(); }
+    public synchronized int getStackCount() { return items.size(); }
+    public boolean isExpired(long now) { return now >= expiresAt; }
+    public long getRemainingMillis(long now) { return Math.max(0L, expiresAt - now); }
+
+    public synchronized GraveSnapshot snapshot() {
+        return new GraveSnapshot(id, ownerId, ownerName, deathPosition, gravePosition,
+            GraveItemCodec.encode(items), experience, createdAt, expiresAt, state, disposition);
     }
 
-    /**
-     * Marks this grave as accessed.
-     */
-    public void markAccessed() {
-        this.accessed = true;
+    private boolean sameClaim(ItemClaim claim) {
+        return pendingClaim != null && pendingClaim.index() == claim.index() && pendingClaim.item().equals(claim.item());
     }
 
-    /**
-     * Removes an item from the grave.
-     *
-     * @param index The index of the item to remove
-     * @return The removed item stack, or null if index was invalid
-     */
-    public ItemStack removeItem(int index) {
-        if (index >= 0 && index < items.size()) {
-            return items.remove(index);
-        }
-        return null;
-    }
-
-    /**
-     * Gets the number of items in this grave.
-     *
-     * @return Item count
-     */
-    public int getItemCount() {
-        return items.size();
-    }
-
-    /**
-     * Checks if this grave is empty.
-     *
-     * @return true if empty, false otherwise
-     */
-    public boolean isEmpty() {
-        return items.isEmpty();
-    }
-
-    /**
-     * Gets the remaining time until this grave expires.
-     *
-     * @return Remaining time in milliseconds
-     */
-    public long getRemainingTime() {
-        return Math.max(0, expiryTime - System.currentTimeMillis());
-    }
-
-    /**
-     * Gets a formatted string of the remaining time.
-     *
-     * @return Formatted time string (e.g., "15m 30s")
-     */
-    public String getFormattedRemainingTime() {
-        long remaining = getRemainingTime();
-        long minutes = remaining / 60000;
-        long seconds = (remaining % 60000) / 1000;
-        
-        if (minutes > 0) {
-            return String.format("%dm %ds", minutes, seconds);
-        } else {
-            return String.format("%ds", seconds);
-        }
-    }
-
-    /**
-     * Creates a copy of this grave.
-     *
-     * @return A deep copy of this grave
-     */
-    public Grave copy() {
-        Grave copy = new Grave(
-            org.bukkit.Bukkit.getOfflinePlayer(playerUuid),
-            deathLocation,
-            graveLocation,
-            items
-        );
-        copy.accessed = this.accessed;
+    private static List<ItemStack> cloneItems(List<ItemStack> source) {
+        List<ItemStack> copy = new ArrayList<>();
+        if (source == null) return copy;
+        for (ItemStack item : source) if (item != null && !item.isEmpty()) copy.add(item.clone());
         return copy;
     }
 
-    @Override
-    public String toString() {
-        return String.format("Grave{player=%s, location=%s, items=%d, expires=%s}",
-            playerName,
-            graveLocation.getBlock().getType().name(),
-            items.size(),
-            getFormattedRemainingTime());
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null || getClass() != obj.getClass()) return false;
-        Grave grave = (Grave) obj;
-        return graveId.equals(grave.graveId);
-    }
-
-    @Override
-    public int hashCode() {
-        return graveId.hashCode();
-    }
+    @Override public boolean equals(Object object) { return object instanceof Grave grave && id.equals(grave.id); }
+    @Override public int hashCode() { return id.hashCode(); }
 }
