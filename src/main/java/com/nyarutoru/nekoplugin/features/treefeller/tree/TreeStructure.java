@@ -75,16 +75,6 @@ public class TreeStructure {
     }
 
     /**
-     * Gets the set of leaf block positions in the tree.
-     * This is useful for iteration when breaking leaves.
-     *
-     * @return a set of leaf positions
-     */
-    public Set<BlockPos> getLeavesSet() {
-        return new HashSet<>(leaves);
-    }
-
-    /**
      * Gets the Y coordinate of the bottom-most log in the tree.
      * Used for max-height validation.
      *

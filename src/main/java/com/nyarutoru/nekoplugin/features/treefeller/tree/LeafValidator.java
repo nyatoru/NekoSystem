@@ -6,7 +6,6 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * Validates that a detected tree structure has sufficient leaves to be considered a valid tree.
@@ -112,45 +111,5 @@ public final class LeafValidator {
         }
 
         return false;
-    }
-
-    /**
-     * Finds all leaf blocks within the break range of the tree.
-     * <p>
-     * Returns leaf blocks that should be broken along with the tree.
-     *
-     * @param world the world containing the tree
-     * @param logs the list of log block positions
-     * @return a set of leaf positions within break range
-     */
-    public Set<BlockPos> findLeavesToBreak(World world, List<BlockPos> logs) {
-        Set<BlockPos> leavesToBreak = new java.util.HashSet<>();
-        int breakRange = TreeFellerConfig.LEAF_BREAK_RANGE;
-        int breakRangeSquared = breakRange * breakRange;
-
-        // Search around each log block for leaves
-        for (BlockPos logPos : logs) {
-            // Search in a cube around the log
-            for (int dx = -breakRange; dx <= breakRange; dx++) {
-                for (int dy = -breakRange; dy <= breakRange; dy++) {
-                    for (int dz = -breakRange; dz <= breakRange; dz++) {
-                        // Skip if outside spherical range
-                        int distanceSquared = dx * dx + dy * dy + dz * dz;
-                        if (distanceSquared > breakRangeSquared) {
-                            continue;
-                        }
-
-                        BlockPos checkPos = new BlockPos(logPos.x() + dx, logPos.y() + dy, logPos.z() + dz);
-                        Block block = checkPos.getBlock(world);
-
-                        if (block != null && treeType.isLeafBlock(block.getType())) {
-                            leavesToBreak.add(checkPos);
-                        }
-                    }
-                }
-            }
-        }
-
-        return leavesToBreak;
     }
 }

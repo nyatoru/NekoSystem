@@ -6,6 +6,7 @@ import com.nyarutoru.nekoplugin.features.treefeller.animation.FallingTreeAnimati
 import com.nyarutoru.nekoplugin.features.treefeller.animation.TreeFellerEffects;
 import com.nyarutoru.nekoplugin.features.treefeller.tool.ToolConfig;
 import com.nyarutoru.nekoplugin.features.treefeller.tool.ToolMatcher;
+import com.nyarutoru.nekoplugin.features.treefeller.tree.FastLeafDecay;
 import com.nyarutoru.nekoplugin.features.treefeller.tree.LeafValidator;
 import com.nyarutoru.nekoplugin.features.treefeller.tree.TreeDetector;
 import com.nyarutoru.nekoplugin.features.treefeller.tree.TreeStructure;
@@ -79,6 +80,7 @@ public class TreeFellerListener implements Listener {
     private final ToolMatcher toolMatcher;
     private final TreeFellerEffects effects;
     private final FallingTreeAnimation animation;
+    private final FastLeafDecay fastLeafDecay;
     private final NekoPlugin plugin;
 
     /**
@@ -92,6 +94,7 @@ public class TreeFellerListener implements Listener {
         this.toolMatcher = new ToolMatcher();
         this.effects = new TreeFellerEffects();
         this.animation = new FallingTreeAnimation();
+        this.fastLeafDecay = new FastLeafDecay();
     }
 
     /**
@@ -377,8 +380,8 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        // Break the tree (logs and leaves)
-        breakTree(player, tree, tool, logsToFell);
+        // Break the tree logs
+        breakTree(player, tree, logsToFell);
 
         // Handle cascade if enabled
         if (TreeFellerConfig.CASCADE) {
@@ -387,20 +390,9 @@ public class TreeFellerListener implements Listener {
 
         // Log if debug mode
         if (TreeFellerConfig.DEBUG) {
-            player.sendMessage(Component.text("TreeFeller: Felled " + logsToFell.size() + " logs and " +
-                    tree.getLeafCount() + " leaves", NamedTextColor.GREEN));
+            player.sendMessage(Component.text("TreeFeller: Felled " + logsToFell.size() + " logs",
+                    NamedTextColor.GREEN));
         }
-    }
-
-    /**
-     * Breaks all blocks in the tree and plays effects.
-     *
-     * @param player the player who broke the tree
-     * @param tree the tree structure to break
-     * @param tool the tool used
-     */
-    private void breakTree(Player player, TreeStructure tree, ItemStack tool) {
-        breakTree(player, tree, tool, tree.getLogs());
     }
 
     /**
@@ -409,26 +401,17 @@ public class TreeFellerListener implements Listener {
      *
      * @param player the player who broke the tree
      * @param tree the tree structure to break
-     * @param tool the tool used
      * @param logsToFell the list of logs to fell (may be partial)
      */
-    private void breakTree(Player player, TreeStructure tree, ItemStack tool, List<BlockPos> logsToFell) {
+    private void breakTree(Player player, TreeStructure tree, List<BlockPos> logsToFell) {
         World world = player.getWorld();
-
-        // Get ALL leaves associated with this tree (not limited by range)
-        Set<BlockPos> leavesToBreak = tree.getLeavesSet();
 
         // Play animation for specified logs (breaks them sequentially or instantly)
         animation.playAnimation(world, logsToFell, effects);
-
-        // Break ALL leaves instantly (ensure no floating leaves)
-        for (BlockPos leafPos : leavesToBreak) {
-            Block leafBlock = leafPos.getBlock(world);
-            if (leafBlock != null && leafBlock.getType() != Material.AIR) {
-                leafBlock.breakNaturally(tool);
-                effects.playEffects(leafBlock);
-            }
-        }
+        long decayStartDelay = TreeFellerConfig.ANIMATION_ENABLED
+                ? (long) logsToFell.size() * TreeFellerConfig.ANIMATION_DELAY_TICKS
+                : 0L;
+        fastLeafDecay.schedule(world, tree.getLeaves(), decayStartDelay);
 
         // Play a completion sound
         if (TreeFellerConfig.SOUNDS_ENABLED) {
@@ -535,7 +518,7 @@ public class TreeFellerListener implements Listener {
                 }
 
                 // Fell the adjacent tree
-                breakTree(player, adjacentTree, tool, logsToFell);
+                breakTree(player, adjacentTree, logsToFell);
                 cascadedTrees++;
 
                 // Add logs to queue for further cascade checking

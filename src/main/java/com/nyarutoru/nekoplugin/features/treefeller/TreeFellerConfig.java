@@ -87,10 +87,19 @@ public final class TreeFellerConfig {
     public static final int LEAF_DETECT_RANGE = 6;
 
     /**
-     * Range (in blocks) to break leaves from trunk blocks.
-     * Matches reference implementation default (same as detect range).
+     * Accelerate natural decay after TreeFeller removes a tree's logs.
      */
-    public static final int LEAF_BREAK_RANGE = 6;
+    public static final boolean FAST_LEAF_DECAY_ENABLED = true;
+
+    /**
+     * Minimum delay before an unsupported leaf is checked for decay.
+     */
+    public static final int FAST_LEAF_DECAY_MIN_DELAY_TICKS = 20;
+
+    /**
+     * Maximum delay before an unsupported leaf is checked for decay.
+     */
+    public static final int FAST_LEAF_DECAY_MAX_DELAY_TICKS = 100;
 
     /**
      * Allow diagonally connected logs to be detected as part of the tree.

@@ -54,7 +54,7 @@ public class TreeFellerFeature extends AbstractFeature {
         plugin.getLogger().info("Require Leaves: " + TreeFellerConfig.REQUIRE_LEAVES);
         plugin.getLogger().info("Minimum Leaves: " + TreeFellerConfig.MINIMUM_LEAVES);
         plugin.getLogger().info("Leaf Detect Range: " + TreeFellerConfig.LEAF_DETECT_RANGE);
-        plugin.getLogger().info("Leaf Break Range: " + TreeFellerConfig.LEAF_BREAK_RANGE);
+        plugin.getLogger().info("Fast Leaf Decay: " + TreeFellerConfig.FAST_LEAF_DECAY_ENABLED);
         plugin.getLogger().info("Diagonal Logs: " + TreeFellerConfig.DIAGONAL_LOGS);
         plugin.getLogger().info("Allow Player Placed: " + TreeFellerConfig.ALLOW_PLAYER_PLACED);
         plugin.getLogger().info("Replant Saplings: " + TreeFellerConfig.REPLANT_SAPLINGS);
