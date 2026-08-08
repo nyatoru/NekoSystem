@@ -1,11 +1,16 @@
 package com.nyarutoru.nekoplugin.features.graves;
 
+import io.papermc.paper.datacomponent.item.ResolvableProfile;
+import org.bukkit.block.Skull;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -115,6 +120,46 @@ class GravesValidationTest {
         assertEquals(byte[].class, encode.getReturnType());
         assertEquals(List.class, decode.getReturnType());
         assertEquals(byte[].class, ItemStack.class.getMethod("serializeItemsAsBytes", java.util.Collection.class).getReturnType());
+    }
+
+    @Test
+    void graveMarkerAppliesOwnerProfileAndUpdatesBlockState() {
+        AtomicReference<ResolvableProfile> appliedProfile = new AtomicReference<>();
+        AtomicBoolean updated = new AtomicBoolean();
+        Skull skull = proxy(Skull.class, (proxy, method, args) -> {
+            if (method.getName().equals("setProfile")) {
+                appliedProfile.set((ResolvableProfile) args[0]);
+                return null;
+            }
+            if (method.getName().equals("update") && args.length == 1) {
+                updated.set((boolean) args[0]);
+                return true;
+            }
+            return defaultValue(method.getReturnType());
+        });
+        ResolvableProfile profile = proxy(ResolvableProfile.class,
+            (proxy, method, args) -> defaultValue(method.getReturnType()));
+
+        assertTrue(GraveManager.applyMarkerProfile(skull, profile));
+        assertSame(profile, appliedProfile.get());
+        assertTrue(updated.get());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T proxy(Class<T> type, java.lang.reflect.InvocationHandler handler) {
+        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
+    }
+
+    private static Object defaultValue(Class<?> type) {
+        if (!type.isPrimitive()) return null;
+        if (type == boolean.class) return false;
+        if (type == char.class) return '\0';
+        if (type == byte.class) return (byte) 0;
+        if (type == short.class) return (short) 0;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == float.class) return 0F;
+        return 0D;
     }
 
     private static Grave grave(List<ItemStack> items, int experience) {

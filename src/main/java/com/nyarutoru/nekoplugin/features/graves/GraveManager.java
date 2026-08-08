@@ -2,12 +2,14 @@ package com.nyarutoru.nekoplugin.features.graves;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
+import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.Skull;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -65,7 +67,7 @@ public final class GraveManager {
             reservations.release(markerPosition); return null;
         }
         block.setType(Material.PLAYER_HEAD);
-        if (block.getType() != Material.PLAYER_HEAD) {
+        if (!applyMarkerProfile(block, ResolvableProfile.resolvableProfile(player.getPlayerProfile()))) {
             reservations.release(markerPosition); return null;
         }
         Grave grave = Grave.create(player.getUniqueId(), player.getName(), GravePosition.from(deathLocation),
@@ -216,8 +218,26 @@ public final class GraveManager {
     private void restoreMarker(Grave grave) {
         Location location = grave.getGravePosition().resolve(plugin.getServer());
         if (location != null) SchedulerUtils.runAtLocation(location, () -> {
-            if (location.getBlock().getType().isAir()) location.getBlock().setType(Material.PLAYER_HEAD);
+            Block block = location.getBlock();
+            if (block.getType().isAir()) block.setType(Material.PLAYER_HEAD);
+            if (block.getType() == Material.PLAYER_HEAD) {
+                ResolvableProfile profile = ResolvableProfile.resolvableProfile()
+                    .uuid(grave.getOwnerId())
+                    .name(grave.getOwnerName())
+                    .build();
+                applyMarkerProfile(block, profile);
+            }
         });
+    }
+
+    static boolean applyMarkerProfile(Block block, ResolvableProfile profile) {
+        if (!(block.getState() instanceof Skull skull)) return false;
+        return applyMarkerProfile(skull, profile);
+    }
+
+    static boolean applyMarkerProfile(Skull skull, ResolvableProfile profile) {
+        skull.setProfile(profile);
+        return skull.update(true);
     }
 
     private Location reserveSafeLocation(Location origin) {
