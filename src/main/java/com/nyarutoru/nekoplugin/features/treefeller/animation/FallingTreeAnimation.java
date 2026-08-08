@@ -6,7 +6,7 @@ import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,69 +36,38 @@ public final class FallingTreeAnimation {
      * @param logs the list of log positions to break
      * @param effects the effects handler for playing particles/sounds
      */
-    public void playAnimation(World world, List<BlockPos> logs, TreeFellerEffects effects) {
+    public void playAnimation(World world, List<BlockPos> logs, ItemStack tool, TreeFellerEffects effects) {
+        List<BlockPos> sortedLogs = sortBlocks(logs);
         if (!TreeFellerConfig.ANIMATION_ENABLED) {
-            // Instant breaking - break all blocks immediately
-            breakAllBlocksInstantly(world, logs, effects);
+            for (BlockPos pos : sortedLogs) {
+                scheduleBlockBreak(world, pos, tool, effects, 0L);
+            }
             return;
         }
 
-        // Sort blocks based on animation direction
-        List<BlockPos> sortedLogs = sortBlocks(logs);
-
-        // Schedule sequential block breaking
-        // On Folia: Async scheduler for timing, then region scheduler for block operations
-        SchedulerUtils.runAsyncTimer(new Runnable() {
-            private int index = 0;
-
-            @Override
-            public void run() {
-                if (index >= sortedLogs.size()) {
-                    return; // Animation complete
-                }
-
-                BlockPos pos = sortedLogs.get(index);
-                
-                // On Folia, block operations must be scheduled on the region thread
-                if (SchedulerUtils.isFolia()) {
-                    Block block = pos.getBlock(world);
-                    if (block != null && block.getType() != Material.AIR) {
-                        SchedulerUtils.runAtLocation(block.getLocation(), () -> {
-                            block.breakNaturally();
-                            effects.playEffects(block);
-                        });
-                    }
-                } else {
-                    // Paper/Spigot: Can break blocks directly from async task
-                    Block block = pos.getBlock(world);
-                    if (block != null && block.getType() != Material.AIR) {
-                        block.breakNaturally();
-                        effects.playEffects(block);
-                    }
-                }
-
-                index++;
-            }
-        }, 0L, TreeFellerConfig.ANIMATION_DELAY_TICKS);
-    }
-
-    /**
-     * Breaks all blocks instantly without animation.
-     *
-     * @param world the world containing the blocks
-     * @param logs the list of log positions to break
-     * @param effects the effects handler
-     */
-    private void breakAllBlocksInstantly(World world, List<BlockPos> logs, TreeFellerEffects effects) {
-        for (BlockPos pos : logs) {
-            Block block = pos.getBlock(world);
-            if (block != null && block.getType() != Material.AIR) {
-                block.breakNaturally();
-                effects.playEffects(block);
-            }
+        for (int index = 0; index < sortedLogs.size(); index++) {
+            long delay = (long) index * TreeFellerConfig.ANIMATION_DELAY_TICKS;
+            scheduleBlockBreak(world, sortedLogs.get(index), tool, effects, delay);
         }
     }
 
+    private void scheduleBlockBreak(World world, BlockPos pos, ItemStack tool,
+                                    TreeFellerEffects effects, long delay) {
+        Material expectedMaterial = pos.getBlock(world).getType();
+        Runnable breakBlock = () -> {
+            Block block = pos.getBlock(world);
+            if (block.getType() != expectedMaterial) {
+                return;
+            }
+            effects.playEffects(block);
+            block.breakNaturally(tool);
+        };
+        if (delay <= 0) {
+            SchedulerUtils.runAtLocation(pos.toLocation(world), breakBlock);
+        } else {
+            SchedulerUtils.runAtLocationLater(pos.toLocation(world), breakBlock, delay);
+        }
+    }
     /**
      * Sorts blocks based on the configured animation direction.
      * <p>

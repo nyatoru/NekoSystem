@@ -2,6 +2,10 @@ package com.nyarutoru.nekoplugin.features.treefeller.tree;
 
 import org.bukkit.Material;
 
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * Represents a configured tree type for detection and validation.
  * <p>
@@ -22,6 +26,8 @@ public class TreeType {
      * The material type for log blocks of this tree.
      */
     private final Material logBlock;
+
+    private final Set<Material> logBlocks;
 
     /**
      * The material type for leaf blocks of this tree.
@@ -51,9 +57,26 @@ public class TreeType {
                     int maxHeight, int requiredLeaves) {
         this.name = name;
         this.logBlock = logBlock;
+        this.logBlocks = Collections.unmodifiableSet(createLogBlocks(logBlock));
         this.leafBlock = leafBlock;
         this.maxHeight = maxHeight;
         this.requiredLeaves = requiredLeaves;
+    }
+
+    private static EnumSet<Material> createLogBlocks(Material logBlock) {
+        String species = logBlock.name().substring(0, logBlock.name().length() - "_LOG".length());
+        EnumSet<Material> materials = EnumSet.of(logBlock);
+        addMaterial(materials, species + "_WOOD");
+        addMaterial(materials, "STRIPPED_" + species + "_LOG");
+        addMaterial(materials, "STRIPPED_" + species + "_WOOD");
+        return materials;
+    }
+
+    private static void addMaterial(Set<Material> materials, String name) {
+        Material material = Material.matchMaterial(name);
+        if (material != null) {
+            materials.add(material);
+        }
     }
 
     /**
@@ -72,6 +95,10 @@ public class TreeType {
      */
     public Material getLogBlock() {
         return logBlock;
+    }
+
+    public Set<Material> getLogBlocks() {
+        return logBlocks;
     }
 
     /**
@@ -108,7 +135,7 @@ public class TreeType {
      * @return true if the material is a log block for this tree, false otherwise
      */
     public boolean isLogBlock(Material material) {
-        return logBlock == material;
+        return logBlocks.contains(material);
     }
 
     /**

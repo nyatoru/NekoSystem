@@ -2,307 +2,356 @@ package com.nyarutoru.nekoplugin.features.treefeller.tree;
 
 import com.nyarutoru.nekoplugin.features.treefeller.TreeFellerConfig;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Orientable;
+import org.bukkit.block.data.type.Leaves;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 
 /**
- * Implements BFS-based tree detection algorithm.
- * <p>
- * Starting from a broken log block, traverses all connected log blocks
- * using breadth-first search to identify the complete tree structure.
- * <p>
- * The detector respects configuration settings for:
- * <ul>
- *     <li>Maximum tree size (prevents lag from huge trees)</li>
- *     <li>Diagonal connections (6-directional vs 26-directional)</li>
- *     <li>Player-placed blocks (allow or ignore)</li>
- * </ul>
- *
- * @author Redstone Agents
- * @since 2026-03-21
+ * Detects rooted tree structures using the layered scanner from TreeFeller v2.
  */
 public final class TreeDetector {
 
-    /**
-     * Offsets for 6-directional traversal (orthogonal neighbors only).
-     */
-    private static final BlockPos[] CARDINAL_OFFSETS = {
-            new BlockPos(1, 0, 0),
-            new BlockPos(-1, 0, 0),
-            new BlockPos(0, 1, 0),
-            new BlockPos(0, -1, 0),
-            new BlockPos(0, 0, 1),
-            new BlockPos(0, 0, -1)
-    };
+    private static final BlockPos[] CARDINAL_OFFSETS = createOffsets(false);
+    private static final BlockPos[] ALL_OFFSETS = createOffsets(true);
 
-    /**
-     * Offsets for 26-directional traversal (includes diagonals).
-     */
-    private static final BlockPos[] ALL_OFFSETS;
-
-    static {
-        // Generate all 26 neighbors (3x3x3 cube minus center)
-        List<BlockPos> offsets = new ArrayList<>();
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (dx != 0 || dy != 0 || dz != 0) {
-                        offsets.add(new BlockPos(dx, dy, dz));
-                    }
-                }
-            }
-        }
-        ALL_OFFSETS = offsets.toArray(new BlockPos[0]);
-    }
-
-    /**
-     * Detects a tree structure starting from the given origin block.
-     * <p>
-     * Uses BFS to traverse all connected log blocks and identifies
-     * the tree type based on the log material.
-     * <p>
-     * Supports root detection: if the origin is a root block (e.g., mangrove roots),
-     * searches for connected trunk blocks within ROOT_DISTANCE.
-     *
-     * @param world the world containing the tree
-     * @param origin the starting block position (the broken log or root)
-     * @return the detected tree structure, or null if no valid tree found
-     */
     public TreeStructure detect(World world, BlockPos origin) {
         if (world == null || origin == null) {
             return null;
         }
+        return detect(new BukkitBlockLookup(world), origin, true);
+    }
 
-        // Get the block at origin
-        Block originBlock = origin.getBlock(world);
-        if (originBlock == null) {
+    TreeStructure detect(BlockLookup blocks, BlockPos origin, boolean verifySecondaryTrees) {
+        BlockPos trunk = findTrunk(blocks, origin);
+        if (trunk == null) {
             return null;
         }
 
-        // Check if this is a root block (mangrove-style detection)
-        BlockPos trunkPos = findTrunkFromRoot(world, origin);
-        if (trunkPos != null) {
-            // Start detection from the trunk instead of the root
-            origin = trunkPos;
-            originBlock = trunkPos.getBlock(world);
-        }
-
-        // Find the matching tree type for this log
-        TreeType treeType = findTreeType(originBlock.getType());
+        TreeType treeType = findTreeType(blocks.getMaterial(trunk));
         if (treeType == null) {
             return null;
         }
 
-        // Perform BFS to find all connected logs
-        List<BlockPos> logs = detectLogs(world, origin, treeType);
-        if (logs.isEmpty()) {
+        TrunkScan trunkScan = scanTrunk(blocks, trunk, treeType);
+        if (trunkScan.logs().isEmpty()) {
             return null;
         }
 
-        // Find all leaf blocks associated with this tree
-        List<BlockPos> leaves = detectLeaves(world, logs, treeType);
+        LeafScan leafScan = scanLeaves(blocks, trunkScan.logs(), treeType);
+        if (verifySecondaryTrees && TreeFellerConfig.SECONDARY_TREE_VERIFICATION) {
+            verifyLeafOwnership(blocks, trunkScan.logs(), treeType, leafScan);
+        }
 
-        // Create and return the tree structure
-        return new TreeStructure(logs, leaves, origin, treeType);
+        List<BlockPos> logs = trunkScan.logs().stream()
+                .sorted(Comparator.comparingInt(pos -> distanceSquared(pos, trunk)))
+                .toList();
+        List<BlockPos> leaves = leafScan.distances().keySet().stream()
+                .sorted(Comparator.comparingInt(leafScan.distances()::get))
+                .toList();
+        return new TreeStructure(logs, leaves, trunk, treeType, trunkScan.overflow());
     }
 
-    /**
-     * Searches for a trunk block from a root block (e.g., mangrove roots).
-     * Matches ThizThizzyDizzy/tree-feller root detection behavior.
-     *
-     * @param world the world containing the tree
-     * @param rootPos the root block position
-     * @return the nearest trunk block position, or null if no trunk found
-     */
-    private BlockPos findTrunkFromRoot(World world, BlockPos rootPos) {
-        int rootDistance = TreeFellerConfig.ROOT_DISTANCE;
-        
-        // BFS to find nearest trunk block within root distance
+    private BlockPos findTrunk(BlockLookup blocks, BlockPos origin) {
+        if (findTreeType(blocks.getMaterial(origin)) != null) {
+            return origin;
+        }
+        if (blocks.getMaterial(origin) != Material.MANGROVE_ROOTS) {
+            return null;
+        }
+
         Queue<BlockPos> queue = new ArrayDeque<>();
-        Set<BlockPos> visited = new HashSet<>();
-        
-        queue.add(rootPos);
-        visited.add(rootPos);
-        
-        int distance = 0;
-        while (!queue.isEmpty() && distance < rootDistance) {
-            int levelSize = queue.size();
-            
-            for (int i = 0; i < levelSize; i++) {
-                BlockPos current = queue.poll();
-                Block block = current.getBlock(world);
-                
-                if (block != null && isTrunkBlock(block.getType())) {
-                    return current; // Found trunk
+        Map<BlockPos, Integer> distances = new HashMap<>();
+        queue.add(origin);
+        distances.put(origin, 0);
+
+        while (!queue.isEmpty()) {
+            BlockPos current = queue.poll();
+            int distance = distances.get(current);
+            if (distance >= TreeFellerConfig.ROOT_DISTANCE) {
+                continue;
+            }
+            for (BlockPos offset : CARDINAL_OFFSETS) {
+                BlockPos neighbor = current.add(offset.x(), offset.y(), offset.z());
+                TreeType type = findTreeType(blocks.getMaterial(neighbor));
+                if (type != null && "mangrove".equals(type.getName())) {
+                    return neighbor;
                 }
-                
-                // Check 6 directions
-                for (BlockPos offset : CARDINAL_OFFSETS) {
-                    BlockPos neighbor = new BlockPos(
-                        current.x() + offset.x(),
-                        current.y() + offset.y(),
-                        current.z() + offset.z()
-                    );
-                    
-                    if (!visited.contains(neighbor)) {
-                        visited.add(neighbor);
-                        queue.add(neighbor);
-                    }
+                if (blocks.getMaterial(neighbor) == Material.MANGROVE_ROOTS
+                        && distances.putIfAbsent(neighbor, distance + 1) == null) {
+                    queue.add(neighbor);
                 }
             }
-            
-            distance++;
         }
-        
-        return null; // No trunk found within range
+        return null;
     }
 
-    /**
-     * Checks if a material is a trunk/log block (not a root).
-     *
-     * @param material the material to check
-     * @return true if the material is a trunk block, false if it's a root
-     */
-    private boolean isTrunkBlock(org.bukkit.Material material) {
-        // Roots are not trunks
-        if (material == org.bukkit.Material.MANGROVE_ROOTS) {
-            return false;
-        }
-        // All other log materials are trunks
-        return findTreeType(material) != null;
-    }
-
-    /**
-     * Performs BFS traversal to detect all connected log blocks.
-     *
-     * @param world the world containing the tree
-     * @param origin the starting position
-     * @param treeType the tree type to match
-     * @return list of all detected log positions
-     */
-    private List<BlockPos> detectLogs(World world, BlockPos origin, TreeType treeType) {
+    private TrunkScan scanTrunk(BlockLookup blocks, BlockPos origin, TreeType treeType) {
         List<BlockPos> logs = new ArrayList<>();
         Set<BlockPos> visited = new HashSet<>();
         Queue<BlockPos> queue = new ArrayDeque<>();
-
-        // Start BFS from origin
         queue.add(origin);
         visited.add(origin);
+        boolean overflow = false;
 
-        // Choose offset pattern based on configuration
-        BlockPos[] offsets = TreeFellerConfig.DIAGONAL_LOGS ? ALL_OFFSETS : CARDINAL_OFFSETS;
-        int maxTreeSize = TreeFellerConfig.MAX_TREE_SIZE;
-
-        while (!queue.isEmpty() && logs.size() < maxTreeSize) {
+        while (!queue.isEmpty()) {
             BlockPos current = queue.poll();
+            if (logs.size() >= TreeFellerConfig.MAX_TREE_SIZE) {
+                overflow = true;
+                break;
+            }
             logs.add(current);
 
-            // Check all neighboring blocks
-            for (BlockPos offset : offsets) {
-                BlockPos neighbor = new BlockPos(
-                        current.x() + offset.x(),
-                        current.y() + offset.y(),
-                        current.z() + offset.z()
-                );
-
-                // Skip if already visited
-                if (visited.contains(neighbor)) {
+            for (BlockPos offset : ALL_OFFSETS) {
+                BlockPos neighbor = current.add(offset.x(), offset.y(), offset.z());
+                if (visited.contains(neighbor) || !treeType.isLogBlock(blocks.getMaterial(neighbor))) {
                     continue;
                 }
-
-                // Get the block at this position
-                Block block = neighbor.getBlock(world);
-                if (block == null) {
+                if (TreeFellerConfig.IGNORE_PARALLEL_TRUNK_PILLARS
+                        && isParallelPillar(blocks, current, neighbor, treeType)) {
                     continue;
                 }
+                visited.add(neighbor);
+                queue.add(neighbor);
+            }
+        }
+        return new TrunkScan(logs, overflow || !queue.isEmpty());
+    }
 
-                // Check if this block is a matching log
-                if (treeType.isLogBlock(block.getType())) {
-                    visited.add(neighbor);
+    private boolean isParallelPillar(BlockLookup blocks, BlockPos current, BlockPos neighbor, TreeType treeType) {
+        Axis currentAxis = blocks.getAxis(current);
+        if (currentAxis == null || currentAxis != blocks.getAxis(neighbor)) {
+            return false;
+        }
+
+        if (sameAxisCoordinate(currentAxis, current, neighbor)) {
+            return true;
+        }
+        if (alignedOnAxis(currentAxis, current, neighbor)) {
+            return false;
+        }
+
+        BlockPos first = switch (currentAxis) {
+            case X -> new BlockPos(current.x(), neighbor.y(), neighbor.z());
+            case Y -> new BlockPos(neighbor.x(), current.y(), neighbor.z());
+            case Z -> new BlockPos(neighbor.x(), neighbor.y(), current.z());
+        };
+        BlockPos second = switch (currentAxis) {
+            case X -> new BlockPos(neighbor.x(), current.y(), current.z());
+            case Y -> new BlockPos(current.x(), neighbor.y(), current.z());
+            case Z -> new BlockPos(current.x(), current.y(), neighbor.z());
+        };
+        return isPillar(blocks, first, treeType, currentAxis) || isPillar(blocks, second, treeType, currentAxis);
+    }
+
+    private boolean sameAxisCoordinate(Axis axis, BlockPos first, BlockPos second) {
+        return switch (axis) {
+            case X -> first.x() == second.x();
+            case Y -> first.y() == second.y();
+            case Z -> first.z() == second.z();
+        };
+    }
+
+    private boolean alignedOnAxis(Axis axis, BlockPos first, BlockPos second) {
+        return switch (axis) {
+            case X -> first.y() == second.y() && first.z() == second.z();
+            case Y -> first.x() == second.x() && first.z() == second.z();
+            case Z -> first.x() == second.x() && first.y() == second.y();
+        };
+    }
+
+    private boolean isPillar(BlockLookup blocks, BlockPos pos, TreeType treeType, Axis axis) {
+        return treeType.isLogBlock(blocks.getMaterial(pos)) && blocks.getAxis(pos) == axis;
+    }
+
+    private LeafScan scanLeaves(BlockLookup blocks, List<BlockPos> logs, TreeType treeType) {
+        Map<BlockPos, Integer> distances = new HashMap<>();
+        Map<BlockPos, BlockPos> parents = new HashMap<>();
+        Queue<BlockPos> queue = new ArrayDeque<>();
+        Set<BlockPos> logSet = new HashSet<>(logs);
+
+        for (BlockPos log : logs) {
+            for (BlockPos offset : leafOffsets()) {
+                BlockPos leaf = log.add(offset.x(), offset.y(), offset.z());
+                if (treeType.isLeafBlock(blocks.getMaterial(leaf))
+                        && acceptsLeafDistance(blocks, log, leaf)
+                        && distances.putIfAbsent(leaf, 1) == null) {
+                    parents.put(leaf, log);
+                    queue.add(leaf);
+                }
+            }
+        }
+
+        while (!queue.isEmpty()) {
+            BlockPos current = queue.poll();
+            int distance = distances.get(current);
+            if (distance >= TreeFellerConfig.LEAF_DETECT_RANGE) {
+                continue;
+            }
+            for (BlockPos offset : leafOffsets()) {
+                BlockPos neighbor = current.add(offset.x(), offset.y(), offset.z());
+                if (logSet.contains(neighbor) || distances.containsKey(neighbor)
+                        || !treeType.isLeafBlock(blocks.getMaterial(neighbor))
+                        || !acceptsLeafDistance(blocks, current, neighbor)) {
+                    continue;
+                }
+                distances.put(neighbor, distance + 1);
+                parents.put(neighbor, current);
+                queue.add(neighbor);
+            }
+        }
+        return new LeafScan(distances, parents);
+    }
+
+    private void verifyLeafOwnership(BlockLookup blocks, List<BlockPos> ownLogs,
+                                     TreeType treeType, LeafScan ownLeaves) {
+        Set<BlockPos> ownLogSet = new HashSet<>(ownLogs);
+        Set<BlockPos> candidateTrunks = new LinkedHashSet<>();
+        Queue<BlockPos> queue = new ArrayDeque<>(ownLeaves.distances().keySet());
+        Map<BlockPos, Integer> extendedDistances = new HashMap<>(ownLeaves.distances());
+
+        while (!queue.isEmpty()) {
+            BlockPos current = queue.poll();
+            int distance = extendedDistances.get(current);
+            for (BlockPos offset : leafOffsets()) {
+                BlockPos neighbor = current.add(offset.x(), offset.y(), offset.z());
+                if (!ownLogSet.contains(neighbor) && treeType.isLogBlock(blocks.getMaterial(neighbor))) {
+                    candidateTrunks.add(neighbor);
+                }
+                if (distance < TreeFellerConfig.LEAF_DETECT_RANGE
+                        && treeType.isLeafBlock(blocks.getMaterial(neighbor))
+                        && extendedDistances.putIfAbsent(neighbor, distance + 1) == null) {
                     queue.add(neighbor);
                 }
             }
         }
 
-        return logs;
-    }
-
-    /**
-     * Detects all leaf blocks associated with the tree.
-     * <p>
-     * Searches for leaf blocks within the configured detection range
-     * of any log block in the tree.
-     * <p>
-     * Individual Tree Detection: Only breaks leaves that match the tree's leaf type
-     * and are within range of the tree's logs. Uses a set to avoid duplicates.
-     *
-     * @param world the world containing the tree
-     * @param logs the list of log positions
-     * @param treeType the tree type to match
-     * @return list of all detected leaf positions
-     */
-    private List<BlockPos> detectLeaves(World world, List<BlockPos> logs, TreeType treeType) {
-        Set<BlockPos> leavesSet = new HashSet<>();
-        int detectRange = TreeFellerConfig.LEAF_DETECT_RANGE;
-        int detectRangeSquared = detectRange * detectRange;
-
-        // Search around each log for matching leaves
-        // This matches ThizThizzyDizzy/tree-feller's approach
-        for (BlockPos logPos : logs) {
-            // Search in a cube around the log
-            for (int dx = -detectRange; dx <= detectRange; dx++) {
-                for (int dy = -detectRange; dy <= detectRange; dy++) {
-                    for (int dz = -detectRange; dz <= detectRange; dz++) {
-                        // Skip if outside spherical range
-                        int distanceSquared = dx * dx + dy * dy + dz * dz;
-                        if (distanceSquared > detectRangeSquared) {
-                            continue;
-                        }
-
-                        BlockPos checkPos = new BlockPos(logPos.x() + dx, logPos.y() + dy, logPos.z() + dz);
-
-                        // Skip if already added
-                        if (leavesSet.contains(checkPos)) {
-                            continue;
-                        }
-
-                        Block block = checkPos.getBlock(world);
-                        if (block == null) {
-                            continue;
-                        }
-
-                        // Check if this is a matching leaf block for THIS tree type
-                        // This prevents breaking leaves from nearby trees of different types
-                        if (treeType.isLeafBlock(block.getType())) {
-                            leavesSet.add(checkPos);
-                        }
-                    }
+        for (BlockPos candidate : candidateTrunks) {
+            TreeStructure secondary = detect(blocks, candidate, false);
+            if (secondary == null || secondary.getLogs().stream().anyMatch(ownLogSet::contains)) {
+                continue;
+            }
+            LeafScan secondaryLeaves = scanLeaves(blocks, secondary.getLogs(), secondary.getTreeType());
+            Set<BlockPos> removed = new HashSet<>();
+            for (Map.Entry<BlockPos, Integer> entry : ownLeaves.distances().entrySet()) {
+                Integer secondaryDistance = secondaryLeaves.distances().get(entry.getKey());
+                if (secondaryDistance != null && secondaryDistance < entry.getValue()) {
+                    removed.add(entry.getKey());
                 }
             }
+            removeLeavesAndDescendants(ownLeaves, removed);
         }
-
-        return new ArrayList<>(leavesSet);
     }
 
-    /**
-     * Finds the tree type that matches the given material.
-     *
-     * @param material the material to match
-     * @return the matching tree type, or null if no match found
-     */
-    private TreeType findTreeType(org.bukkit.Material material) {
+    private void removeLeavesAndDescendants(LeafScan leaves, Set<BlockPos> removed) {
+        boolean changed;
+        do {
+            changed = false;
+            for (Map.Entry<BlockPos, BlockPos> entry : leaves.parents().entrySet()) {
+                if (removed.contains(entry.getValue()) && removed.add(entry.getKey())) {
+                    changed = true;
+                }
+            }
+        } while (changed);
+        removed.forEach(leaves.distances()::remove);
+    }
+
+    private boolean acceptsLeafDistance(BlockLookup blocks, BlockPos source, BlockPos target) {
+        if (!TreeFellerConfig.USE_LEAF_DISTANCE) {
+            return true;
+        }
+        int sourceDistance = blocks.getLeafDistance(source);
+        int targetDistance = blocks.getLeafDistance(target);
+        return sourceDistance == -1 || targetDistance == -1 || sourceDistance >= 7 || targetDistance > sourceDistance;
+    }
+
+    private BlockPos[] leafOffsets() {
+        return TreeFellerConfig.DIAGONAL_LEAVES ? ALL_OFFSETS : CARDINAL_OFFSETS;
+    }
+
+    private TreeType findTreeType(Material material) {
+        if (material == null) {
+            return null;
+        }
         for (TreeType treeType : TreeFellerConfig.TREE_TYPES) {
             if (treeType.isLogBlock(material)) {
                 return treeType;
             }
         }
         return null;
+    }
+
+    private static int distanceSquared(BlockPos first, BlockPos second) {
+        return first.distanceSquared(second);
+    }
+
+    private static BlockPos[] createOffsets(boolean diagonals) {
+        List<BlockPos> offsets = new ArrayList<>();
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                for (int z = -1; z <= 1; z++) {
+                    if (x == 0 && y == 0 && z == 0) {
+                        continue;
+                    }
+                    if (diagonals || Math.abs(x) + Math.abs(y) + Math.abs(z) == 1) {
+                        offsets.add(new BlockPos(x, y, z));
+                    }
+                }
+            }
+        }
+        return offsets.toArray(BlockPos[]::new);
+    }
+
+    interface BlockLookup {
+        Material getMaterial(BlockPos pos);
+
+        Axis getAxis(BlockPos pos);
+
+        int getLeafDistance(BlockPos pos);
+    }
+
+    enum Axis {
+        X, Y, Z
+    }
+
+    private record BukkitBlockLookup(World world) implements BlockLookup {
+        @Override
+        public Material getMaterial(BlockPos pos) {
+            return pos.getBlock(world).getType();
+        }
+
+        @Override
+        public Axis getAxis(BlockPos pos) {
+            BlockData data = pos.getBlock(world).getBlockData();
+            if (!(data instanceof Orientable orientable)) {
+                return null;
+            }
+            return Axis.valueOf(orientable.getAxis().name());
+        }
+
+        @Override
+        public int getLeafDistance(BlockPos pos) {
+            BlockData data = pos.getBlock(world).getBlockData();
+            return data instanceof Leaves leaves ? leaves.getDistance() : -1;
+        }
+    }
+
+    private record TrunkScan(List<BlockPos> logs, boolean overflow) {
+    }
+
+    private record LeafScan(Map<BlockPos, Integer> distances, Map<BlockPos, BlockPos> parents) {
     }
 }

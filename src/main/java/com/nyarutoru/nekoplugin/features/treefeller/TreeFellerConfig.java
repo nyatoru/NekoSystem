@@ -86,6 +86,14 @@ public final class TreeFellerConfig {
      */
     public static final int LEAF_DETECT_RANGE = 6;
 
+    public static final boolean DIAGONAL_LEAVES = false;
+
+    public static final boolean SECONDARY_TREE_VERIFICATION = true;
+
+    public static final boolean IGNORE_PARALLEL_TRUNK_PILLARS = false;
+
+    public static final boolean USE_LEAF_DISTANCE = true;
+
     /**
      * Accelerate natural decay after TreeFeller removes a tree's logs.
      */
@@ -100,13 +108,6 @@ public final class TreeFellerConfig {
      * Maximum delay before an unsupported leaf is checked for decay.
      */
     public static final int FAST_LEAF_DECAY_MAX_DELAY_TICKS = 100;
-
-    /**
-     * Allow diagonally connected logs to be detected as part of the tree.
-     * If false, only orthogonally connected logs (6 directions) are detected.
-     * Matches reference implementation default (diagonal-leaves: false).
-     */
-    public static final boolean DIAGONAL_LOGS = false;
 
     /**
      * Ignore leaf block data (persistent flag).

@@ -40,6 +40,8 @@ public class TreeStructure {
      */
     private final TreeType treeType;
 
+    private final boolean overflow;
+
     /**
      * Creates a new tree structure.
      *
@@ -50,10 +52,16 @@ public class TreeStructure {
      */
     public TreeStructure(List<BlockPos> logs, List<BlockPos> leaves,
                          BlockPos origin, TreeType treeType) {
-        this.logs = logs != null ? Collections.unmodifiableList(logs) : Collections.emptyList();
-        this.leaves = leaves != null ? Collections.unmodifiableList(leaves) : Collections.emptyList();
+        this(logs, leaves, origin, treeType, false);
+    }
+
+    public TreeStructure(List<BlockPos> logs, List<BlockPos> leaves,
+                         BlockPos origin, TreeType treeType, boolean overflow) {
+        this.logs = logs != null ? Collections.unmodifiableList(new ArrayList<>(logs)) : Collections.emptyList();
+        this.leaves = leaves != null ? Collections.unmodifiableList(new ArrayList<>(leaves)) : Collections.emptyList();
         this.origin = origin;
         this.treeType = treeType;
+        this.overflow = overflow;
     }
 
     /**
@@ -192,6 +200,10 @@ public class TreeStructure {
      */
     public int getTotalBlocks() {
         return logs.size() + leaves.size();
+    }
+
+    public boolean isOverflow() {
+        return overflow;
     }
 
     /**

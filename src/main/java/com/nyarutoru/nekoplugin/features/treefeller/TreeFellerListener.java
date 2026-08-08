@@ -259,7 +259,7 @@ public class TreeFellerListener implements Listener {
     /**
      * Handles block break events for tree felling.
      */
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
 
@@ -278,9 +278,6 @@ public class TreeFellerListener implements Listener {
         if (!LOGS.contains(blockType)) {
             return;
         }
-
-        // Clean up player-placed data for broken logs
-        cleanupPlayerPlaced(block);
 
         // Check if feature is enabled
         if (!TreeFellerConfig.ENABLED) {
@@ -349,30 +346,19 @@ public class TreeFellerListener implements Listener {
             return;
         }
 
-        // Check if tree exceeds max size and handle partial felling
         List<BlockPos> logsToFell = tree.getLogs();
-        if (logsToFell.size() > TreeFellerConfig.MAX_TREE_SIZE) {
-            if (!TreeFellerConfig.ALLOW_PARTIAL) {
-                if (TreeFellerConfig.DEBUG) {
-                    player.sendMessage(Component.text("TreeFeller: Tree too large (" + tree.getLogCount() + 
-                            " > " + TreeFellerConfig.MAX_TREE_SIZE + ") and partial felling disabled", NamedTextColor.YELLOW));
-                }
-                return;
-            }
-            // Partial felling: limit to MAX_TREE_SIZE logs
-            logsToFell = tree.getLogs().subList(0, TreeFellerConfig.MAX_TREE_SIZE);
+        if (tree.isOverflow() && !TreeFellerConfig.ALLOW_PARTIAL) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Partial felling (" + TreeFellerConfig.MAX_TREE_SIZE + 
-                        " of " + tree.getLogCount() + " logs)", NamedTextColor.YELLOW));
+                player.sendMessage(Component.text("TreeFeller: Tree exceeds the maximum size and partial felling is disabled",
+                        NamedTextColor.YELLOW));
             }
+            return;
         }
-
-        // Cancel the original block break (we'll handle it ourselves)
-        event.setCancelled(true);
 
         // Calculate durability cost: base cost per log × number of logs to fell
         int logCount = logsToFell.size();
         int totalDurabilityCost = toolConfig.getDurabilityCost() * logCount;
+        ItemStack dropTool = tool.clone();
 
         // Apply durability cost (respects Unbreaking and Unbreakable)
         if (!ItemUtils.consumeDurabilityOrDeactivate(player, tool, totalDurabilityCost, toolConfig.getName())) {
@@ -383,7 +369,9 @@ public class TreeFellerListener implements Listener {
         }
 
         // Break the tree logs
-        breakTree(player, tree, logsToFell);
+        event.setCancelled(true);
+        cleanupPlayerPlaced(block);
+        breakTree(player, tree, logsToFell, dropTool);
 
         // Handle cascade if enabled
         if (TreeFellerConfig.CASCADE) {
@@ -405,11 +393,11 @@ public class TreeFellerListener implements Listener {
      * @param tree the tree structure to break
      * @param logsToFell the list of logs to fell (may be partial)
      */
-    private void breakTree(Player player, TreeStructure tree, List<BlockPos> logsToFell) {
+    private void breakTree(Player player, TreeStructure tree, List<BlockPos> logsToFell, ItemStack dropTool) {
         World world = player.getWorld();
 
         // Play animation for specified logs (breaks them sequentially or instantly)
-        animation.playAnimation(world, logsToFell, effects);
+        animation.playAnimation(world, logsToFell, dropTool, effects);
         long decayStartDelay = TreeFellerConfig.ANIMATION_ENABLED
                 ? (long) logsToFell.size() * TreeFellerConfig.ANIMATION_DELAY_TICKS
                 : 0L;
@@ -501,11 +489,8 @@ public class TreeFellerListener implements Listener {
 
                 // Check if we should fell the entire tree or partial
                 List<BlockPos> logsToFell = adjacentTree.getLogs();
-                if (logsToFell.size() > TreeFellerConfig.MAX_TREE_SIZE) {
-                    if (!TreeFellerConfig.ALLOW_PARTIAL) {
-                        continue;
-                    }
-                    logsToFell = adjacentTree.getLogs().subList(0, TreeFellerConfig.MAX_TREE_SIZE);
+                if (adjacentTree.isOverflow() && !TreeFellerConfig.ALLOW_PARTIAL) {
+                    continue;
                 }
 
                 // Calculate and apply durability cost
@@ -520,7 +505,7 @@ public class TreeFellerListener implements Listener {
                 }
 
                 // Fell the adjacent tree
-                breakTree(player, adjacentTree, logsToFell);
+                breakTree(player, adjacentTree, logsToFell, tool.clone());
                 cascadedTrees++;
 
                 // Add logs to queue for further cascade checking
