@@ -1,8 +1,11 @@
 package com.nyarutoru.nekoplugin.features.server;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
+import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Tag;
 import org.bukkit.inventory.FurnaceRecipe;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.RecipeChoice;
@@ -13,6 +16,7 @@ import org.bukkit.inventory.RecipeChoice;
 public class ServerRecipes {
 
     private static final String RECIPE_KEY = "rotten_flesh_to_leather";
+    private static final String MOSS_RECIPE_ID = "dirt_leaves_to_moss";
     private final NekoPlugin plugin;
     private NamespacedKey recipeKey;
 
@@ -26,6 +30,7 @@ public class ServerRecipes {
     public void registerAll() {
         unregisterAll();
         registerRottenFleshToLeather();
+        registerMossRecipe();
     }
 
     /**
@@ -46,10 +51,33 @@ public class ServerRecipes {
         plugin.getServer().addRecipe(recipe);
     }
 
+    private void registerMossRecipe() {
+        // 8 dirt + any leaves -> 8 moss_block (shapeless, fills 3x3)
+        ItemStack result = new ItemStack(Material.MOSS_BLOCK, 8);
+        CustomRecipe.Ingredient dirt = CustomRecipe.Ingredient.of(Material.DIRT);
+        CustomRecipe.Ingredient leaves = CustomRecipe.Ingredient.ofTag(Tag.LEAVES);
+        CustomRecipe recipe = CustomRecipe.builder(MOSS_RECIPE_ID)
+                .category("server")
+                .result(result)
+                .shapeless()
+                .ingredient(0, dirt)
+                .ingredient(1, dirt)
+                .ingredient(2, dirt)
+                .ingredient(3, dirt)
+                .ingredient(4, dirt)
+                .ingredient(5, dirt)
+                .ingredient(6, dirt)
+                .ingredient(7, dirt)
+                .ingredient(8, leaves)
+                .build();
+        RecipeAPI.getInstance().registerRecipe(recipe);
+    }
+
     public void unregisterAll() {
         if (recipeKey != null) {
             plugin.getServer().removeRecipe(recipeKey);
             recipeKey = null;
         }
+        RecipeAPI.getInstance().unregisterRecipe(MOSS_RECIPE_ID);
     }
 }

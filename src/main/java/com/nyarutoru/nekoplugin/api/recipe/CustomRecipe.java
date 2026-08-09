@@ -2,10 +2,14 @@ package com.nyarutoru.nekoplugin.api.recipe;
 
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Tag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+
+import java.util.Collection;
+import java.util.Set;
 
 /**
  * Represents a custom crafting recipe.
@@ -235,29 +239,43 @@ public class CustomRecipe {
     // ========== Ingredient ==========
 
     public static class Ingredient {
-        public static final Ingredient EMPTY = new Ingredient(null, null, null, null);
+        public static final Ingredient EMPTY = new Ingredient(null, null, null, null, null);
 
         private final Material material;
+        private final Set<Material> materials;
         private final NamespacedKey customKey;
         private final String customValue;
         private final ItemStack displayItem;
 
-        private Ingredient(Material material, NamespacedKey customKey, String customValue, ItemStack displayItem) {
+        private Ingredient(Material material, Set<Material> materials, NamespacedKey customKey, String customValue, ItemStack displayItem) {
             this.material = material;
+            this.materials = materials == null || materials.isEmpty() ? null : Set.copyOf(materials);
             this.customKey = customKey;
             this.customValue = customValue;
             this.displayItem = displayItem;
         }
 
         public static Ingredient of(Material material) {
-            return new Ingredient(material, null, null, null);
+            return new Ingredient(material, null, null, null, null);
+        }
+
+        public static Ingredient ofMaterials(Material... mats) {
+            return new Ingredient(null, Set.of(mats), null, null, null);
+        }
+
+        public static Ingredient ofMaterials(Collection<Material> mats) {
+            return new Ingredient(null, Set.copyOf(mats), null, null, null);
+        }
+
+        public static Ingredient ofTag(Tag<Material> tag) {
+            return new Ingredient(null, Set.copyOf(tag.getValues()), null, null, null);
         }
 
         /**
          * Create an ingredient with a custom item display (for recipe preview).
          */
         public static Ingredient ofCustomItem(Material material, NamespacedKey key, String value) {
-            return new Ingredient(material, key, value, null);
+            return new Ingredient(material, null, key, value, null);
         }
 
         /**
@@ -265,15 +283,21 @@ public class CustomRecipe {
          */
         public static Ingredient ofCustomItem(Material material, NamespacedKey key, String value,
                                               ItemStack displayItem) {
-            return new Ingredient(material, key, value, displayItem != null ? displayItem.clone() : null);
+            return new Ingredient(material, null, key, value, displayItem != null ? displayItem.clone() : null);
         }
 
         public boolean isEmpty() {
-            return material == null;
+            return material == null && materials == null;
         }
 
         public Material getMaterial() {
-            return material;
+            if (material != null) return material;
+            if (materials != null && !materials.isEmpty()) return materials.iterator().next();
+            return null;
+        }
+
+        public Set<Material> getMaterials() {
+            return materials;
         }
 
         /**
@@ -287,6 +311,11 @@ public class CustomRecipe {
             if (material != null) {
                 return new ItemStack(material);
             }
+            if (materials != null && !materials.isEmpty()) {
+                // ponytail: deterministic preview for tag ingredients (e.g. leaves -> oak)
+                if (materials.contains(Material.OAK_LEAVES)) return new ItemStack(Material.OAK_LEAVES);
+                return new ItemStack(materials.iterator().next());
+            }
             return null;
         }
 
@@ -299,7 +328,9 @@ public class CustomRecipe {
                 return false;
             }
 
-            if (item.getType() != material) {
+            if (materials != null) {
+                if (!materials.contains(item.getType())) return false;
+            } else if (item.getType() != material) {
                 return false;
             }
 
