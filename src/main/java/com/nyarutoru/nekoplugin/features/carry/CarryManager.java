@@ -76,6 +76,7 @@ final class CarryManager {
             return false;
         }
         clearLiveInventory(state);
+        clearLiveFurnaceExp(block);
         block.setType(Material.AIR, false);
         carriedByPlayer.put(player.getUniqueId(), new CarriedObject.Block(state, display));
         player.sendActionBar(ComponentUtils.success("Picked up " + state.getType().key().value().replace('_', ' ')));
@@ -154,6 +155,15 @@ final class CarryManager {
     static void clearLiveInventory(BlockState state) {
         if (state instanceof TileStateInventoryHolder inventoryHolder) {
             inventoryHolder.getInventory().clear();
+        }
+    }
+
+    static void clearLiveFurnaceExp(Block block) {
+        // ponytail: furnace stores XP in recipesUsed; preRemoveSideEffects drops it on block removal -> dupe each carry
+        // clear live BE recipes before setType(AIR) so no orb spawns, snapshot keeps XP for placement without dupe
+        BlockState live = block.getState(false);
+        if (live instanceof org.bukkit.block.Furnace furnace) {
+            furnace.setRecipesUsed(java.util.Collections.emptyMap());
         }
     }
 
