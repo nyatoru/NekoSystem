@@ -217,16 +217,17 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
 
     private static void applyWaterEffects(Player player) {
         // Heart of the Sea while in water -> Conduit Power + Dolphin's Grace, clear mining fatigue
+        // 300 ticks (15s) + refresh every 20 ticks keeps remaining >200 ticks so icon never flashes (<10s flashes)
         player.removePotionEffect(PotionEffectType.MINING_FATIGUE);
-        player.addPotionEffect(new PotionEffect(PotionEffectType.CONDUIT_POWER, 60, 0, false, false, true));
-        player.addPotionEffect(new PotionEffect(PotionEffectType.DOLPHINS_GRACE, 60, 0, false, false, true));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.CONDUIT_POWER, 300, 0, false, false, true));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.DOLPHINS_GRACE, 300, 0, false, false, true));
     }
 
     private static void applyLandEffects(Player player) {
         // Slows mining when not in water
         player.removePotionEffect(PotionEffectType.CONDUIT_POWER);
         player.removePotionEffect(PotionEffectType.DOLPHINS_GRACE);
-        player.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, 60, 1, false, false, true));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, 300, 1, false, false, true));
     }
 
     private static void clearCurseEffects(Player player) {
