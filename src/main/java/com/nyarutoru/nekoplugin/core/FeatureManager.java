@@ -2,122 +2,201 @@ package com.nyarutoru.nekoplugin.core;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 
-/**
- * Manages all plugin features.
- * Handles registration, enabling, and disabling of features.
- */
+/** Manages deterministic, serialized feature lifecycle transitions. */
 public class FeatureManager {
-
     private static volatile FeatureManager instance;
-    private final Map<String, Feature> features = new ConcurrentHashMap<>();
+    private final Map<String, Feature> features = new LinkedHashMap<>();
+    private final java.util.logging.Logger fallbackLogger;
     private NekoPlugin plugin;
 
-    private FeatureManager() {
+    FeatureManager() {
+        this(java.util.logging.Logger.getLogger(FeatureManager.class.getName()));
+    }
+
+    FeatureManager(java.util.logging.Logger fallbackLogger) {
+        this.fallbackLogger = Objects.requireNonNull(fallbackLogger, "fallbackLogger");
     }
 
     public static FeatureManager getInstance() {
         if (instance == null) {
             synchronized (FeatureManager.class) {
-                if (instance == null) {
-                    instance = new FeatureManager();
-                }
+                if (instance == null) instance = new FeatureManager();
             }
         }
         return instance;
     }
 
-    /**
-     * Initialize the manager with plugin reference.
-     */
-    public void initialize(NekoPlugin plugin) {
-        this.plugin = plugin;
+    public synchronized void initialize(NekoPlugin plugin) {
+        this.plugin = Objects.requireNonNull(plugin, "plugin");
     }
 
-    /**
-     * Registers a feature.
-     */
-    public void registerFeature(Feature feature) {
-        if (features.containsKey(feature.getId())) {
-            plugin.getLogger().warning("Feature already registered: " + feature.getId());
+    public synchronized void registerFeature(Feature feature) {
+        Objects.requireNonNull(feature, "feature");
+        String id = Objects.requireNonNull(feature.getId(), "feature id");
+        if (features.containsKey(id)) {
+            logger().warning("Feature already registered: " + id);
             return;
         }
-        features.put(feature.getId(), feature);
-        plugin.getLogger().info("Registered feature: " + feature.getName() + " (" + feature.getId() + ")");
+        features.put(id, feature);
+        logger().info("Registered feature: " + feature.getName() + " (" + id + ")");
     }
 
-    /**
-     * Enables all registered features.
-     */
+    public synchronized TransitionResult enable(String id) {
+        Feature feature = features.get(id);
+        if (feature == null) return result(id, TransitionStatus.NOT_FOUND, false, "Unknown feature");
+        if (safeIsEnabled(feature)) return result(id, TransitionStatus.ALREADY_IN_STATE, true, "Already enabled");
+
+        try {
+            feature.onEnable(plugin);
+            if (safeIsEnabled(feature)) return result(id, TransitionStatus.CHANGED, true, "Enabled");
+            return failedEnable(feature, null, "Feature did not report enabled");
+        } catch (Throwable failure) {
+            if (isFatal(failure)) throw (Error) failure;
+            return failedEnable(feature, failure, message(failure));
+        }
+    }
+
+    private TransitionResult failedEnable(Feature feature, Throwable enableFailure, String detail) {
+        if (enableFailure != null) {
+            logger().log(Level.SEVERE, "Failed to enable feature: " + safeName(feature), enableFailure);
+        } else {
+            logger().severe("Failed to enable feature: " + safeName(feature) + " (" + detail + ")");
+        }
+        Throwable rollbackFailure = null;
+        try {
+            feature.onDisable();
+        } catch (Throwable failure) {
+            if (isFatal(failure)) throw (Error) failure;
+            rollbackFailure = failure;
+            logger().log(Level.SEVERE, "Failed to roll back feature: " + safeName(feature), failure);
+            if (enableFailure != null && enableFailure != failure) enableFailure.addSuppressed(failure);
+        }
+        boolean enabled = safeIsEnabled(feature);
+        String suffix = rollbackFailure == null ? "" : "; rollback failed: " + message(rollbackFailure);
+        return result(feature.getId(), TransitionStatus.FAILED, enabled, detail + suffix);
+    }
+
+    public synchronized TransitionResult disable(String id) {
+        Feature feature = features.get(id);
+        if (feature == null) return result(id, TransitionStatus.NOT_FOUND, false, "Unknown feature");
+        if (!safeIsEnabled(feature)) return result(id, TransitionStatus.ALREADY_IN_STATE, false, "Already disabled");
+        try {
+            feature.onDisable();
+            if (safeIsEnabled(feature)) return result(id, TransitionStatus.FAILED, true, "Feature did not report disabled");
+            return result(id, TransitionStatus.CHANGED, false, "Disabled");
+        } catch (Throwable failure) {
+            if (isFatal(failure)) throw (Error) failure;
+            logger().log(Level.SEVERE, "Failed to disable feature: " + safeName(feature), failure);
+            return result(id, TransitionStatus.FAILED, safeIsEnabled(feature), message(failure));
+        }
+    }
+
+    public synchronized TransitionResult setEnabled(String id, boolean enabled) {
+        return enabled ? enable(id) : disable(id);
+    }
+
     public void enableAll() {
+        enableDesired(ignored -> true);
+    }
+
+    public synchronized void enableDesired(Predicate<String> desiredEnabled) {
+        Objects.requireNonNull(desiredEnabled, "desiredEnabled");
         int enabled = 0;
         int failed = 0;
-
         for (Feature feature : features.values()) {
+            boolean desired;
             try {
-                feature.onEnable(plugin);
-                enabled++;
-            } catch (Exception e) {
-                plugin.getLogger().log(Level.SEVERE, "Failed to enable feature: " + feature.getName(), e);
+                desired = desiredEnabled.test(feature.getId());
+            } catch (Throwable failure) {
+                if (isFatal(failure)) throw (Error) failure;
                 failed++;
+                logger().log(Level.SEVERE, "Failed to resolve desired state for feature: " + safeName(feature), failure);
+                continue;
             }
+            if (!desired) continue;
+            TransitionResult transition = enable(feature.getId());
+            if (transition.success()) enabled++; else failed++;
         }
-
-        // Summary log
-        if (failed == 0) {
-            plugin.getLogger().info(String.format("✓ Enabled %d features successfully", enabled));
-        } else {
-            plugin.getLogger().warning(String.format("Enabled %d features (%d failed)", enabled, failed));
-        }
+        if (failed == 0) logger().info("✓ Enabled " + enabled + " features successfully");
+        else logger().warning("Enabled " + enabled + " features (" + failed + " failed)");
     }
 
-    /**
-     * Disables all registered features.
-     */
-    public void disableAll() {
+    public synchronized void disableAll() {
         int disabled = 0;
         int failed = 0;
-
-        for (Feature feature : features.values()) {
-            try {
-                feature.onDisable();
-                disabled++;
-            } catch (Exception e) {
-                plugin.getLogger().log(Level.SEVERE, "Failed to disable feature: " + feature.getName(), e);
-                failed++;
-            }
+        Feature[] ordered = features.values().toArray(Feature[]::new);
+        for (int i = ordered.length - 1; i >= 0; i--) {
+            Feature feature = ordered[i];
+            if (!safeIsEnabled(feature)) continue;
+            TransitionResult transition = disable(feature.getId());
+            if (transition.success()) disabled++; else failed++;
         }
+        if (failed == 0) logger().info("✓ Disabled " + disabled + " features successfully");
+        else logger().warning("Disabled " + disabled + " features (" + failed + " failed)");
+    }
 
-        // Summary log
-        if (failed == 0) {
-            plugin.getLogger().info(String.format("✓ Disabled %d features successfully", disabled));
-        } else {
-            plugin.getLogger().warning(String.format("Disabled %d features (%d failed)", disabled, failed));
+    /** Disables features, then drops registrations and the plugin reference for a clean reload. */
+    public synchronized void shutdown() {
+        disableAll();
+        features.clear();
+        plugin = null;
+    }
+
+    /** Alias for tests/reloads that need the same complete lifecycle reset. */
+    public synchronized void reset() {
+        shutdown();
+    }
+
+    private boolean safeIsEnabled(Feature feature) {
+        try {
+            return feature.isEnabled();
+        } catch (Throwable failure) {
+            if (isFatal(failure)) throw (Error) failure;
+            logger().log(Level.SEVERE, "Failed to inspect feature state: " + safeName(feature), failure);
+            return false;
         }
     }
 
-    /**
-     * Gets a feature by its ID.
-     */
-    public Feature getFeature(String id) {
-        return features.get(id);
+    private String safeName(Feature feature) {
+        try {
+            return feature.getName();
+        } catch (Throwable ignored) {
+            return "<unknown>";
+        }
     }
 
-    /**
-     * Gets all registered features.
-     */
-    public Map<String, Feature> getAllFeatures() {
-        return new HashMap<>(features);
+    private static boolean isFatal(Throwable failure) {
+        return failure instanceof VirtualMachineError || failure instanceof LinkageError;
     }
 
-    /**
-     * Gets the number of registered features.
-     */
-    public int getFeatureCount() {
-        return features.size();
+    private static String message(Throwable failure) {
+        String message = failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass().getSimpleName() : message;
+    }
+
+    private static TransitionResult result(String id, TransitionStatus status, boolean enabled, String message) {
+        return new TransitionResult(id, status, enabled, message);
+    }
+
+    private java.util.logging.Logger logger() {
+        return plugin == null ? fallbackLogger : plugin.getLogger();
+    }
+
+    public synchronized Feature getFeature(String id) { return features.get(id); }
+    public synchronized Map<String, Feature> getAllFeatures() { return new LinkedHashMap<>(features); }
+    public synchronized int getFeatureCount() { return features.size(); }
+
+    public enum TransitionStatus { CHANGED, ALREADY_IN_STATE, NOT_FOUND, FAILED }
+
+    public record TransitionResult(String featureId, TransitionStatus status, boolean enabled, String message) {
+        public boolean success() {
+            return status == TransitionStatus.CHANGED || status == TransitionStatus.ALREADY_IN_STATE;
+        }
     }
 }

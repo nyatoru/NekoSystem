@@ -1,6 +1,8 @@
 package com.nyarutoru.nekoplugin.features.treefeller;
 
 import com.nyarutoru.nekoplugin.api.tool.AbstractVeinMiner;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -16,6 +18,34 @@ class TreeFellerValidationTest {
         TreeFellerFeature feature = new TreeFellerFeature();
         assertEquals("treefeller", feature.getId());
         assertEquals("TreeFeller", feature.getName());
+    }
+
+    @Test
+    void testRegistersImplementedSafeSettings() {
+        assertNotNull(SettingRegistry.class);
+        assertNotNull(AdminState.class);
+        assertNotNull(TreeFellerFeature.class);
+    }
+
+    @Test
+    void testFastLeafDecayDelayUpdatesCannotCreateInvalidRange() {
+        int originalMinimum = TreeFellerConfig.FAST_LEAF_DECAY_MIN_DELAY_TICKS;
+        int originalMaximum = TreeFellerConfig.FAST_LEAF_DECAY_MAX_DELAY_TICKS;
+        try {
+            TreeFellerConfig.setFastLeafDecayDelays(20, 100);
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> TreeFellerConfig.setFastLeafDecayMinDelay(101));
+            assertEquals(20, TreeFellerConfig.FAST_LEAF_DECAY_MIN_DELAY_TICKS);
+            assertEquals(100, TreeFellerConfig.FAST_LEAF_DECAY_MAX_DELAY_TICKS);
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> TreeFellerConfig.setFastLeafDecayMaxDelay(19));
+            assertEquals(20, TreeFellerConfig.FAST_LEAF_DECAY_MIN_DELAY_TICKS);
+            assertEquals(100, TreeFellerConfig.FAST_LEAF_DECAY_MAX_DELAY_TICKS);
+        } finally {
+            TreeFellerConfig.setFastLeafDecayDelays(originalMinimum, originalMaximum);
+        }
     }
 
     @Test

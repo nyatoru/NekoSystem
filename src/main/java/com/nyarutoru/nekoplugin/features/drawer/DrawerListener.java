@@ -158,6 +158,7 @@ public class DrawerListener implements Listener {
             Drawer drawer = DrawerManager.getInstance().getDrawer(source.getLocation());
             if (drawer != null) {
                 event.setCancelled(true);
+                if (!Drawer.areWithdrawalsEnabled()) return;
 
                 if (drawer.isEmpty())
                     return;

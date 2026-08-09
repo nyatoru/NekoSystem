@@ -1,6 +1,8 @@
 package com.nyarutoru.nekoplugin.core;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 
 /**
  * Interface for plugin features.
@@ -34,4 +36,7 @@ public interface Feature {
      * Checks if this feature is currently enabled.
      */
     boolean isEnabled();
+
+    default void registerSettings(SettingRegistry registry, AdminState state) {
+    }
 }

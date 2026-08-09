@@ -25,22 +25,30 @@ final class CarryPolicy {
     }
 
     static boolean isCarryableMob(Entity entity) {
+        return isCarryableMob(entity, true, true);
+    }
+
+    static boolean isCarryableMob(Entity entity, boolean animals, boolean villagers) {
         if (!(entity instanceof LivingEntity living) || entity instanceof Player) return false;
         if (!entity.isValid() || entity.isDead() || entity.isInsideVehicle() || !entity.getPassengers().isEmpty()) return false;
         if (living.isLeashed()) return false;
-        return entity instanceof Animals || entity instanceof AbstractVillager;
+        return (animals && entity instanceof Animals) || (villagers && entity instanceof AbstractVillager);
     }
 
     static boolean isCarryableBlock(BlockState state) {
+        return isCarryableBlock(state, true, true, true);
+    }
+
+    static boolean isCarryableBlock(BlockState state, boolean containers, boolean lecterns, boolean workstations) {
         Material material = state.getType();
         if (!material.isBlock() || material.isAir()) return false;
         return isCarryableBlockCategory(
-            state instanceof Container || state instanceof ChiseledBookshelf,
-            state instanceof Lectern,
-            material == Material.CRAFTING_TABLE
+            containers && (state instanceof Container || state instanceof ChiseledBookshelf),
+            lecterns && state instanceof Lectern,
+            workstations && (material == Material.CRAFTING_TABLE
                 || state.getBlockData() instanceof Furnace
                 || state.getBlockData() instanceof BrewingStand
-                || state.getBlockData() instanceof Crafter
+                || state.getBlockData() instanceof Crafter)
         );
     }
 

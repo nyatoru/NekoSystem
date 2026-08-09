@@ -1,9 +1,15 @@
 package com.nyarutoru.nekoplugin;
 
 import com.nyarutoru.nekoplugin.api.gui.GUIManager;
+import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
+import com.nyarutoru.nekoplugin.api.tool.ActiveToolAPI;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolListener;
 import com.nyarutoru.nekoplugin.core.DatabaseManager;
 import com.nyarutoru.nekoplugin.core.FeatureManager;
+import com.nyarutoru.nekoplugin.core.admin.AdminConfigStore;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.admin.NekoCommand;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import com.nyarutoru.nekoplugin.features.carry.CarryFeature;
 import com.nyarutoru.nekoplugin.features.drawer.DrawerFeature;
 import com.nyarutoru.nekoplugin.features.graves.GravesFeature;
@@ -20,6 +26,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class NekoPlugin extends JavaPlugin {
 
     private static NekoPlugin instance;
+    private AdminConfigStore adminConfigStore;
 
     public static NekoPlugin getInstance() {
         return instance;
@@ -29,26 +36,57 @@ public class NekoPlugin extends JavaPlugin {
     public void onEnable() {
         instance = this;
 
-        // Initialize core managers
+        // Load operator choices before any feature is enabled.
+        AdminState adminState = new AdminState();
+        SettingRegistry settingRegistry = new SettingRegistry();
+        adminConfigStore = new AdminConfigStore(this, adminState);
+        adminConfigStore.load();
+
         DatabaseManager.getInstance().initialize(this);
         FeatureManager.getInstance().initialize(this);
         GUIManager.getInstance().initialize(this);
 
         // Register features
-        FeatureManager.getInstance().registerFeature(new CarryFeature());
-        FeatureManager.getInstance().registerFeature(new DrawerFeature());
-        FeatureManager.getInstance().registerFeature(new GravesFeature());
-        FeatureManager.getInstance().registerFeature(new OreExcavationFeature());
-        FeatureManager.getInstance().registerFeature(new SandExcavationFeature());
-        FeatureManager.getInstance().registerFeature(new HammerFeature());
-        FeatureManager.getInstance().registerFeature(new PlayerFeature());
-        FeatureManager.getInstance().registerFeature(new ServerFeature());
-        FeatureManager.getInstance().registerFeature(new WoodcuttingFeature());
-        FeatureManager.getInstance().registerFeature(new TreeFellerFeature());
-        FeatureManager.getInstance().registerFeature(new VillagerOptimizeFeature());
+        CarryFeature carryFeature = new CarryFeature();
+        DrawerFeature drawerFeature = new DrawerFeature();
+        GravesFeature gravesFeature = new GravesFeature();
+        OreExcavationFeature oreExcavationFeature = new OreExcavationFeature();
+        SandExcavationFeature sandExcavationFeature = new SandExcavationFeature();
+        HammerFeature hammerFeature = new HammerFeature();
+        PlayerFeature playerFeature = new PlayerFeature();
+        ServerFeature serverFeature = new ServerFeature();
+        WoodcuttingFeature woodcuttingFeature = new WoodcuttingFeature();
+        TreeFellerFeature treeFellerFeature = new TreeFellerFeature();
+        VillagerOptimizeFeature villagerOptimizeFeature = new VillagerOptimizeFeature();
 
-        // Enable all features
-        FeatureManager.getInstance().enableAll();
+        FeatureManager.getInstance().registerFeature(carryFeature);
+        FeatureManager.getInstance().registerFeature(drawerFeature);
+        FeatureManager.getInstance().registerFeature(gravesFeature);
+        FeatureManager.getInstance().registerFeature(oreExcavationFeature);
+        FeatureManager.getInstance().registerFeature(sandExcavationFeature);
+        FeatureManager.getInstance().registerFeature(hammerFeature);
+        FeatureManager.getInstance().registerFeature(playerFeature);
+        FeatureManager.getInstance().registerFeature(serverFeature);
+        FeatureManager.getInstance().registerFeature(woodcuttingFeature);
+        FeatureManager.getInstance().registerFeature(treeFellerFeature);
+        FeatureManager.getInstance().registerFeature(villagerOptimizeFeature);
+
+        carryFeature.registerSettings(settingRegistry, adminState);
+        drawerFeature.registerSettings(settingRegistry, adminState);
+        gravesFeature.registerSettings(settingRegistry, adminState);
+        oreExcavationFeature.registerSettings(settingRegistry, adminState);
+        sandExcavationFeature.registerSettings(settingRegistry, adminState);
+        hammerFeature.registerSettings(settingRegistry, adminState);
+        playerFeature.registerSettings(settingRegistry, adminState);
+        serverFeature.registerSettings(settingRegistry, adminState);
+        woodcuttingFeature.registerSettings(settingRegistry, adminState);
+        treeFellerFeature.registerSettings(settingRegistry, adminState);
+        villagerOptimizeFeature.registerSettings(settingRegistry, adminState);
+
+        // Register the single core command and honor persisted startup selection.
+        registerCommand("neko", "Opens the Neko operator feature manager",
+                new NekoCommand(FeatureManager.getInstance(), adminState, adminConfigStore, settingRegistry));
+        FeatureManager.getInstance().enableDesired(adminState::desiredEnabled);
 
         // Register core listeners
         getServer().getPluginManager().registerEvents(new ActiveToolListener(), this);
@@ -58,8 +96,13 @@ public class NekoPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Disable all features
-        FeatureManager.getInstance().disableAll();
+        // Disable all features and synchronously flush the last immutable snapshot.
+        FeatureManager.getInstance().shutdown();
+        ActiveToolAPI.getInstance().shutdown();
+        RecipeAPI.getInstance().clear();
+        if (adminConfigStore != null) {
+            adminConfigStore.flush();
+        }
 
         // Close database connection
         DatabaseManager.getInstance().shutdown();

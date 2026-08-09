@@ -11,6 +11,8 @@ import org.bukkit.inventory.ItemStack;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * Handles optional falling tree animation.
@@ -36,25 +38,30 @@ public final class FallingTreeAnimation {
      * @param logs the list of log positions to break
      * @param effects the effects handler for playing particles/sounds
      */
-    public void playAnimation(World world, List<BlockPos> logs, ItemStack tool, TreeFellerEffects effects) {
+    public void playAnimation(World world, List<BlockPos> logs, ItemStack tool, TreeFellerEffects effects,
+                              BooleanSupplier isCurrent, Consumer<SchedulerUtils.TaskHandle> taskOwner) {
         List<BlockPos> sortedLogs = sortBlocks(logs);
         if (!TreeFellerConfig.ANIMATION_ENABLED) {
             for (BlockPos pos : sortedLogs) {
-                scheduleBlockBreak(world, pos, tool, effects, 0L);
+                scheduleBlockBreak(world, pos, tool, effects, 0L, isCurrent, taskOwner);
             }
             return;
         }
 
         for (int index = 0; index < sortedLogs.size(); index++) {
             long delay = (long) index * TreeFellerConfig.ANIMATION_DELAY_TICKS;
-            scheduleBlockBreak(world, sortedLogs.get(index), tool, effects, delay);
+            scheduleBlockBreak(world, sortedLogs.get(index), tool, effects, delay, isCurrent, taskOwner);
         }
     }
 
     private void scheduleBlockBreak(World world, BlockPos pos, ItemStack tool,
-                                    TreeFellerEffects effects, long delay) {
+                                    TreeFellerEffects effects, long delay, BooleanSupplier isCurrent,
+                                    Consumer<SchedulerUtils.TaskHandle> taskOwner) {
         Material expectedMaterial = pos.getBlock(world).getType();
         Runnable breakBlock = () -> {
+            if (!isCurrent.getAsBoolean()) {
+                return;
+            }
             Block block = pos.getBlock(world);
             if (block.getType() != expectedMaterial) {
                 return;
@@ -62,11 +69,10 @@ public final class FallingTreeAnimation {
             effects.playEffects(block);
             block.breakNaturally(tool);
         };
-        if (delay <= 0) {
-            SchedulerUtils.runAtLocation(pos.toLocation(world), breakBlock);
-        } else {
-            SchedulerUtils.runAtLocationLater(pos.toLocation(world), breakBlock, delay);
-        }
+        SchedulerUtils.TaskHandle task = delay <= 0
+                ? SchedulerUtils.runAtLocationTask(pos.toLocation(world), breakBlock)
+                : SchedulerUtils.runAtLocationLaterTask(pos.toLocation(world), breakBlock, delay);
+        taskOwner.accept(task);
     }
     /**
      * Sorts blocks based on the configured animation direction.

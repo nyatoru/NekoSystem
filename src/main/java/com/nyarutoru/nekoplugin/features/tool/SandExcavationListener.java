@@ -1,6 +1,10 @@
 package com.nyarutoru.nekoplugin.features.tool;
 
 import com.nyarutoru.nekoplugin.api.tool.AbstractVeinMiner;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.ApplySemantics;
+import com.nyarutoru.nekoplugin.core.settings.SettingDescriptor;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import org.bukkit.Material;
@@ -23,7 +27,8 @@ import java.util.function.Predicate;
 public class SandExcavationListener extends AbstractVeinMiner {
 
     public static final String TOOL_NAME = "Sand Excavation";
-    private static final int MAX_BLOCKS = 250;
+    private static final int DEFAULT_MAX_BLOCKS = 250;
+    private volatile int maxBlocks = DEFAULT_MAX_BLOCKS;
 
     // Excavatable materials - gravity-affected blocks and clay
     // Using EnumSet for optimal performance (100x faster than HashSet for Material lookups)
@@ -55,6 +60,39 @@ public class SandExcavationListener extends AbstractVeinMiner {
 
     private final Predicate<Player> toolPredicate = this::isHoldingShovel;
 
+    public void registerSettings(SettingRegistry registry, AdminState state) {
+        SettingDescriptor<Integer> max = SettingDescriptor.integer(
+                "max-blocks", "Maximum blocks", DEFAULT_MAX_BLOCKS, 1, 1000,
+                ApplySemantics.IMMEDIATE, this::setMaxBlocks);
+        SettingDescriptor<List<Material>> materials = SettingDescriptor.materials(
+                "allowed-materials", "Allowed excavation materials", List.copyOf(EXCAVATABLE),
+                ApplySemantics.IMMEDIATE, this::setTargetMaterials);
+        registry.register("sand_excavation", max);
+        registry.register("sand_excavation", materials);
+        applyStored(state, max);
+        applyStored(state, materials);
+    }
+
+    public int getConfiguredMaxBlocks() { return maxBlocks; }
+
+    public void setMaxBlocks(int value) { maxBlocks = value; }
+
+    public void setTargetMaterials(List<Material> materials) {
+        if (materials.isEmpty()) throw new IllegalArgumentException("At least one material is required");
+        targetMaterials = Set.copyOf(materials);
+    }
+
+    private volatile Set<Material> targetMaterials = Set.copyOf(EXCAVATABLE);
+
+    private <T> void applyStored(AdminState state, SettingDescriptor<T> descriptor) {
+        String stored = state.settingValue("sand_excavation", descriptor.key());
+        try {
+            descriptor.apply(stored == null ? descriptor.defaultValue() : descriptor.parse(stored));
+        } catch (IllegalArgumentException ignored) {
+            descriptor.apply(descriptor.defaultValue());
+        }
+    }
+
     @Override
     protected String getToolName() {
         return TOOL_NAME;
@@ -62,7 +100,7 @@ public class SandExcavationListener extends AbstractVeinMiner {
 
     @Override
     protected int getMaxBlocks() {
-        return MAX_BLOCKS;
+        return maxBlocks;
     }
 
     @Override
@@ -72,7 +110,7 @@ public class SandExcavationListener extends AbstractVeinMiner {
 
     @Override
     protected Set<Material> getTargetMaterials() {
-        return EXCAVATABLE;
+        return targetMaterials;
     }
 
     @Override

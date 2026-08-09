@@ -12,7 +12,9 @@ import org.bukkit.inventory.RecipeChoice;
  */
 public class ServerRecipes {
 
+    private static final String RECIPE_KEY = "rotten_flesh_to_leather";
     private final NekoPlugin plugin;
+    private NamespacedKey recipeKey;
 
     public ServerRecipes(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -22,6 +24,7 @@ public class ServerRecipes {
      * Register all server recipes.
      */
     public void registerAll() {
+        unregisterAll();
         registerRottenFleshToLeather();
     }
 
@@ -30,7 +33,8 @@ public class ServerRecipes {
      * Allows players to obtain leather by smelting rotten flesh.
      */
     private void registerRottenFleshToLeather() {
-        NamespacedKey key = new NamespacedKey(plugin, "rotten_flesh_to_leather");
+        NamespacedKey key = new NamespacedKey(plugin, RECIPE_KEY);
+        recipeKey = key;
 
         ItemStack result = new ItemStack(Material.LEATHER);
         RecipeChoice.MaterialChoice input = new RecipeChoice.MaterialChoice(Material.ROTTEN_FLESH);
@@ -40,5 +44,12 @@ public class ServerRecipes {
         FurnaceRecipe recipe = new FurnaceRecipe(key, result, input, 0.35f, 200);
 
         plugin.getServer().addRecipe(recipe);
+    }
+
+    public void unregisterAll() {
+        if (recipeKey != null) {
+            plugin.getServer().removeRecipe(recipeKey);
+            recipeKey = null;
+        }
     }
 }

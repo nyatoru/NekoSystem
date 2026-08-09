@@ -17,9 +17,10 @@ import java.util.concurrent.TimeUnit;
  */
 public class ConcreteConverter {
 
-    private static final long CONVERT_TIME_MS = 10 * 1000; // 10 seconds
-    // Note: No BukkitTask reference needed for Folia-compatible scheduling
-    private static final long CHECK_INTERVAL_TICKS = 20; // 1 second
+    private static final long DEFAULT_CONVERT_TIME_MS = 10 * 1000; // 10 seconds
+    private static final long DEFAULT_CHECK_INTERVAL_TICKS = 20; // 1 second
+    private static final long MAX_CONVERT_TIME_MS = TimeUnit.HOURS.toMillis(1);
+    private static final long MAX_CHECK_INTERVAL_TICKS = TimeUnit.MINUTES.toMillis(1) / 50;
     // Map concrete powder to solid concrete - using EnumMap for optimal performance
     private static final Map<Material, Material> POWDER_TO_CONCRETE = new EnumMap<>(Map.ofEntries(
             Map.entry(Material.WHITE_CONCRETE_POWDER, Material.WHITE_CONCRETE),
@@ -40,23 +41,67 @@ public class ConcreteConverter {
             Map.entry(Material.BLACK_CONCRETE_POWDER, Material.BLACK_CONCRETE)));
     // Track items in water: Item UUID -> time entered water
     private final Map<UUID, Long> itemsInWater = new ConcurrentHashMap<>();
+    private volatile long convertTimeMs = DEFAULT_CONVERT_TIME_MS;
+    private volatile long checkIntervalTicks = DEFAULT_CHECK_INTERVAL_TICKS;
+    private volatile long generation;
+    private volatile boolean running;
+    private SchedulerUtils.TaskHandle task;
 
-    public void start() {
-        // Schedule timer to check all worlds for items
-        SchedulerUtils.runGlobalTimer(this::checkAllWorlds, CHECK_INTERVAL_TICKS, CHECK_INTERVAL_TICKS);
+    public synchronized SchedulerUtils.TaskHandle start() {
+        stop();
+        running = true;
+        long currentGeneration = ++generation;
+        task = SchedulerUtils.runGlobalTimerTask(
+                () -> {
+                    if (running && generation == currentGeneration) checkAllWorlds(currentGeneration);
+                }, checkIntervalTicks, checkIntervalTicks);
+        return task;
     }
 
-    public void stop() {
-        // Task cleanup is handled by SchedulerUtils
+    public synchronized void setConvertTimeSeconds(long seconds) {
+        if (seconds < 1 || seconds > TimeUnit.MILLISECONDS.toSeconds(MAX_CONVERT_TIME_MS)) {
+            throw new IllegalArgumentException("Conversion delay must be between 1 and 3600 seconds");
+        }
+        convertTimeMs = TimeUnit.SECONDS.toMillis(seconds);
+    }
+
+    public synchronized void setCheckIntervalSeconds(long seconds) {
+        if (seconds < 1 || seconds > TimeUnit.MILLISECONDS.toSeconds(MAX_CHECK_INTERVAL_TICKS * 50)) {
+            throw new IllegalArgumentException("Scan interval must be between 1 and 60 seconds");
+        }
+        checkIntervalTicks = TimeUnit.SECONDS.toMillis(seconds) / 50;
+        if (running) {
+            SchedulerUtils.cancelTask(task);
+            long currentGeneration = ++generation;
+            task = SchedulerUtils.runGlobalTimerTask(
+                    () -> {
+                        if (running && generation == currentGeneration) checkAllWorlds(currentGeneration);
+                    }, checkIntervalTicks, checkIntervalTicks);
+        }
+    }
+
+    public long getConvertTimeSeconds() {
+        return TimeUnit.MILLISECONDS.toSeconds(convertTimeMs);
+    }
+
+    public long getCheckIntervalSeconds() {
+        return TimeUnit.MILLISECONDS.toSeconds(checkIntervalTicks * 50);
+    }
+
+    public synchronized void stop() {
+        running = false;
+        generation++;
+        SchedulerUtils.cancelTask(task);
+        task = null;
         itemsInWater.clear();
     }
 
     /**
      * Called on global region - schedules individual entity checks
      */
-    private void checkAllWorlds() {
+    private void checkAllWorlds(long currentGeneration) {
         long now = System.currentTimeMillis();
-        long staleThreshold = CONVERT_TIME_MS + TimeUnit.SECONDS.toMillis(30); // 30 seconds extra
+        long staleThreshold = convertTimeMs + TimeUnit.SECONDS.toMillis(30); // 30 seconds extra
 
         // Clean up dead items and stale entries (safe to do on global thread)
         itemsInWater.entrySet().removeIf(entry -> {
@@ -83,7 +128,9 @@ public class ConcreteConverter {
 
             // Schedule a check for each item on its own region
             for (Item item : items) {
-                SchedulerUtils.runAtEntity(item, () -> checkItem(item, now));
+                SchedulerUtils.runAtEntityTask(item, () -> {
+                    if (running && generation == currentGeneration) checkItem(item, now);
+                });
             }
         }
     }
@@ -118,7 +165,7 @@ public class ConcreteConverter {
             } else {
                 // Check if 10 seconds have passed
                 long enteredTime = itemsInWater.get(item.getUniqueId());
-                if (now - enteredTime >= CONVERT_TIME_MS) {
+                if (now - enteredTime >= convertTimeMs) {
                     // Convert to solid concrete
                     Material concrete = POWDER_TO_CONCRETE.get(type);
                     int amount = stack.getAmount();

@@ -1,6 +1,7 @@
 package com.nyarutoru.nekoplugin.features.server;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -29,15 +30,24 @@ public class MapExpansionTracker {
     // Cooldown tracking
     private volatile long lastNotificationTime = 0;
     
-    // Constants
-    private static final long TIME_WINDOW_MS = 10 * 1000; // 10 seconds
-    private static final long COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
-    private static final int PLAYER_TRACKING_RADIUS = 128; // blocks
-    private static final long DATA_RETENTION_MS = 60 * 1000; // 60 seconds
-    
-    // Track radius squared for performance
-    private static final int PLAYER_TRACKING_RADIUS_SQUARED = PLAYER_TRACKING_RADIUS * PLAYER_TRACKING_RADIUS;
+    // Defaults are intentionally bounded to keep tracking work predictable.
+    private static final long DEFAULT_TIME_WINDOW_MS = 10 * 1000;
+    private static final long DEFAULT_COOLDOWN_MS = 5 * 60 * 1000;
+    private static final int DEFAULT_PLAYER_TRACKING_RADIUS = 128;
+    private static final long DEFAULT_DATA_RETENTION_MS = 60 * 1000;
+    private static final long MAX_TIME_WINDOW_MS = 60 * 1000;
+    private static final long MAX_COOLDOWN_MS = 60 * 60 * 1000;
+    private static final int MAX_PLAYER_TRACKING_RADIUS = 512;
+    private static final long MAX_DATA_RETENTION_MS = 60 * 60 * 1000;
 
+    private volatile long timeWindowMs = DEFAULT_TIME_WINDOW_MS;
+    private volatile long cooldownMs = DEFAULT_COOLDOWN_MS;
+    private volatile int playerTrackingRadius = DEFAULT_PLAYER_TRACKING_RADIUS;
+    private volatile long dataRetentionMs = DEFAULT_DATA_RETENTION_MS;
+    private volatile double tpsWarningThreshold = 18.0;
+    private volatile int minPlayersForWarning = 3;
+    private volatile SchedulerUtils.TaskHandle cleanupTask;
+    private volatile boolean running = true;
     public MapExpansionTracker(NekoPlugin plugin) {
         this.plugin = plugin;
         startCleanupTimer();
@@ -47,11 +57,11 @@ public class MapExpansionTracker {
      * Records a chunk generation event and attributes it to nearby players.
      */
     public void recordChunkGeneration(Chunk chunk) {
-        if (chunk == null) {
+        if (!running || chunk == null) {
             return;
         }
         
-        long currentWindow = System.currentTimeMillis() / TIME_WINDOW_MS * TIME_WINDOW_MS;
+        long currentWindow = System.currentTimeMillis() / timeWindowMs * timeWindowMs;
         Location chunkCenter = getChunkCenterLocation(chunk);
         
         if (chunkCenter == null) {
@@ -79,12 +89,12 @@ public class MapExpansionTracker {
     public Map<UUID, Integer> getContributingPlayers() {
         Map<UUID, Integer> contributingPlayers = new ConcurrentHashMap<>();
         
-        long currentWindow = System.currentTimeMillis() / TIME_WINDOW_MS * TIME_WINDOW_MS;
+        long currentWindow = System.currentTimeMillis() / timeWindowMs * timeWindowMs;
         
-        // Get chunks from current and previous window (to catch recent generation)
-        List<ChunkLocation> recentChunks = new ArrayList<>();
-        recentChunks.addAll(chunksByTimeWindow.getOrDefault(currentWindow, Collections.emptyList()));
-        recentChunks.addAll(chunksByTimeWindow.getOrDefault(currentWindow - TIME_WINDOW_MS, Collections.emptyList()));
+        // Only include the configured time window; including the previous bucket would
+        // make a nominal 10-second window represent nearly 20 seconds of data.
+        List<ChunkLocation> recentChunks = new ArrayList<>(
+                chunksByTimeWindow.getOrDefault(currentWindow, Collections.emptyList()));
         
         // For each chunk, find all players within tracking radius
         for (ChunkLocation chunkLoc : recentChunks) {
@@ -111,7 +121,7 @@ public class MapExpansionTracker {
                 int distanceSquared = dx * dx + dy * dy + dz * dz;
                 
                 // Attribute chunk to player if within radius
-                if (distanceSquared <= PLAYER_TRACKING_RADIUS_SQUARED) {
+                if (distanceSquared <= playerTrackingRadius * playerTrackingRadius) {
                     contributingPlayers.merge(playerId, 1, Integer::sum);
                 }
             }
@@ -130,12 +140,12 @@ public class MapExpansionTracker {
         }
         
         // Check TPS threshold
-        if (tps >= 18.0) {
+        if (tps >= tpsWarningThreshold) {
             return false;
         }
         
         // Check player count threshold
-        if (onlinePlayers <= 2) {
+        if (onlinePlayers < minPlayersForWarning) {
             return false;
         }
         
@@ -160,35 +170,31 @@ public class MapExpansionTracker {
      */
     public long getTimeUntilNextNotification() {
         long elapsed = System.currentTimeMillis() - lastNotificationTime;
-        return Math.max(0, COOLDOWN_MS - elapsed);
+        return Math.max(0, cooldownMs - elapsed);
     }
 
     /**
      * Checks if the cooldown has elapsed.
      */
     public boolean isCooldownElapsed() {
-        return System.currentTimeMillis() - lastNotificationTime >= COOLDOWN_MS;
+        return System.currentTimeMillis() - lastNotificationTime >= cooldownMs;
     }
 
     /**
      * Gets the total number of chunks generated in the current time window.
      */
     public int getRecentChunkCount() {
-        long currentWindow = System.currentTimeMillis() / TIME_WINDOW_MS * TIME_WINDOW_MS;
+        long currentWindow = System.currentTimeMillis() / timeWindowMs * timeWindowMs;
         
-        int count = 0;
-        count += chunksByTimeWindow.getOrDefault(currentWindow, Collections.emptyList()).size();
-        count += chunksByTimeWindow.getOrDefault(currentWindow - TIME_WINDOW_MS, Collections.emptyList()).size();
-        
-        return count;
+        return chunksByTimeWindow.getOrDefault(currentWindow, Collections.emptyList()).size();
     }
 
     /**
      * Cleans up old chunk data to prevent memory leaks.
      */
     public void cleanup() {
-        long currentWindow = System.currentTimeMillis() / TIME_WINDOW_MS * TIME_WINDOW_MS;
-        long cutoffWindow = currentWindow - DATA_RETENTION_MS;
+        long currentWindow = System.currentTimeMillis() / timeWindowMs * timeWindowMs;
+        long cutoffWindow = currentWindow - dataRetentionMs;
         
         // Remove old time windows
         chunksByTimeWindow.keySet().removeIf(window -> window < cutoffWindow);
@@ -241,14 +247,67 @@ public class MapExpansionTracker {
      * Starts the cleanup timer to remove old data.
      */
     private void startCleanupTimer() {
-        // Run cleanup every 30 seconds
-        plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
-            plugin,
-            task -> cleanup(),
-            600L, // 30 seconds initial delay
-            600L  // 30 seconds interval
-        );
+        cleanupTask = SchedulerUtils.runGlobalTimerTask(() -> {
+            if (running) cleanup();
+        }, 600L, 600L);
     }
+
+    public void stop() {
+        running = false;
+        SchedulerUtils.cancelTask(cleanupTask);
+        cleanupTask = null;
+        chunksByTimeWindow.clear();
+        playerLocations.clear();
+    }
+
+    public void setTimeWindowSeconds(long seconds) {
+        if (seconds < 1 || seconds > TimeUnit.MILLISECONDS.toSeconds(MAX_TIME_WINDOW_MS)) {
+            throw new IllegalArgumentException("Map lag window must be between 1 and 60 seconds");
+        }
+        timeWindowMs = TimeUnit.SECONDS.toMillis(seconds);
+    }
+
+    public void setCooldownMinutes(long minutes) {
+        if (minutes < 1 || minutes > TimeUnit.MILLISECONDS.toMinutes(MAX_COOLDOWN_MS)) {
+            throw new IllegalArgumentException("Map lag cooldown must be between 1 and 60 minutes");
+        }
+        cooldownMs = TimeUnit.MINUTES.toMillis(minutes);
+    }
+
+    public void setTrackingRadius(int radius) {
+        if (radius < 1 || radius > MAX_PLAYER_TRACKING_RADIUS) {
+            throw new IllegalArgumentException("Map lag tracking radius must be between 1 and 512 blocks");
+        }
+        playerTrackingRadius = radius;
+    }
+
+    public void setDataRetentionMinutes(long minutes) {
+        if (minutes < 1 || minutes > TimeUnit.MILLISECONDS.toMinutes(MAX_DATA_RETENTION_MS)) {
+            throw new IllegalArgumentException("Map lag data retention must be between 1 and 60 minutes");
+        }
+        dataRetentionMs = TimeUnit.MINUTES.toMillis(minutes);
+    }
+
+    public void setTpsWarningThreshold(double threshold) {
+        if (!Double.isFinite(threshold) || threshold < 1.0 || threshold > 20.0) {
+            throw new IllegalArgumentException("Map lag TPS threshold must be between 1 and 20");
+        }
+        tpsWarningThreshold = threshold;
+    }
+
+    public void setMinPlayersForWarning(int players) {
+        if (players < 1 || players > 100) {
+            throw new IllegalArgumentException("Map lag player threshold must be between 1 and 100");
+        }
+        minPlayersForWarning = players;
+    }
+
+    public double getTpsWarningThreshold() { return tpsWarningThreshold; }
+    public int getMinPlayersForWarning() { return minPlayersForWarning; }
+    public long getCooldownMinutes() { return TimeUnit.MILLISECONDS.toMinutes(cooldownMs); }
+    public long getTimeWindowSeconds() { return TimeUnit.MILLISECONDS.toSeconds(timeWindowMs); }
+    public int getTrackingRadius() { return playerTrackingRadius; }
+    public long getDataRetentionMinutes() { return TimeUnit.MILLISECONDS.toMinutes(dataRetentionMs); }
 
     /**
      * Simple data class for chunk location.

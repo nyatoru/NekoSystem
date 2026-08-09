@@ -1,6 +1,8 @@
 package com.nyarutoru.nekoplugin.features.server;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.core.settings.SettingDescriptor;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import com.nyarutoru.nekoplugin.utils.ServerPerformanceUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -33,7 +35,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Consolidated Server Events Listener.
@@ -48,19 +49,39 @@ import java.util.concurrent.TimeUnit;
  */
 public class ServerEventsListener implements Listener {
 
-    // Instant mining requirements
-    private static final int MIN_EFFICIENCY_LEVEL = 5;
-    private static final int MIN_HASTE_AMPLIFIER = 1;
+    // Defaults for user-facing behavior. Values are configured by ServerFeature.
+    private static final int DEFAULT_MIN_EFFICIENCY_LEVEL = 5;
+    private static final int DEFAULT_MIN_HASTE_AMPLIFIER = 1;
+    private static final int DEFAULT_MIN_PLAYERS_FOR_LAG_WARNING = 3;
+    private static final double DEFAULT_TPS_WARNING_THRESHOLD = 18.0;
+    private static final String DEFAULT_JOIN_MESSAGE = "<green><bold>+</bold> <gray>{player} joined the server.";
+    private static final String DEFAULT_QUIT_MESSAGE = "<red><bold>-</bold> <gray>{player} left the server.";
+    private static final String DEFAULT_ANVIL_MESSAGE = "✓ Anvil repaired!";
 
-    // Lag notification constants
-    private static final int MIN_PLAYERS_FOR_LAG_WARNING = 2;
-    private static final double TPS_WARNING_THRESHOLD = 18.0;
+    private int minEfficiencyLevel = DEFAULT_MIN_EFFICIENCY_LEVEL;
+    private int minHasteAmplifier = DEFAULT_MIN_HASTE_AMPLIFIER;
+    private boolean instantBreakEnabled = true;
+    private boolean ladderEnabled = true;
+    private boolean anvilRepairEnabled = true;
+    private boolean joinMessagesEnabled = true;
+    private boolean quitMessagesEnabled = true;
+    private boolean lagNotificationsEnabled = true;
+    private boolean lagBroadcastEnabled = true;
+    private boolean lagOpDetailsEnabled = true;
+    private boolean lagConsoleLoggingEnabled = true;
+    private int minPlayersForLagWarning = DEFAULT_MIN_PLAYERS_FOR_LAG_WARNING;
+    private double tpsWarningThreshold = DEFAULT_TPS_WARNING_THRESHOLD;
+    private Set<Material> deepslateBlocks = DEFAULT_DEEPSLATE_BLOCKS;
+    private Set<Material> glassBlocks = DEFAULT_GLASS_BLOCKS;
+    private String joinMessage = DEFAULT_JOIN_MESSAGE;
+    private String quitMessage = DEFAULT_QUIT_MESSAGE;
+    private String anvilMessage = DEFAULT_ANVIL_MESSAGE;
 
     // Pitch detection for ladder placement
     private static final double DOWNWARD_PITCH_THRESHOLD = 0;
 
     // Deepslate blocks that can be instant-mined
-    private static final Set<Material> DEEPSLATE_BLOCKS = Set.of(
+    static final Set<Material> DEFAULT_DEEPSLATE_BLOCKS = Set.of(
             Material.DEEPSLATE,
             Material.DEEPSLATE_BRICKS,
             Material.DEEPSLATE_TILES,
@@ -83,7 +104,7 @@ public class ServerEventsListener implements Listener {
             Material.POLISHED_DEEPSLATE_WALL);
 
     // Glass blocks that can be instant-mined
-    private static final Set<Material> GLASS_BLOCKS = Set.of(Material.GLASS, Material.GLASS_PANE,
+    static final Set<Material> DEFAULT_GLASS_BLOCKS = Set.of(Material.GLASS, Material.GLASS_PANE,
             Material.WHITE_STAINED_GLASS, Material.WHITE_STAINED_GLASS_PANE, Material.ORANGE_STAINED_GLASS,
             Material.ORANGE_STAINED_GLASS_PANE, Material.MAGENTA_STAINED_GLASS, Material.MAGENTA_STAINED_GLASS_PANE,
             Material.LIGHT_BLUE_STAINED_GLASS, Material.LIGHT_BLUE_STAINED_GLASS_PANE, Material.YELLOW_STAINED_GLASS,
@@ -99,7 +120,10 @@ public class ServerEventsListener implements Listener {
 
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final MapExpansionTracker tracker;
+    private SchedulerUtils.TaskHandle lagTask;
     private boolean timerStarted = false;
+    private long lagCheckIntervalSeconds = 10;
+    private volatile boolean running;
     private final NekoPlugin plugin;
 
     public ServerEventsListener(NekoPlugin plugin) {
@@ -107,22 +131,127 @@ public class ServerEventsListener implements Listener {
         this.tracker = new MapExpansionTracker(plugin);
     }
 
+    public void configure(int minEfficiencyLevel, int minHasteAmplifier, boolean instantBreakEnabled,
+                          boolean ladderEnabled, boolean anvilRepairEnabled, boolean joinMessagesEnabled,
+                          boolean quitMessagesEnabled, boolean lagNotificationsEnabled, boolean lagBroadcastEnabled,
+                          boolean lagOpDetailsEnabled, boolean lagConsoleLoggingEnabled, int minPlayersForLagWarning,
+                          double tpsWarningThreshold, String joinMessage, String quitMessage, String anvilMessage) {
+        setMinEfficiencyLevel(minEfficiencyLevel);
+        setMinHasteAmplifier(minHasteAmplifier);
+        this.instantBreakEnabled = instantBreakEnabled;
+        this.ladderEnabled = ladderEnabled;
+        this.anvilRepairEnabled = anvilRepairEnabled;
+        this.joinMessagesEnabled = joinMessagesEnabled;
+        this.quitMessagesEnabled = quitMessagesEnabled;
+        this.lagNotificationsEnabled = lagNotificationsEnabled;
+        this.lagBroadcastEnabled = lagBroadcastEnabled;
+        this.lagOpDetailsEnabled = lagOpDetailsEnabled;
+        this.lagConsoleLoggingEnabled = lagConsoleLoggingEnabled;
+        setMinPlayersForLagWarning(minPlayersForLagWarning);
+        setTpsWarningThreshold(tpsWarningThreshold);
+        setJoinMessage(joinMessage);
+        setQuitMessage(quitMessage);
+        setAnvilMessage(anvilMessage);
+    }
+
+    public void setMinEfficiencyLevel(int value) {
+        if (value < 1 || value > 10) throw new IllegalArgumentException("Efficiency must be between 1 and 10");
+        minEfficiencyLevel = value;
+    }
+
+    public void setMinHasteAmplifier(int value) {
+        if (value < 0 || value > 10) throw new IllegalArgumentException("Haste amplifier must be between 0 and 10");
+        minHasteAmplifier = value;
+    }
+
+    public void setMinPlayersForLagWarning(int value) {
+        if (value < 1 || value > 100) throw new IllegalArgumentException("Minimum players must be between 1 and 100");
+        minPlayersForLagWarning = value;
+        tracker.setMinPlayersForWarning(value);
+    }
+
+    public void setTpsWarningThreshold(double value) {
+        if (!Double.isFinite(value) || value < 1.0 || value > 20.0) throw new IllegalArgumentException("TPS threshold must be between 1 and 20");
+        tpsWarningThreshold = value;
+        tracker.setTpsWarningThreshold(value);
+    }
+
+    public void setJoinMessage(String value) { joinMessage = validateMessage(value, "Join message"); }
+    public void setQuitMessage(String value) { quitMessage = validateMessage(value, "Quit message"); }
+    public void setAnvilMessage(String value) { anvilMessage = validateMessage(value, "Anvil message"); }
+    public void setInstantBreakEnabled(boolean value) { instantBreakEnabled = value; }
+    public void setLadderEnabled(boolean value) { ladderEnabled = value; }
+    public void setAnvilRepairEnabled(boolean value) { anvilRepairEnabled = value; }
+    public void setJoinMessagesEnabled(boolean value) { joinMessagesEnabled = value; }
+    public void setQuitMessagesEnabled(boolean value) { quitMessagesEnabled = value; }
+    public void setLagNotificationsEnabled(boolean value) { lagNotificationsEnabled = value; }
+    public void setLagBroadcastEnabled(boolean value) { lagBroadcastEnabled = value; }
+    public void setLagOpDetailsEnabled(boolean value) { lagOpDetailsEnabled = value; }
+    public void setLagConsoleLoggingEnabled(boolean value) { lagConsoleLoggingEnabled = value; }
+    public void setLagCheckIntervalSeconds(long seconds) {
+        if (seconds < 1 || seconds > 60) throw new IllegalArgumentException("Lag check interval must be between 1 and 60 seconds");
+        lagCheckIntervalSeconds = seconds;
+        if (running && timerStarted) {
+            SchedulerUtils.cancelTask(lagTask);
+            lagTask = SchedulerUtils.runGlobalTimerTask(this::checkAndBroadcastLag, seconds * 20, seconds * 20);
+        }
+    }
+
+    public void setDeepslateBlocks(List<Material> values) {
+        if (values.isEmpty()) throw new IllegalArgumentException("At least one deepslate material is required");
+        if (!DEFAULT_DEEPSLATE_BLOCKS.containsAll(values)) throw new IllegalArgumentException("Unsupported deepslate material");
+        deepslateBlocks = Set.copyOf(values);
+    }
+
+    public void setGlassBlocks(List<Material> values) {
+        if (values.isEmpty()) throw new IllegalArgumentException("At least one glass material is required");
+        if (!DEFAULT_GLASS_BLOCKS.containsAll(values)) throw new IllegalArgumentException("Unsupported glass material");
+        glassBlocks = Set.copyOf(values);
+    }
+
+    private String validateMessage(String value, String name) {
+        if (value == null || value.isBlank() || value.length() > 256) throw new IllegalArgumentException(name + " must be 1-256 characters");
+        return value;
+    }
+
+    public MapExpansionTracker getTracker() { return tracker; }
+
+    public void start() {
+        running = true;
+    }
+
+    public void stop() {
+        running = false;
+        SchedulerUtils.cancelTask(lagTask);
+        lagTask = null;
+        timerStarted = false;
+        tracker.stop();
+    }
+
     // ========== Player Join/Quit Messages ==========
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        String processedMessage = "<green><bold>+</bold> <gray>" + event.getPlayer().getName() + " joined the server.";
-        Component message = miniMessage.deserialize(processedMessage);
-        event.joinMessage(message);
-        
-        // Start lag detection timer on first player join
+        if (!running) return;
+        if (!joinMessagesEnabled) {
+            event.joinMessage(null);
+        } else {
+            Component message = miniMessage.deserialize(joinMessage.replace("{player}", event.getPlayer().getName()));
+            event.joinMessage(message);
+        }
+
+        // Start lag detection independently of message visibility.
         startLagDetectionTimer();
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        String processedMessage = "<red><bold>-</bold> <gray>" + event.getPlayer().getName() + " left the server.";
-        Component message = miniMessage.deserialize(processedMessage);
+        if (!running) return;
+        if (!quitMessagesEnabled) {
+            event.quitMessage(null);
+            return;
+        }
+        Component message = miniMessage.deserialize(quitMessage.replace("{player}", event.getPlayer().getName()));
         event.quitMessage(message);
     }
 
@@ -130,6 +259,7 @@ public class ServerEventsListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
+        if (!instantBreakEnabled) return;
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
         Material blockType = event.getBlock().getType();
@@ -139,7 +269,7 @@ public class ServerEventsListener implements Listener {
             return;
 
         // Glass: just needs Netherite Pickaxe - drop the glass
-        if (GLASS_BLOCKS.contains(blockType)) {
+        if (glassBlocks.contains(blockType)) {
             if (!tool.containsEnchantment(Enchantment.SILK_TOUCH)) {
                 event.setDropItems(false);
                 event.getBlock().getWorld().dropItemNaturally(
@@ -155,6 +285,7 @@ public class ServerEventsListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onBlockDamage(BlockDamageEvent event) {
+        if (!instantBreakEnabled) return;
         Player player = event.getPlayer();
         ItemStack tool = player.getInventory().getItemInMainHand();
         Material blockType = event.getBlock().getType();
@@ -164,17 +295,17 @@ public class ServerEventsListener implements Listener {
             return;
 
         // Only deepslate blocks
-        if (!DEEPSLATE_BLOCKS.contains(blockType))
+        if (!deepslateBlocks.contains(blockType))
             return;
 
         // Check Efficiency 5
         int effLevel = tool.getEnchantmentLevel(Enchantment.EFFICIENCY);
-        if (effLevel < MIN_EFFICIENCY_LEVEL)
+        if (effLevel < minEfficiencyLevel)
             return;
 
         // Check Haste 2
         var hasteEffect = player.getPotionEffect(PotionEffectType.HASTE);
-        if (hasteEffect == null || hasteEffect.getAmplifier() < MIN_HASTE_AMPLIFIER)
+        if (hasteEffect == null || hasteEffect.getAmplifier() < minHasteAmplifier)
             return; // Amplifier 1 = Haste 2
 
         // Instant break - set to insta-break mode
@@ -185,6 +316,7 @@ public class ServerEventsListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onLadderInteract(PlayerInteractEvent event) {
+        if (!ladderEnabled) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK)
             return;
         if (event.getHand() != EquipmentSlot.HAND)
@@ -244,6 +376,7 @@ public class ServerEventsListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onAnvilRepair(PlayerInteractEvent event) {
+        if (!anvilRepairEnabled) return;
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK)
             return;
         if (event.getHand() != EquipmentSlot.HAND)
@@ -279,14 +412,14 @@ public class ServerEventsListener implements Listener {
             held.setAmount(held.getAmount() - 1);
         }
 
-        player.sendMessage(Component.text("✓ Anvil repaired!")
-                .color(NamedTextColor.GREEN));
+        player.sendMessage(miniMessage.deserialize(anvilMessage).colorIfAbsent(NamedTextColor.GREEN));
     }
 
     // ========== Map Expansion Lag Detection ==========
 
     @EventHandler
     public void onChunkPopulate(ChunkPopulateEvent event) {
+        if (!running) return;
         // Record chunk generation for tracking
         tracker.recordChunkGeneration(event.getChunk());
     }
@@ -295,22 +428,17 @@ public class ServerEventsListener implements Listener {
      * Starts the lag detection timer that checks every 10 seconds.
      */
     private void startLagDetectionTimer() {
-        if (!timerStarted) {
-            timerStarted = true;
-            // Run every 10 seconds (200 ticks)
-            plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(
-                plugin,
-                task -> checkAndBroadcastLag(),
-                200L, // 10 seconds initial delay
-                200L  // 10 seconds interval
-            );
-        }
+        if (!running || timerStarted) return;
+        timerStarted = true;
+        long intervalTicks = lagCheckIntervalSeconds * 20L;
+        lagTask = SchedulerUtils.runGlobalTimerTask(this::checkAndBroadcastLag, intervalTicks, intervalTicks);
     }
 
     /**
      * Checks lag conditions and broadcasts warning if needed.
      */
     private void checkAndBroadcastLag() {
+        if (!running || !lagNotificationsEnabled) return;
         // Get current TPS
         double tps = ServerPerformanceUtils.getTPS();
         
@@ -347,11 +475,8 @@ public class ServerEventsListener implements Listener {
         DecimalFormat df = new DecimalFormat("#.#");
         String tpsFormatted = df.format(tps);
         
-        // Get time until next notification
-        long timeUntilNext = TimeUnit.MILLISECONDS.toMinutes(tracker.getTimeUntilNextNotification());
-        
         // Build broadcast message
-        String broadcastMessage = 
+        String broadcastMessage =
             "⚠ Server Lag Detected - Map Expansion\n" +
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
             "Current TPS: " + tpsFormatted + "\n" +
@@ -359,17 +484,19 @@ public class ServerEventsListener implements Listener {
             playerList + "\n" +
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
             "Please pause exploration to reduce lag.\n" +
-            "Next warning in 5 minutes.";
+            "Next warning in " + tracker.getCooldownMinutes() + " minutes.";
         
-        // Broadcast to all players
-        Bukkit.broadcast(Component.text(broadcastMessage).color(NamedTextColor.RED));
-        
-        // Send detailed message to OPs
-        sendOpDetailedMessage(tpsFormatted, sortedPlayers.size(), contributingPlayers.values().stream().mapToInt(Integer::intValue).sum());
-        
-        // Log to console
-        logToConsole(tpsFormatted, sortedPlayers, contributingPlayers.values().stream().mapToInt(Integer::intValue).sum());
-        
+        if (lagBroadcastEnabled) {
+            Bukkit.broadcast(Component.text(broadcastMessage).color(NamedTextColor.RED));
+        }
+
+        if (lagOpDetailsEnabled) {
+            sendOpDetailedMessage(tpsFormatted, sortedPlayers.size(), contributingPlayers.values().stream().mapToInt(Integer::intValue).sum());
+        }
+
+        if (lagConsoleLoggingEnabled) {
+            logToConsole(tpsFormatted, sortedPlayers, contributingPlayers.values().stream().mapToInt(Integer::intValue).sum());
+        }
         // Reset cooldown
         tracker.resetCooldown();
     }
@@ -378,12 +505,12 @@ public class ServerEventsListener implements Listener {
      * Sends detailed debug information to OPs only.
      */
     private void sendOpDetailedMessage(String tps, int playerCount, int chunkCount) {
-        String opMessage = 
+        String opMessage =
             "[MAP LAG DEBUG] Details:\n" +
-            "- TPS: " + tps + " (threshold: 18.0)\n" +
-            "- Chunks generated: " + chunkCount + " (last 10s)\n" +
+            "- TPS: " + tps + " (threshold: " + tracker.getTpsWarningThreshold() + ")\n" +
+            "- Chunks generated: " + chunkCount + " (last " + tracker.getTimeWindowSeconds() + "s)\n" +
             "- Active explorers: " + playerCount + " players\n" +
-            "- Cooldown resets in: 5:00";
+            "- Cooldown: " + tracker.getCooldownMinutes() + ":00";
         
         Component opComponent = Component.text(opMessage).color(NamedTextColor.GOLD);
         

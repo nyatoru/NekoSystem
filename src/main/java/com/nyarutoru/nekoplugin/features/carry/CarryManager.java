@@ -21,6 +21,26 @@ import java.util.UUID;
 
 final class CarryManager {
     private final Map<UUID, CarriedObject> carriedByPlayer = new HashMap<>();
+    private boolean requireSneaking = true;
+    private boolean animalsEnabled = true;
+    private boolean villagersEnabled = true;
+    private boolean containersEnabled = true;
+    private boolean lecternsEnabled = true;
+    private boolean workstationsEnabled = true;
+
+    void configure(boolean requireSneaking, boolean animalsEnabled, boolean villagersEnabled,
+                   boolean containersEnabled, boolean lecternsEnabled, boolean workstationsEnabled) {
+        this.requireSneaking = requireSneaking;
+        this.animalsEnabled = animalsEnabled;
+        this.villagersEnabled = villagersEnabled;
+        this.containersEnabled = containersEnabled;
+        this.lecternsEnabled = lecternsEnabled;
+        this.workstationsEnabled = workstationsEnabled;
+    }
+
+    boolean requireSneaking() {
+        return requireSneaking;
+    }
 
     boolean isCarrying(Player player) {
         return carriedByPlayer.containsKey(player.getUniqueId());
@@ -28,7 +48,7 @@ final class CarryManager {
 
     boolean pickupMob(Player player, Entity entity) {
         if (isCarrying(player) || !CarryPolicy.hasEmptyMainHand(player)
-                || !CarryPolicy.isCarryableMob(entity)) return false;
+                || !CarryPolicy.isCarryableMob(entity, animalsEnabled, villagersEnabled)) return false;
         if (!player.addPassenger(entity)) return false;
         carriedByPlayer.put(player.getUniqueId(), new CarriedObject.Mob(entity));
         player.sendActionBar(ComponentUtils.success("Picked up " + entity.getType().key().value().replace('_', ' ')));
@@ -39,7 +59,7 @@ final class CarryManager {
         if (isCarrying(player) || !CarryPolicy.hasEmptyMainHand(player)) return false;
         if (DrawerManager.getInstance().isDrawer(block.getLocation())) return false;
         BlockState state = block.getState();
-        if (!CarryPolicy.isCarryableBlock(state)) return false;
+        if (!CarryPolicy.isCarryableBlock(state, containersEnabled, lecternsEnabled, workstationsEnabled)) return false;
         if (state instanceof org.bukkit.block.Chest chest
                 && chest.getInventory().getHolder() instanceof org.bukkit.block.DoubleChest) {
             player.sendActionBar(ComponentUtils.error("Double chests cannot be carried"));

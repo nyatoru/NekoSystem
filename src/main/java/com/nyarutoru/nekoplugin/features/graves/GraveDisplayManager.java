@@ -21,13 +21,13 @@ import java.util.concurrent.ConcurrentHashMap;
 final class GraveDisplayManager {
     private static final double DISPLAY_HEIGHT = 1.6;
     private static final double SEARCH_RADIUS = 2.0;
-    private static final long UPDATE_INTERVAL_TICKS = 20L;
-
     private final GraveManager graveManager;
     private final NamespacedKey displayKey;
     private final NamespacedKey graveIdKey;
     private final Map<UUID, TextDisplay> displays = new ConcurrentHashMap<>();
     private final NekoPlugin plugin;
+    private long updateIntervalTicks = GraveConfig.DEFAULT_DISPLAY_UPDATE_INTERVAL_TICKS;
+    private boolean started;
     private BukkitTask paperTask;
     private ScheduledTask foliaTask;
 
@@ -38,19 +38,38 @@ final class GraveDisplayManager {
         graveIdKey = new NamespacedKey(plugin, "grave_id");
     }
 
-    void start() {
-        if (SchedulerUtils.isFolia()) {
-            foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
-                task -> updateDisplays(), UPDATE_INTERVAL_TICKS, UPDATE_INTERVAL_TICKS);
-        } else {
-            paperTask = SchedulerUtils.runGlobalTimer(this::updateDisplays, UPDATE_INTERVAL_TICKS, UPDATE_INTERVAL_TICKS);
+    void setUpdateIntervalTicks(long value) {
+        updateIntervalTicks = value;
+        if (started) {
+            stopTask();
+            startTask();
         }
     }
 
+    void start() {
+        started = true;
+        startTask();
+    }
+
     void stop() {
-        SchedulerUtils.cancelTask(paperTask);
-        if (foliaTask != null) foliaTask.cancel();
+        started = false;
+        stopTask();
         displays.clear();
+    }
+
+    private void startTask() {
+        if (SchedulerUtils.isFolia()) {
+            foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
+                task -> updateDisplays(), updateIntervalTicks, updateIntervalTicks);
+        } else {
+            paperTask = SchedulerUtils.runGlobalTimer(this::updateDisplays, updateIntervalTicks, updateIntervalTicks);
+        }
+    }
+
+    private void stopTask() {
+        SchedulerUtils.cancelTask(paperTask);
+        paperTask = null;
+        if (foliaTask != null) { foliaTask.cancel(); foliaTask = null; }
     }
 
     void reconcile(Grave grave, Location markerLocation) {

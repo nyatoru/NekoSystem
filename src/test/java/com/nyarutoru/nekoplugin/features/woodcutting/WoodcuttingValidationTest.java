@@ -1,6 +1,8 @@
 package com.nyarutoru.nekoplugin.features.woodcutting;
 
 import org.bukkit.Material;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,6 +25,14 @@ class WoodcuttingValidationTest {
     @Test
     void testFeatureClassExists() {
         assertNotNull(WoodcuttingFeature.class);
+    }
+
+    @Test
+    void testFeatureRegistersNoUnsafeRecipeSettings() {
+        SettingRegistry registry = new SettingRegistry();
+        WoodcuttingFeature feature = new WoodcuttingFeature();
+        feature.registerSettings(registry, new AdminState());
+        assertTrue(registry.get(feature.getId()).isEmpty());
     }
 
     @Test

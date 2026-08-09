@@ -1,5 +1,7 @@
 package com.nyarutoru.nekoplugin.features.graves;
 
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import io.papermc.paper.datacomponent.item.ResolvableProfile;
 import org.bukkit.block.Skull;
 import org.bukkit.inventory.ItemStack;
@@ -25,6 +27,17 @@ class GravesValidationTest {
         assertEquals("graves", feature.getId());
         assertEquals("Grave", feature.getName());
         assertFalse(feature.isEnabled());
+    }
+
+    @Test
+    void featureRegistersSafeSettingsOnly() {
+        SettingRegistry registry = new SettingRegistry();
+        GravesFeature feature = new GravesFeature();
+        feature.registerSettings(registry, new AdminState());
+
+        assertEquals(List.of("future-grave-lifetime-minutes", "safe-search-radius", "max-graves-per-player",
+            "expiry-check-interval-seconds", "display-update-interval-seconds"),
+            registry.get(feature.getId()).stream().map(descriptor -> descriptor.key()).toList());
     }
 
     @Test

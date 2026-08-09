@@ -44,6 +44,7 @@ public class DrawerGUI extends BaseGUI {
 
     private final Drawer drawer;
     private final String drawerKey;
+    private final Set<UUID> viewerIds = new HashSet<>();
     private final NumberFormat numberFormat = NumberFormat.getInstance();
 
     @SuppressWarnings("this-escape")
@@ -65,18 +66,23 @@ public class DrawerGUI extends BaseGUI {
         if (drawer == null || drawer.getLocation() == null) {
             return;
         }
-        
-        String key = locationKey(drawer.getLocation());
-        Set<DrawerGUI> viewers = openViewers.get(key);
-        if (viewers != null) {
-            // Create copy to avoid concurrent modification
-            Set<DrawerGUI> viewersCopy = new HashSet<>(viewers);
-            for (DrawerGUI gui : viewersCopy) {
-                gui.forceClose();
-            }
-            viewers.clear();
-            openViewers.remove(key);
+
+        closeViewers(openViewers.remove(locationKey(drawer.getLocation())));
+    }
+
+    public static void closeAllViewers() {
+        for (Set<DrawerGUI> viewers : List.copyOf(openViewers.values())) {
+            closeViewers(viewers);
         }
+        openViewers.clear();
+    }
+
+    private static void closeViewers(Set<DrawerGUI> viewers) {
+        if (viewers == null) return;
+        for (DrawerGUI gui : Set.copyOf(viewers)) {
+            gui.forceClose();
+        }
+        viewers.clear();
     }
 
     /**
@@ -94,12 +100,11 @@ public class DrawerGUI extends BaseGUI {
             Map.Entry<String, Set<DrawerGUI>> entry = iterator.next();
             Set<DrawerGUI> viewers = entry.getValue();
             
-            // Remove GUIs that this player is viewing
             viewers.removeIf(gui -> {
-                // Check if player is in this GUI's viewers
-                return true; // Remove since player is disconnecting
+                gui.viewerIds.remove(player.getUniqueId());
+                return gui.viewerIds.isEmpty();
             });
-            
+
             // Clean up empty sets
             if (viewers.isEmpty()) {
                 iterator.remove();
@@ -178,12 +183,15 @@ public class DrawerGUI extends BaseGUI {
     @Override
     public void open(Player player) {
         super.open(player);
+        viewerIds.add(player.getUniqueId());
         openViewers.computeIfAbsent(drawerKey, k -> new HashSet<>()).add(this);
     }
 
     @Override
     public void onClose(Player player) {
         super.onClose(player);
+        viewerIds.remove(player.getUniqueId());
+        if (!viewerIds.isEmpty()) return;
         Set<DrawerGUI> viewers = openViewers.get(drawerKey);
         if (viewers != null) {
             viewers.remove(this);
@@ -288,7 +296,7 @@ public class DrawerGUI extends BaseGUI {
     }
 
     private void withdrawToHand(Player player, int amount) {
-        if (drawer.isEmpty())
+        if (!Drawer.areWithdrawalsEnabled() || drawer.isEmpty())
             return;
 
         Material itemType = drawer.getItemType();
@@ -426,7 +434,7 @@ public class DrawerGUI extends BaseGUI {
     }
 
     private void withdraw(Player player, int amount) {
-        if (drawer.isEmpty()) {
+        if (!Drawer.areWithdrawalsEnabled() || drawer.isEmpty()) {
             return;
         }
 

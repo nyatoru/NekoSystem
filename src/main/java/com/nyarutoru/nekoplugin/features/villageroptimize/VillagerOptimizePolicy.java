@@ -1,19 +1,30 @@
 package com.nyarutoru.nekoplugin.features.villageroptimize;
 
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 final class VillagerOptimizePolicy {
 
-    static final long OPTIMIZE_COOLDOWN_MILLIS = 10 * 60 * 1000L;
-    static final long LEVEL_CHECK_COOLDOWN_MILLIS = 5 * 1000L;
-    static final Set<String> OPTIMIZE_NAMES = Set.of("optimize", "disableai");
+    static long optimizeCooldownMillis = 10 * 60 * 1000L;
+    static long levelCheckCooldownMillis = 5 * 1000L;
+    static Set<String> optimizeNames = Set.of("optimize", "disableai");
+
+    static void setOptimizeNames(String value) {
+        Set<String> names = Arrays.stream(value.split(","))
+            .map(name -> name.strip().toLowerCase(Locale.ROOT))
+            .filter(name -> !name.isBlank())
+            .collect(Collectors.toUnmodifiableSet());
+        if (names.isEmpty()) throw new IllegalArgumentException("At least one optimize name is required");
+        optimizeNames = names;
+    }
 
     private VillagerOptimizePolicy() {
     }
 
     static boolean isOptimizeName(String name) {
-        return OPTIMIZE_NAMES.contains(name.strip().toLowerCase(Locale.ROOT));
+        return optimizeNames.contains(name.strip().toLowerCase(Locale.ROOT));
     }
 
     static boolean cooldownElapsed(long now, long lastAction, long cooldown) {

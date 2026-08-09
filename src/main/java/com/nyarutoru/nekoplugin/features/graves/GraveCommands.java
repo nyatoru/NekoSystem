@@ -9,12 +9,21 @@ import org.bukkit.entity.Player;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 public final class GraveCommands {
-    private final GraveManager manager;
+    private final Supplier<GraveManager> managerSupplier;
 
-    GraveCommands(GraveManager manager) {
-        this.manager = manager;
+    GraveCommands(Supplier<GraveManager> managerSupplier) {
+        this.managerSupplier = managerSupplier;
+    }
+
+    private GraveManager manager(CommandSender sender) {
+        GraveManager manager = managerSupplier.get();
+        if (manager == null) {
+            sender.sendMessage(Component.text("Graves are currently unavailable.", NamedTextColor.RED));
+        }
+        return manager;
     }
 
     BasicCommand playerCommand() {
@@ -50,10 +59,14 @@ public final class GraveCommands {
             sender.sendMessage(Component.text("Only players can use this command.", NamedTextColor.RED));
             return;
         }
+        GraveManager manager = manager(sender);
+        if (manager == null) return;
         list(sender, manager.getForPlayer(player.getUniqueId()));
     }
 
     private void handleAdminCommand(CommandSender sender, String[] args) {
+        GraveManager manager = manager(sender);
+        if (manager == null) return;
         if (args.length == 0 || args[0].equalsIgnoreCase("list")) {
             list(sender, List.copyOf(manager.getAll()));
             return;

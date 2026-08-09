@@ -7,6 +7,8 @@ import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -15,11 +17,14 @@ import java.util.Set;
  */
 public class Drawer implements ConfigurationSerializable {
 
-    private static final Set<String> BLOCKED_CATEGORIES = Set.of(
+    private static final List<String> DEFAULT_BLOCKED_CATEGORIES = List.of(
             "_SWORD", "_AXE", "_HOE", "_PICKAXE", "_SHOVEL",
             "BOW", "CROSSBOW", "TRIDENT", "SHIELD",
             "HELMET", "CHESTPLATE", "LEGGINGS", "BOOTS",
             "ELYTRA", "TURTLE_HELMET");
+    private static volatile Set<String> blockedCategories = Set.copyOf(DEFAULT_BLOCKED_CATEGORIES);
+    private static volatile boolean depositsEnabled = true;
+    private static volatile boolean withdrawalsEnabled = true;
     private final Location location;
     private Material itemType;
     private int itemCount;
@@ -42,8 +47,41 @@ public class Drawer implements ConfigurationSerializable {
         this.tier = tier;
     }
 
+    public static List<String> defaultBlockedCategories() {
+        return DEFAULT_BLOCKED_CATEGORIES;
+    }
+
+    public static void setBlockedCategories(List<String> categories) {
+        if (categories == null || categories.isEmpty()) {
+            throw new IllegalArgumentException("At least one blocked category is required");
+        }
+        Set<String> normalized = categories.stream()
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .map(value -> value.toUpperCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (normalized.isEmpty()) throw new IllegalArgumentException("At least one blocked category is required");
+        blockedCategories = normalized;
+    }
+
+    public static void setDepositsEnabled(boolean enabled) {
+        depositsEnabled = enabled;
+    }
+
+    public static void setWithdrawalsEnabled(boolean enabled) {
+        withdrawalsEnabled = enabled;
+    }
+
+    public static boolean areDepositsEnabled() {
+        return depositsEnabled;
+    }
+
+    public static boolean areWithdrawalsEnabled() {
+        return withdrawalsEnabled;
+    }
+
     public static boolean isAllowedItem(ItemStack item) {
-        if (item == null || item.getType() == Material.AIR)
+        if (!depositsEnabled || item == null || item.getType() == Material.AIR)
             return false;
         if (DrawerRecipes.isDrawerItem(item))
             return false;
@@ -53,7 +91,7 @@ public class Drawer implements ConfigurationSerializable {
             return false;
 
         String materialName = item.getType().name();
-        for (String blocked : BLOCKED_CATEGORIES) {
+        for (String blocked : blockedCategories) {
             if (materialName.contains(blocked))
                 return false;
         }
@@ -65,7 +103,7 @@ public class Drawer implements ConfigurationSerializable {
             return false;
 
         String materialName = material.name();
-        for (String blocked : BLOCKED_CATEGORIES) {
+        for (String blocked : blockedCategories) {
             if (materialName.contains(blocked))
                 return false;
         }

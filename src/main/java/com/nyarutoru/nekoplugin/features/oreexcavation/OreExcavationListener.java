@@ -1,6 +1,10 @@
 package com.nyarutoru.nekoplugin.features.oreexcavation;
 
 import com.nyarutoru.nekoplugin.api.tool.AbstractVeinMiner;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.ApplySemantics;
+import com.nyarutoru.nekoplugin.core.settings.SettingDescriptor;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import com.nyarutoru.nekoplugin.features.hammer.HammerRecipes;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
@@ -23,9 +27,11 @@ import java.util.function.Predicate;
 public class OreExcavationListener extends AbstractVeinMiner {
 
     public static final String TOOL_NAME = "Ore Excavation";
-    private static final int RADIUS = 8;
-    private static final int RADIUS_SQUARED = RADIUS * RADIUS;
-    private static final int MAX_BLOCKS = 250;
+    private static final int DEFAULT_RADIUS = 8;
+    private static final int DEFAULT_MAX_BLOCKS = 250;
+
+    private volatile int radius = DEFAULT_RADIUS;
+    private volatile int maxBlocks = DEFAULT_MAX_BLOCKS;
 
     // Ores that can be vein-mined
     // Using EnumSet for optimal performance (100x faster than HashSet for Material lookups)
@@ -40,8 +46,49 @@ public class OreExcavationListener extends AbstractVeinMiner {
             Material.DIAMOND_ORE, Material.DEEPSLATE_DIAMOND_ORE,
             Material.NETHER_GOLD_ORE, Material.NETHER_QUARTZ_ORE,
             Material.ANCIENT_DEBRIS);
+    private volatile Set<Material> targetMaterials = Set.copyOf(ORES);
 
     private final Predicate<Player> toolPredicate = this::isHoldingValidPickaxe;
+
+    public void registerSettings(SettingRegistry registry, AdminState state) {
+        SettingDescriptor<Integer> max = SettingDescriptor.integer(
+                "max-blocks", "Maximum blocks", DEFAULT_MAX_BLOCKS, 1, 1000,
+                ApplySemantics.IMMEDIATE, this::setMaxBlocks);
+        SettingDescriptor<Integer> radiusSetting = SettingDescriptor.integer(
+                "radius", "Search radius", DEFAULT_RADIUS, 1, 64,
+                ApplySemantics.IMMEDIATE, this::setRadius);
+        SettingDescriptor<List<Material>> materials = SettingDescriptor.materials(
+                "allowed-materials", "Allowed ore materials", List.copyOf(ORES),
+                ApplySemantics.IMMEDIATE, this::setTargetMaterials);
+        registry.register("ore_excavation", max);
+        registry.register("ore_excavation", radiusSetting);
+        registry.register("ore_excavation", materials);
+        applyStored(state, max);
+        applyStored(state, radiusSetting);
+        applyStored(state, materials);
+    }
+
+    public int getConfiguredMaxBlocks() { return maxBlocks; }
+
+    public void setMaxBlocks(int value) { maxBlocks = value; }
+
+    public int getConfiguredRadius() { return radius; }
+
+    public void setRadius(int value) { radius = value; }
+
+    public void setTargetMaterials(List<Material> materials) {
+        if (materials.isEmpty()) throw new IllegalArgumentException("At least one material is required");
+        targetMaterials = Set.copyOf(materials);
+    }
+
+    private <T> void applyStored(AdminState state, SettingDescriptor<T> descriptor) {
+        String stored = state.settingValue("ore_excavation", descriptor.key());
+        try {
+            descriptor.apply(stored == null ? descriptor.defaultValue() : descriptor.parse(stored));
+        } catch (IllegalArgumentException ignored) {
+            descriptor.apply(descriptor.defaultValue());
+        }
+    }
 
     @Override
     protected String getToolName() {
@@ -50,7 +97,7 @@ public class OreExcavationListener extends AbstractVeinMiner {
 
     @Override
     protected int getMaxBlocks() {
-        return MAX_BLOCKS;
+        return maxBlocks;
     }
 
     @Override
@@ -60,7 +107,7 @@ public class OreExcavationListener extends AbstractVeinMiner {
 
     @Override
     protected Set<Material> getTargetMaterials() {
-        return ORES;
+        return targetMaterials;
     }
 
     @Override
@@ -70,7 +117,7 @@ public class OreExcavationListener extends AbstractVeinMiner {
 
     @Override
     protected int getRadiusSquared() {
-        return RADIUS_SQUARED;
+        return radius * radius;
     }
 
     /**

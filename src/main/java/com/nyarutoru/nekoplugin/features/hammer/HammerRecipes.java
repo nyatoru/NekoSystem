@@ -13,6 +13,8 @@ import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +36,8 @@ public class HammerRecipes {
             new HammerTier("Netherite", Material.NETHERITE_PICKAXE, Material.NETHERITE_INGOT, NamedTextColor.DARK_RED));
 
     private final NekoPlugin plugin;
+    private final List<NamespacedKey> bukkitRecipeKeys = new ArrayList<>();
+    private final List<String> customRecipeIds = new ArrayList<>();
 
     public HammerRecipes(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -85,28 +89,48 @@ public class HammerRecipes {
     }
 
     public void registerAll() {
-        for (Map.Entry<String, HammerTier> entry : TIERS.entrySet()) {
-            registerHammerRecipe(entry.getKey(), entry.getValue());
-            registerCustomRecipe(entry.getKey(), entry.getValue());
+        unregisterAll();
+        TIERS.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    registerHammerRecipe(entry.getKey(), entry.getValue());
+                    registerCustomRecipe(entry.getKey(), entry.getValue());
+                });
+    }
+
+    public void unregisterAll() {
+        for (NamespacedKey key : bukkitRecipeKeys) {
+            plugin.getServer().removeRecipe(key);
         }
+        bukkitRecipeKeys.clear();
+
+        for (String id : customRecipeIds) {
+            RecipeAPI.getInstance().unregisterRecipe(id);
+        }
+        customRecipeIds.clear();
     }
 
     private void registerHammerRecipe(String tierName, HammerTier tier) {
         ItemStack hammer = createHammer(tierName, tier);
         NamespacedKey key = new NamespacedKey(plugin, "hammer_" + tierName);
 
+        // Remove stale registrations from a previous feature instance before adding.
+        plugin.getServer().removeRecipe(key);
         ShapedRecipe recipe = new ShapedRecipe(key, hammer);
         recipe.shape("PPP", " S ", " S ");
         recipe.setIngredient('S', Material.STICK);
         recipe.setIngredient('P', tier.baseTool());
 
-        plugin.getServer().addRecipe(recipe);
+        if (plugin.getServer().addRecipe(recipe)) {
+            bukkitRecipeKeys.add(key);
+        }
     }
 
     private void registerCustomRecipe(String tierName, HammerTier tier) {
         ItemStack hammer = createHammer(tierName, tier);
+        String id = recipeId(tierName);
 
-        CustomRecipe recipe = CustomRecipe.builder("hammer_" + tierName)
+        CustomRecipe recipe = CustomRecipe.builder(id)
                 .category("hammer")
                 .result(hammer)
                 .shaped()
@@ -116,6 +140,15 @@ public class HammerRecipes {
                                 'S', CustomRecipe.Ingredient.of(Material.STICK)))
                 .build();
         RecipeAPI.getInstance().registerRecipe(recipe);
+        customRecipeIds.add(id);
+    }
+
+    static List<String> orderedTierNames() {
+        return TIERS.keySet().stream().sorted(Comparator.naturalOrder()).toList();
+    }
+
+    static String recipeId(String tierName) {
+        return "hammer_" + tierName;
     }
 
     public record HammerTier(String displayName, Material baseTool, Material material, NamedTextColor color) {

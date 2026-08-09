@@ -12,6 +12,7 @@ import com.nyarutoru.nekoplugin.features.treefeller.tree.TreeDetector;
 import com.nyarutoru.nekoplugin.features.treefeller.tree.TreeStructure;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Chunk;
@@ -38,6 +39,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * Event listener for the TreeFeller feature.
@@ -84,14 +87,19 @@ public class TreeFellerListener implements Listener {
     private final FallingTreeAnimation animation;
     private final FastLeafDecay fastLeafDecay;
     private final NekoPlugin plugin;
+    private final BooleanSupplier isCurrent;
+    private final Consumer<SchedulerUtils.TaskHandle> taskOwner;
 
     /**
      * Creates a new TreeFellerListener.
      *
      * @param plugin the plugin instance
      */
-    public TreeFellerListener(NekoPlugin plugin) {
+    public TreeFellerListener(NekoPlugin plugin, BooleanSupplier isCurrent,
+                              Consumer<SchedulerUtils.TaskHandle> taskOwner) {
         this.plugin = plugin;
+        this.isCurrent = isCurrent;
+        this.taskOwner = taskOwner;
         this.treeDetector = new TreeDetector();
         this.toolMatcher = new ToolMatcher();
         this.effects = new TreeFellerEffects();
@@ -397,11 +405,11 @@ public class TreeFellerListener implements Listener {
         World world = player.getWorld();
 
         // Play animation for specified logs (breaks them sequentially or instantly)
-        animation.playAnimation(world, logsToFell, dropTool, effects);
+        animation.playAnimation(world, logsToFell, dropTool, effects, isCurrent, taskOwner);
         long decayStartDelay = TreeFellerConfig.ANIMATION_ENABLED
                 ? (long) logsToFell.size() * TreeFellerConfig.ANIMATION_DELAY_TICKS
                 : 0L;
-        fastLeafDecay.schedule(world, tree.getLeaves(), decayStartDelay);
+        fastLeafDecay.schedule(world, tree.getLeaves(), decayStartDelay, isCurrent, taskOwner);
 
         // Play a completion sound
         if (TreeFellerConfig.SOUNDS_ENABLED) {

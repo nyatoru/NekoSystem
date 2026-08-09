@@ -80,13 +80,15 @@ public class WoodOnStoneCutter {
                 Material outputMaterial = getMaterial(woodType, itemType);
 
                 if (outputMaterial != null && outputMaterial.isItem()) {
-                    NamespacedKey key = new NamespacedKey(plugin, "wood_" + woodType.toLowerCase() + "_" + itemType.toLowerCase());
+                    NamespacedKey key = new NamespacedKey(plugin, recipeKeyPath(woodType, itemType));
                     ItemStack result = new ItemStack(outputMaterial, outputAmount);
                     StonecuttingRecipe recipe = new StonecuttingRecipe(key, result, input);
                     recipe.setGroup("woodcutting_" + woodType.toLowerCase());
 
+                    // Remove a stale recipe left by an earlier feature instance.
+                    plugin.getServer().removeRecipe(key);
+                    recipeKeys.add(key);
                     if (plugin.getServer().addRecipe(recipe)) {
-                        recipeKeys.add(key);
                         recipeCount++;
                     } else {
                         skippedCount++;
@@ -98,6 +100,10 @@ public class WoodOnStoneCutter {
 
         plugin.getLogger().info("Registered " + recipeCount + " wood stonecutter recipes" +
             (skippedCount > 0 ? " (skipped " + skippedCount + " invalid)" : ""));
+    }
+
+    private String recipeKeyPath(String woodType, String itemType) {
+        return "woodcutting/" + woodType.toLowerCase() + "/" + itemType.toLowerCase();
     }
 
     /**

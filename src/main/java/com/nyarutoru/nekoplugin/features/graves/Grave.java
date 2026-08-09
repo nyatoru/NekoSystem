@@ -64,9 +64,10 @@ public final class Grave {
     }
 
     public static Grave create(UUID ownerId, String ownerName, GravePosition deathPosition,
-                               GravePosition gravePosition, List<ItemStack> items, int experience, long now) {
+                               GravePosition gravePosition, List<ItemStack> items, int experience,
+                               long now, long lifetimeMillis) {
         return new Grave(UUID.randomUUID(), ownerId, ownerName, deathPosition, gravePosition,
-            items, experience, now, now + GraveConfig.GRAVE_LIFETIME_MS);
+            items, experience, now, now + lifetimeMillis);
     }
 
     public UUID getId() { return id; }

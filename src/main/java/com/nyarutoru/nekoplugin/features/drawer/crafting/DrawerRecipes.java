@@ -22,6 +22,7 @@ import java.util.Map;
  * Handles creation and registration of drawer crafting recipes.
  */
 public class DrawerRecipes {
+    private final List<String> registeredRecipeIds = new ArrayList<>();
 
     public static ItemStack createDrawerItem(DrawerTier tier) {
         return createDrawerItemWithContents(tier, null, 0);
@@ -160,6 +161,7 @@ public class DrawerRecipes {
     }
 
     public void registerAll() {
+        unregisterAll();
         registerBaseCustomRecipe();
 
         for (DrawerTier tier : DrawerTier.values()) {
@@ -167,6 +169,18 @@ public class DrawerRecipes {
                 continue;
             registerUpgradeCustomRecipe(tier);
         }
+    }
+
+    public void unregisterAll() {
+        for (String recipeId : List.copyOf(registeredRecipeIds)) {
+            RecipeAPI.getInstance().unregisterRecipe(recipeId);
+        }
+        registeredRecipeIds.clear();
+    }
+
+    private void register(CustomRecipe recipe) {
+        RecipeAPI.getInstance().registerRecipe(recipe);
+        registeredRecipeIds.add(recipe.getId());
     }
 
     private void registerBaseCustomRecipe() {
@@ -182,7 +196,7 @@ public class DrawerRecipes {
                                 'B', CustomRecipe.Ingredient.of(Material.BARREL)))
                 .build();
 
-        RecipeAPI.getInstance().registerRecipe(recipe);
+        register(recipe);
     }
 
     private void registerUpgradeCustomRecipe(DrawerTier tier) {
@@ -241,6 +255,6 @@ public class DrawerRecipes {
                 })
                 .build();
 
-        RecipeAPI.getInstance().registerRecipe(recipe);
+        register(recipe);
     }
 }

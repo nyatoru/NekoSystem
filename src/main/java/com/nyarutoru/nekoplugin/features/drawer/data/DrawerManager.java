@@ -19,7 +19,9 @@ import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 
 /**
@@ -31,12 +33,17 @@ public class DrawerManager {
 
     private static final String DATABASE_NAME = "drawers";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final long AUTO_SAVE_TICKS = 20L * 60 * 5; // 5 minutes
+    private static final long DEFAULT_AUTO_SAVE_INTERVAL_SECONDS = 5 * 60;
     private static volatile DrawerManager instance;
 
     private final Map<String, Drawer> drawers = new ConcurrentHashMap<>();
+    private final Set<SchedulerUtils.TaskHandle> saveTasks = ConcurrentHashMap.newKeySet();
+    private final AtomicLong generation = new AtomicLong();
+    private final Object saveLock = new Object();
     private NekoPlugin plugin;
-    private boolean dirty = false;
+    private volatile boolean dirty;
+    private volatile long autoSaveIntervalSeconds = DEFAULT_AUTO_SAVE_INTERVAL_SECONDS;
+    private SchedulerUtils.TaskHandle autoSaveTask;
 
     private DrawerManager() {
     }
@@ -52,7 +59,15 @@ public class DrawerManager {
         return instance;
     }
 
-    public void initialize(NekoPlugin plugin) {
+    public synchronized void initialize(NekoPlugin plugin) {
+        SchedulerUtils.cancelTask(autoSaveTask);
+        autoSaveTask = null;
+        generation.incrementAndGet();
+        synchronized (saveLock) {
+            for (SchedulerUtils.TaskHandle task : Set.copyOf(saveTasks)) SchedulerUtils.cancelTask(task);
+            saveTasks.clear();
+        }
+        dirty = false;
         this.plugin = plugin;
 
         // Initialize database table
@@ -176,13 +191,30 @@ public class DrawerManager {
         }
     }
 
+    public synchronized void setAutoSaveIntervalSeconds(long seconds) {
+        if (seconds < 10 || seconds > 86400) {
+            throw new IllegalArgumentException("Auto-save interval must be between 10 and 86400 seconds");
+        }
+        autoSaveIntervalSeconds = seconds;
+        if (plugin != null) {
+            SchedulerUtils.cancelTask(autoSaveTask);
+            autoSaveTask = null;
+            startAutoSave();
+        }
+    }
+
+    public long getAutoSaveIntervalSeconds() {
+        return autoSaveIntervalSeconds;
+    }
+
     private void startAutoSave() {
-        // Run on global timer - saveAll() is fully async so no blocking
-        SchedulerUtils.runGlobalTimer(() -> {
-            if (dirty) {
-                saveAll(); // Fully async, won't block
+        long expectedGeneration = generation.get();
+        long intervalTicks = SchedulerUtils.secondsToTicks(autoSaveIntervalSeconds);
+        autoSaveTask = SchedulerUtils.runGlobalTimerTask(() -> {
+            if (generation.get() == expectedGeneration && dirty) {
+                saveAll();
             }
-        }, AUTO_SAVE_TICKS, AUTO_SAVE_TICKS);
+        }, intervalTicks, intervalTicks);
     }
 
     private String locationKey(Location location) {
@@ -239,6 +271,11 @@ public class DrawerManager {
             deleteDrawer(removed);
         }
         return removed;
+    }
+
+    /** Removes a loaded drawer without deleting its persistent record. */
+    public Drawer evictDrawer(Location location) {
+        return drawers.remove(locationKey(location));
     }
 
     public int getDrawerCount() {
@@ -331,58 +368,54 @@ public class DrawerManager {
         dirty = false; // Reset dirty flag immediately
 
         // Execute all database work async to prevent blocking
-        SchedulerUtils.runAsync(() -> {
-            Connection conn = getConnection();
-            if (conn == null) {
-                plugin.getLogger().warning("Failed to get database connection for drawer auto-save");
-                return;
-            }
+        SchedulerUtils.TaskHandle saveTask = SchedulerUtils.runAsyncTask(() -> {
+            synchronized (saveLock) {
+                Connection conn = getConnection();
+                if (conn == null) {
+                    if (plugin != null) plugin.getLogger().warning("Failed to get database connection for drawer auto-save");
+                    return;
+                }
 
-            String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                String sql = "INSERT OR REPLACE INTO drawers (world, x, y, z, item_type, item_count, tier) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                conn.setAutoCommit(false);
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    conn.setAutoCommit(false);
 
-                int batchSize = 0;
-                for (Drawer drawer : snapshot.values()) {
-                    Location loc = drawer.getLocation();
-                    stmt.setString(1, loc.getWorld().getName());
-                    stmt.setInt(2, loc.getBlockX());
-                    stmt.setInt(3, loc.getBlockY());
-                    stmt.setInt(4, loc.getBlockZ());
-                    stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
-                    stmt.setInt(6, drawer.getItemCount());
-                    stmt.setString(7, drawer.getTier().name());
-                    stmt.addBatch();
-                    batchSize++;
+                    int batchSize = 0;
+                    for (Drawer drawer : snapshot.values()) {
+                        Location loc = drawer.getLocation();
+                        stmt.setString(1, loc.getWorld().getName());
+                        stmt.setInt(2, loc.getBlockX());
+                        stmt.setInt(3, loc.getBlockY());
+                        stmt.setInt(4, loc.getBlockZ());
+                        stmt.setString(5, drawer.getItemType() != null ? drawer.getItemType().name() : null);
+                        stmt.setInt(6, drawer.getItemCount());
+                        stmt.setString(7, drawer.getTier().name());
+                        stmt.addBatch();
+                        batchSize++;
 
-                    // Execute batch every 100 items to prevent memory issues
-                    if (batchSize >= 100) {
-                        stmt.executeBatch();
-                        batchSize = 0;
+                        if (batchSize >= 100) {
+                            stmt.executeBatch();
+                            batchSize = 0;
+                        }
                     }
-                }
 
-                // Execute remaining items
-                if (batchSize > 0) {
-                    stmt.executeBatch();
-                }
+                    if (batchSize > 0) stmt.executeBatch();
+                    conn.commit();
+                    conn.setAutoCommit(true);
 
-                conn.commit();
-                conn.setAutoCommit(true);
-
-                // Log success (async, won't spam console)
-                plugin.getLogger().info("Auto-saved " + snapshot.size() + " drawers asynchronously.");
-
-            } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "Failed to save drawers asynchronously", e);
-                try {
-                    conn.rollback();
-                } catch (SQLException ex) {
-                    plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", ex);
+                    if (plugin != null) plugin.getLogger().info("Auto-saved " + snapshot.size() + " drawers asynchronously.");
+                } catch (SQLException e) {
+                    if (plugin != null) plugin.getLogger().log(Level.WARNING, "Failed to save drawers asynchronously", e);
+                    try {
+                        conn.rollback();
+                    } catch (SQLException ex) {
+                        if (plugin != null) plugin.getLogger().log(Level.SEVERE, "Failed to rollback transaction", ex);
+                    }
                 }
             }
         });
+        saveTasks.add(saveTask);
     }
 
     public void loadAll() {
@@ -453,10 +486,21 @@ public class DrawerManager {
         }
     }
 
-    public void shutdown() {
-        // On shutdown, save synchronously to ensure all data is saved
-        saveAllSync();
+    public synchronized void shutdown() {
+        SchedulerUtils.cancelTask(autoSaveTask);
+        autoSaveTask = null;
+        generation.incrementAndGet();
+        for (SchedulerUtils.TaskHandle task : Set.copyOf(saveTasks)) SchedulerUtils.cancelTask(task);
+        saveTasks.clear();
+
+        // On shutdown, save synchronously to ensure all data is saved. Waiting on the
+        // same lock also keeps an in-flight async save from racing connection close.
+        synchronized (saveLock) {
+            saveAllSync();
+        }
         drawers.clear();
+        plugin = null;
+        dirty = false;
 
         // Close database connection
         DatabaseManager.getInstance().closeConnection(DATABASE_NAME);

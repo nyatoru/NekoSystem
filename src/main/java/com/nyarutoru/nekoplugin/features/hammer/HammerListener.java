@@ -1,8 +1,13 @@
 package com.nyarutoru.nekoplugin.features.hammer;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.ApplySemantics;
+import com.nyarutoru.nekoplugin.core.settings.SettingDescriptor;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import org.bukkit.Material;
@@ -29,7 +34,10 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Handles Hammer 3x3 mining, anvil restriction, and mining speed reduction.
@@ -39,7 +47,8 @@ public class HammerListener implements Listener {
 
     // Mining speed modifier for hammers (35% reduction = multiply by 0.65)
     private final NamespacedKey HAMMER_SPEED_MODIFIER_KEY;
-    private static final double MINING_SPEED_REDUCTION = -0.35; // 35% reduction
+    private static final double DEFAULT_MINING_SPEED_REDUCTION = 0.35;
+    private volatile double miningSpeedReduction = DEFAULT_MINING_SPEED_REDUCTION;
 
     // Static 3x3 offset patterns
     private static final int[][] OFFSETS_HORIZONTAL = {
@@ -131,14 +140,86 @@ public class HammerListener implements Listener {
             // Misc
             Material.GLOWSTONE, Material.MAGMA_BLOCK, Material.BONE_BLOCK,
             Material.LODESTONE, Material.RESPAWN_ANCHOR);
+    private volatile Set<Material> mineableMaterials = Set.copyOf(MINEABLE);
 
     private final NekoPlugin plugin;
+    private final AtomicLong generation = new AtomicLong();
+    private final Set<SchedulerUtils.TaskHandle> ownedTasks = ConcurrentHashMap.newKeySet();
+    private volatile boolean running;
     // Track blocks being broken to prevent recursion using BlockPos
     private final Set<BlockPos> breakingBlocks = new HashSet<>();
 
     public HammerListener(NekoPlugin plugin) {
         this.plugin = plugin;
         this.HAMMER_SPEED_MODIFIER_KEY = new NamespacedKey(plugin, "hammer_mining_speed");
+    }
+
+    void start() {
+        if (running) return;
+        for (SchedulerUtils.TaskHandle task : ownedTasks) {
+            SchedulerUtils.cancelTask(task);
+        }
+        ownedTasks.clear();
+        running = true;
+        long expectedGeneration = generation.incrementAndGet();
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            schedulePlayer(player, expectedGeneration, () -> updateMiningSpeedModifier(player,
+                    player.getInventory().getItemInMainHand()));
+        }
+    }
+
+    void stop() {
+        running = false;
+        long cleanupGeneration = generation.incrementAndGet();
+        for (SchedulerUtils.TaskHandle task : ownedTasks) {
+            SchedulerUtils.cancelTask(task);
+        }
+        ownedTasks.clear();
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            scheduleOwned(player, cleanupGeneration, () -> removeMiningSpeedModifier(player), true);
+        }
+        breakingBlocks.clear();
+    }
+
+    public void registerSettings(SettingRegistry registry, AdminState state) {
+        SettingDescriptor<Double> reduction = SettingDescriptor.doubleValue(
+                "mining-speed-reduction", "Mining speed reduction", DEFAULT_MINING_SPEED_REDUCTION,
+                0.0, 0.95, ApplySemantics.IMMEDIATE, this::setMiningSpeedReduction);
+        SettingDescriptor<List<Material>> materials = SettingDescriptor.materials(
+                "mineable-materials", "Mineable materials", List.copyOf(MINEABLE),
+                ApplySemantics.IMMEDIATE, this::setMineableMaterials);
+        registry.register("hammer", reduction);
+        registry.register("hammer", materials);
+        applyStored(state, reduction);
+        applyStored(state, materials);
+    }
+
+    public double getMiningSpeedReduction() { return miningSpeedReduction; }
+
+    public void setMiningSpeedReduction(double value) {
+        if (!Double.isFinite(value) || value < 0.0 || value > 0.95) {
+            throw new IllegalArgumentException("Reduction must be between 0 and 0.95");
+        }
+        miningSpeedReduction = value;
+        long expectedGeneration = generation.get();
+        for (Player player : plugin.getServer().getOnlinePlayers()) {
+            schedulePlayer(player, expectedGeneration, () -> updateMiningSpeedModifier(player,
+                    player.getInventory().getItemInMainHand()));
+        }
+    }
+
+    public void setMineableMaterials(List<Material> materials) {
+        if (materials.isEmpty()) throw new IllegalArgumentException("At least one material is required");
+        mineableMaterials = Set.copyOf(materials);
+    }
+
+    private <T> void applyStored(AdminState state, SettingDescriptor<T> descriptor) {
+        String stored = state.settingValue("hammer", descriptor.key());
+        try {
+            descriptor.apply(stored == null ? descriptor.defaultValue() : descriptor.parse(stored));
+        } catch (IllegalArgumentException ignored) {
+            descriptor.apply(descriptor.defaultValue());
+        }
     }
 
     @EventHandler(priority = EventPriority.LOW)
@@ -216,17 +297,17 @@ public class HammerListener implements Listener {
 
             // Break block with appropriate drops
             breakingBlocks.add(targetPos);
-
-            // Use breakNaturally for both silk touch and normal mining
-            // This preserves proper block behavior (bee nests, shulker boxes, infested blocks, etc.)
-            if (hasSilkTouch) {
-                target.breakNaturally(hammer, true); // true = drop silk touch drops
-            } else {
-                target.breakNaturally(hammer);
+            try {
+                // Use breakNaturally for both silk touch and normal mining.
+                if (hasSilkTouch) {
+                    target.breakNaturally(hammer, true);
+                } else {
+                    target.breakNaturally(hammer);
+                }
+                brokeAnyBlock = true;
+            } finally {
+                breakingBlocks.remove(targetPos);
             }
-
-            breakingBlocks.remove(targetPos);
-            brokeAnyBlock = true;
         }
 
         // Apply only 1 durability for the entire 3x3 operation
@@ -268,7 +349,7 @@ public class HammerListener implements Listener {
     }
 
     private boolean isMineable(Material material) {
-        return MINEABLE.contains(material);
+        return mineableMaterials.contains(material);
     }
 
     /**
@@ -311,7 +392,8 @@ public class HammerListener implements Listener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        removeMiningSpeedModifier(event.getPlayer());
+        Player player = event.getPlayer();
+        scheduleOwned(player, generation.get(), () -> removeMiningSpeedModifier(player), false);
     }
 
     private void updateMiningSpeedModifier(Player player, ItemStack item) {
@@ -337,14 +419,13 @@ public class HammerListener implements Listener {
         if (attribute == null)
             return;
 
-        // Check if already applied
-        if (attribute.getModifier(HAMMER_SPEED_MODIFIER_KEY) != null)
-            return;
+        AttributeModifier existingModifier = attribute.getModifier(HAMMER_SPEED_MODIFIER_KEY);
+        if (existingModifier != null) attribute.removeModifier(existingModifier);
 
         // Create and apply modifier
         AttributeModifier modifier = new AttributeModifier(
                 HAMMER_SPEED_MODIFIER_KEY,
-                MINING_SPEED_REDUCTION,
+                -miningSpeedReduction,
                 AttributeModifier.Operation.MULTIPLY_SCALAR_1);
         attribute.addModifier(modifier);
     }
@@ -362,5 +443,25 @@ public class HammerListener implements Listener {
         if (existingModifier != null) {
             attribute.removeModifier(existingModifier);
         }
+    }
+
+    private void schedulePlayer(Player player, long expectedGeneration, Runnable action) {
+        scheduleOwned(player, expectedGeneration, action, false);
+    }
+
+    private void scheduleOwned(Player player, long expectedGeneration, Runnable action, boolean cleanup) {
+        SchedulerUtils.TaskHandle[] holder = new SchedulerUtils.TaskHandle[1];
+        holder[0] = SchedulerUtils.runAtEntityTask(player, () -> {
+            ownedTasks.remove(holder[0]);
+            if ((cleanup && !running && generation.get() == expectedGeneration)
+                    || (!cleanup && running && generation.get() == expectedGeneration)) {
+                action.run();
+            }
+        });
+        ownedTasks.add(holder[0]);
+    }
+
+    void clearRecursionState() {
+        breakingBlocks.clear();
     }
 }

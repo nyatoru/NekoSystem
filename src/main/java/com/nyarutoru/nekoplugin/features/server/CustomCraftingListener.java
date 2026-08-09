@@ -49,6 +49,7 @@ public class CustomCraftingListener implements Listener {
             .color(NamedTextColor.GOLD)
             .decoration(TextDecoration.BOLD, true);
     private final NekoPlugin plugin;
+    private volatile boolean running = true;
     private final Set<UUID> openCraftingGUIs = new HashSet<>();
     private final RecipeBookGUI recipeBookGUI;
 
@@ -84,6 +85,15 @@ public class CustomCraftingListener implements Listener {
 
         // Open custom GUI
         openCraftingGUI(event.getPlayer());
+    }
+
+    public void cleanup() {
+        running = false;
+        for (UUID playerId : Set.copyOf(openCraftingGUIs)) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) player.closeInventory();
+        }
+        openCraftingGUIs.clear();
     }
 
     private void openCraftingGUI(Player player) {
@@ -153,8 +163,10 @@ public class CustomCraftingListener implements Listener {
         // Allow clicks in player inventory, but update result after
         if (slot >= 54) {
             // If shift-clicking from player inventory, update result after
-            if (event.isShiftClick()) {
-                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> updateCraftingResult(inv));
+            if (event.isShiftClick() && running) {
+                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> {
+                    if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv);
+                });
             }
             return;
         }
@@ -171,7 +183,11 @@ public class CustomCraftingListener implements Listener {
         // Allow crafting slot interaction
         if (isCraftingSlot) {
             // Update result after a tick (handles all click types)
-            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> updateCraftingResult(inv));
+            if (running) {
+                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> {
+                    if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv);
+                });
+            }
             return;
         }
 
@@ -202,8 +218,12 @@ public class CustomCraftingListener implements Listener {
                             player.setItemOnCursor(cursor);
                             inv.setItem(RESULT_SLOT, createResultPlaceholder());
                             consumeCraftingMaterials(inv);
-                            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
-                                    () -> updateCraftingResult(inv));
+                            if (running) {
+                                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
+                                        () -> {
+                                            if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv);
+                                        });
+                            }
                         }
                     }
                 }
@@ -222,7 +242,7 @@ public class CustomCraftingListener implements Listener {
         // Recipe Book button
         if (slot == RECIPE_BOOK_SLOT) {
             player.closeInventory();
-            recipeBookGUI.openRecipeBook(player);
+            if (running) recipeBookGUI.openRecipeBook(player);
             event.setCancelled(true);
             return;
         }
@@ -444,9 +464,12 @@ public class CustomCraftingListener implements Listener {
         }
 
         // Update result if dragging to crafting slots
-        if (affectsCrafting) {
+        if (affectsCrafting && running) {
+            Inventory inventory = event.getInventory();
             com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
-                    () -> updateCraftingResult(event.getInventory()));
+                    () -> {
+                        if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inventory);
+                    });
         }
     }
 

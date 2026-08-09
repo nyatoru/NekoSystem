@@ -25,14 +25,16 @@ final class CarryListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
         Player player = event.getPlayer();
-        if (event.getHand() != EquipmentSlot.HAND || !player.isSneaking() || manager.isCarrying(player)) return;
+        if (event.getHand() != EquipmentSlot.HAND || (manager.requireSneaking() && !player.isSneaking())
+                || manager.isCarrying(player)) return;
         if (manager.pickupMob(player, event.getRightClicked())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteractBlock(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getHand() != EquipmentSlot.HAND
-                || event.getClickedBlock() == null || !event.getPlayer().isSneaking()) return;
+                || event.getClickedBlock() == null
+                || (manager.requireSneaking() && !event.getPlayer().isSneaking())) return;
         boolean handled = manager.isCarrying(event.getPlayer())
             ? manager.place(event.getPlayer(), event.getClickedBlock(), event.getBlockFace())
             : manager.pickupBlock(event.getPlayer(), event.getClickedBlock());

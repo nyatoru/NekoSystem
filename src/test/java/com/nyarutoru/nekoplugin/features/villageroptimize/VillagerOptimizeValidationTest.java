@@ -2,6 +2,8 @@ package com.nyarutoru.nekoplugin.features.villageroptimize;
 
 import com.nyarutoru.nekoplugin.core.AbstractFeature;
 import com.nyarutoru.nekoplugin.core.Feature;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import org.bukkit.event.Listener;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +23,17 @@ class VillagerOptimizeValidationTest {
         assertTrue(Feature.class.isAssignableFrom(VillagerOptimizeFeature.class));
         assertTrue(AbstractFeature.class.isAssignableFrom(VillagerOptimizeFeature.class));
         assertTrue(Listener.class.isAssignableFrom(VillagerOptimizeListener.class));
+    }
+
+    @Test
+    void featureRegistersCooldownPolicyAndProtectionSettings() {
+        SettingRegistry registry = new SettingRegistry();
+        VillagerOptimizeFeature feature = new VillagerOptimizeFeature();
+        feature.registerSettings(registry, new AdminState());
+
+        assertTrue(registry.get(feature.getId()).stream().anyMatch(descriptor -> descriptor.key().equals("optimize-cooldown-seconds")));
+        assertTrue(registry.get(feature.getId()).stream().anyMatch(descriptor -> descriptor.key().equals("protect-damage")));
+        assertTrue(registry.get(feature.getId()).stream().anyMatch(descriptor -> descriptor.key().equals("restore-ai-on-disable")));
     }
 
     @Test

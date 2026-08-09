@@ -3,6 +3,7 @@ package com.nyarutoru.nekoplugin.features.villageroptimize;
 import com.destroystokyo.paper.event.entity.EntityKnockbackByEntityEvent;
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.utils.ComponentUtils;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.NamespacedKey;
@@ -25,6 +26,11 @@ import org.bukkit.persistence.PersistentDataType;
 public class VillagerOptimizeListener implements Listener {
 
     private static final String OPTIMIZATION_TYPE = "NAMETAG";
+
+    private boolean protectDamage = true;
+    private boolean protectKnockback = true;
+    private boolean protectTargeting = true;
+    private boolean restoreAiOnDisable = true;
 
     private final NamespacedKey optimizationTypeKey;
     private final NamespacedKey lastOptimizeKey;
@@ -67,7 +73,7 @@ public class VillagerOptimizeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onTarget(EntityTargetEvent event) {
-        if (event.getTarget() instanceof Villager villager && isOptimized(villager)) {
+        if (protectTargeting && event.getTarget() instanceof Villager villager && isOptimized(villager)) {
             event.setCancelled(true);
             if (event.getEntity() instanceof Mob mob) {
                 mob.setTarget(null);
@@ -77,14 +83,14 @@ public class VillagerOptimizeListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Villager villager && isOptimized(villager)) {
+        if (protectDamage && event.getEntity() instanceof Villager villager && isOptimized(villager)) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onKnockback(EntityKnockbackByEntityEvent event) {
-        if (event.getEntity() instanceof Villager villager && isOptimized(villager)) {
+        if (protectKnockback && event.getEntity() instanceof Villager villager && isOptimized(villager)) {
             event.setCancelled(true);
         }
     }
@@ -101,7 +107,7 @@ public class VillagerOptimizeListener implements Listener {
         long now = System.currentTimeMillis();
         Long lastOptimize = villager.getPersistentDataContainer().get(lastOptimizeKey, PersistentDataType.LONG);
         if (lastOptimize != null && !VillagerOptimizePolicy.cooldownElapsed(
-                now, lastOptimize, VillagerOptimizePolicy.OPTIMIZE_COOLDOWN_MILLIS)) {
+                now, lastOptimize, VillagerOptimizePolicy.optimizeCooldownMillis)) {
             event.getPlayer().sendActionBar(ComponentUtils.error("This villager was optimized recently"));
             return;
         }
@@ -141,7 +147,7 @@ public class VillagerOptimizeListener implements Listener {
         PersistentDataContainer data = villager.getPersistentDataContainer();
         Long lastLevelUp = data.get(lastLevelUpKey, PersistentDataType.LONG);
         if (lastLevelUp != null && !VillagerOptimizePolicy.cooldownElapsed(
-                now, lastLevelUp, VillagerOptimizePolicy.LEVEL_CHECK_COOLDOWN_MILLIS)) {
+                now, lastLevelUp, VillagerOptimizePolicy.levelCheckCooldownMillis)) {
             return;
         }
 
@@ -161,6 +167,26 @@ public class VillagerOptimizeListener implements Listener {
 
     private void unoptimize(Villager villager) {
         villager.getPersistentDataContainer().remove(optimizationTypeKey);
+        villager.setAware(true);
+        villager.setAI(true);
+    }
+
+    public void configure(boolean protectDamage, boolean protectKnockback, boolean protectTargeting,
+                          boolean restoreAiOnDisable) {
+        this.protectDamage = protectDamage;
+        this.protectKnockback = protectKnockback;
+        this.protectTargeting = protectTargeting;
+        this.restoreAiOnDisable = restoreAiOnDisable;
+    }
+
+    public void restoreLoadedOptimizedVillagers() {
+        if (!restoreAiOnDisable) return;
+        org.bukkit.Bukkit.getWorlds().forEach(world -> world.getEntitiesByClass(Villager.class).forEach(villager -> {
+            if (isOptimized(villager)) SchedulerUtils.runAtEntity(villager, () -> restoreRuntimeState(villager));
+        }));
+    }
+
+    private void restoreRuntimeState(Villager villager) {
         villager.setAware(true);
         villager.setAI(true);
     }

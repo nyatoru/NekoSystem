@@ -1,5 +1,7 @@
 package com.nyarutoru.nekoplugin.features.carry;
 
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import io.papermc.paper.block.TileStateInventoryHolder;
 import org.bukkit.block.BlockState;
 import org.bukkit.entity.Animals;
@@ -47,6 +49,17 @@ class CarryValidationTest {
             default -> defaultValue(method.getReturnType());
         });
         assertFalse(CarryPolicy.isCarryableMob(occupied));
+    }
+
+    @Test
+    void featureRegistersOnlySafeCarrySettings() {
+        CarryFeature feature = new CarryFeature();
+        SettingRegistry registry = new SettingRegistry();
+        AdminState state = new AdminState();
+        feature.registerSettings(registry, state);
+
+        assertEquals(6, registry.get("carry").size());
+        assertTrue(registry.get("carry").stream().noneMatch(setting -> setting.key().contains("capacity")));
     }
 
     @Test

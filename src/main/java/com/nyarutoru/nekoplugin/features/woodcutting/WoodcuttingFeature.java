@@ -2,6 +2,8 @@ package com.nyarutoru.nekoplugin.features.woodcutting;
 
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.core.AbstractFeature;
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 
 /**
  * Woodcutting feature - enhanced wood processing using stonecutter.
@@ -16,6 +18,11 @@ public class WoodcuttingFeature extends AbstractFeature {
 
     public WoodcuttingFeature() {
         super("woodcutting", "Woodcutting");
+    }
+
+    public void registerSettings(SettingRegistry registry, AdminState state) {
+        // Recipe output and input policy are intentionally not exposed: this feature
+        // has no safe persisted recipe rebuild contract for live administration.
     }
 
     @Override

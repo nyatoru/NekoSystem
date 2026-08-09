@@ -39,6 +39,7 @@ public class RecipeBookGUI implements Listener {
             .decoration(TextDecoration.BOLD, true);
     // Track which GUI players have open
     private final Map<UUID, GUIState> playerStates = new ConcurrentHashMap<>();
+    private volatile boolean running = true;
     private RecipePreviewGUI recipePreviewGUI;
 
     public RecipePreviewGUI getRecipePreviewGUI() {
@@ -49,10 +50,16 @@ public class RecipeBookGUI implements Listener {
         this.recipePreviewGUI = recipePreviewGUI;
     }
 
+    public void cleanup() {
+        running = false;
+        playerStates.clear();
+    }
+
     /**
      * Open the recipe book for a player.
      */
     public void openRecipeBook(Player player) {
+        if (!running) return;
         List<CustomRecipe> allRecipes = RecipeAPI.getInstance().getAllRecipes();
 
         // Group recipes by result display name + material to avoid true duplicates

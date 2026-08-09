@@ -34,6 +34,11 @@ public final class GraveManager {
     private final Map<UUID, Grave> graves = new ConcurrentHashMap<>();
     private final Map<String, UUID> locations = new ConcurrentHashMap<>();
     private final Set<UUID> viewers = ConcurrentHashMap.newKeySet();
+    private long graveLifetimeMillis = GraveConfig.DEFAULT_GRAVE_LIFETIME_MS;
+    private long checkIntervalTicks = GraveConfig.DEFAULT_GRAVE_CHECK_INTERVAL_TICKS;
+    private int maxGravesPerPlayer = GraveConfig.DEFAULT_MAX_GRAVES_PER_PLAYER;
+    private int safeLocationSearchRadius = GraveConfig.DEFAULT_MAX_SAFE_LOCATION_SEARCH_RADIUS;
+    private boolean started;
     private BukkitTask paperTask;
     private ScheduledTask foliaTask;
 
@@ -43,6 +48,15 @@ public final class GraveManager {
         this.displayManager = new GraveDisplayManager(plugin, this);
     }
 
+    public void setGraveLifetimeMillis(long value) { graveLifetimeMillis = value; }
+    public void setCheckIntervalTicks(long value) {
+        checkIntervalTicks = value;
+        if (started) rescheduleExpiryTask();
+    }
+    public void setMaxGravesPerPlayer(int value) { maxGravesPerPlayer = value; }
+    public void setSafeLocationSearchRadius(int value) { safeLocationSearchRadius = value; }
+    public void setDisplayUpdateIntervalTicks(long value) { displayManager.setUpdateIntervalTicks(value); }
+
     public boolean start() {
         if (!repository.initialize()) return false;
         for (Grave grave : repository.loadAll()) {
@@ -50,16 +64,14 @@ public final class GraveManager {
             resume(grave);
         }
         displayManager.start();
-        if (SchedulerUtils.isFolia()) foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
-            task -> checkExpired(), GraveConfig.GRAVE_CHECK_INTERVAL_TICKS, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS);
-        else paperTask = plugin.getServer().getScheduler().runTaskTimer(plugin,
-            this::checkExpired, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS, GraveConfig.GRAVE_CHECK_INTERVAL_TICKS);
+        started = true;
+        rescheduleExpiryTask();
         return true;
     }
 
     public void stop() {
-        if (paperTask != null) paperTask.cancel();
-        if (foliaTask != null) foliaTask.cancel();
+        started = false;
+        cancelExpiryTask();
         displayManager.stop();
         persistence.close();
         viewers.clear(); graves.clear(); locations.clear(); repository.close();
@@ -78,7 +90,7 @@ public final class GraveManager {
             reservations.release(markerPosition); return null;
         }
         Grave grave = Grave.create(player.getUniqueId(), player.getName(), GravePosition.from(deathLocation),
-            markerPosition, items, experience, System.currentTimeMillis());
+            markerPosition, items, experience, System.currentTimeMillis(), graveLifetimeMillis);
         addToIndexes(grave);
         displayManager.reconcile(grave, markerLocation);
         save(grave, success -> {
@@ -307,7 +319,7 @@ public final class GraveManager {
         int baseX = origin.getBlockX();
         int baseY = Math.max(world.getMinHeight() + 1, Math.min(origin.getBlockY(), world.getMaxHeight() - 2));
         int baseZ = origin.getBlockZ();
-        for (int radius = 0; radius <= GraveConfig.MAX_SAFE_LOCATION_SEARCH_RADIUS; radius++) {
+        for (int radius = 0; radius <= safeLocationSearchRadius; radius++) {
             for (int yOffset = -radius; yOffset <= radius; yOffset++) for (int xOffset = -radius; xOffset <= radius; xOffset++) for (int zOffset = -radius; zOffset <= radius; zOffset++) {
                 Location candidate = new Location(world, baseX + xOffset, baseY + yOffset, baseZ + zOffset);
                 if (!Bukkit.isOwnedByCurrentRegion(candidate) || !isSafe(candidate)) continue;
@@ -328,7 +340,24 @@ public final class GraveManager {
 
     private void enforceLimit(UUID ownerId) {
         List<Grave> ownerGraves = new ArrayList<>(getForPlayer(ownerId));
-        while (ownerGraves.size() > GraveConfig.MAX_GRAVES_PER_PLAYER) remove(ownerGraves.removeFirst(), true);
+        while (ownerGraves.size() > maxGravesPerPlayer) remove(ownerGraves.removeFirst(), true);
+    }
+
+    private void rescheduleExpiryTask() {
+        cancelExpiryTask();
+        if (!started) return;
+        if (SchedulerUtils.isFolia()) {
+            foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
+                task -> checkExpired(), checkIntervalTicks, checkIntervalTicks);
+        } else {
+            paperTask = plugin.getServer().getScheduler().runTaskTimer(plugin,
+                this::checkExpired, checkIntervalTicks, checkIntervalTicks);
+        }
+    }
+
+    private void cancelExpiryTask() {
+        if (paperTask != null) { paperTask.cancel(); paperTask = null; }
+        if (foliaTask != null) { foliaTask.cancel(); foliaTask = null; }
     }
 
     private void checkExpired() {

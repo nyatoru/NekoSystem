@@ -10,6 +10,8 @@ import org.bukkit.block.data.type.Leaves;
 
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /**
  * Accelerates natural decay for leaves exposed by TreeFeller.
@@ -25,17 +27,27 @@ public final class FastLeafDecay {
      * @param leaves the detected leaf positions
      * @param initialDelayTicks delay before decay checks can begin
      */
-    public void schedule(World world, List<BlockPos> leaves, long initialDelayTicks) {
+    public void schedule(World world, List<BlockPos> leaves, long initialDelayTicks,
+                         BooleanSupplier isCurrent, Consumer<SchedulerUtils.TaskHandle> taskOwner) {
         if (!TreeFellerConfig.FAST_LEAF_DECAY_ENABLED) {
             return;
         }
 
+        int minimumDelay = TreeFellerConfig.FAST_LEAF_DECAY_MIN_DELAY_TICKS;
+        int maximumDelay = TreeFellerConfig.FAST_LEAF_DECAY_MAX_DELAY_TICKS;
+        if (minimumDelay > maximumDelay) {
+            maximumDelay = minimumDelay;
+        }
+
         for (BlockPos leafPos : leaves) {
             long delay = initialDelayTicks + ThreadLocalRandom.current().nextLong(
-                    TreeFellerConfig.FAST_LEAF_DECAY_MIN_DELAY_TICKS,
-                    TreeFellerConfig.FAST_LEAF_DECAY_MAX_DELAY_TICKS + 1L);
-            SchedulerUtils.runAtLocationLater(leafPos.toLocation(world),
-                    () -> decayIfUnsupported(world, leafPos), delay);
+                    minimumDelay,
+                    maximumDelay + 1L);
+            taskOwner.accept(SchedulerUtils.runAtLocationLaterTask(leafPos.toLocation(world), () -> {
+                if (isCurrent.getAsBoolean()) {
+                    decayIfUnsupported(world, leafPos);
+                }
+            }, delay));
         }
     }
 

@@ -1,5 +1,7 @@
 package com.nyarutoru.nekoplugin.features.drawer;
 
+import com.nyarutoru.nekoplugin.core.admin.AdminState;
+import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import com.nyarutoru.nekoplugin.features.drawer.data.Drawer;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
 import org.junit.jupiter.api.Test;
@@ -117,10 +119,23 @@ class DrawerTest {
     }
 
     @Test
+    void testSettingsExposeSafeDrawerControlsOnly() {
+        DrawerFeature feature = new DrawerFeature();
+        SettingRegistry registry = new SettingRegistry();
+        AdminState state = new AdminState();
+        feature.registerSettings(registry, state);
+
+        assertEquals(4, registry.get("drawer").size());
+        assertTrue(registry.get("drawer").stream().noneMatch(setting ->
+                setting.key().contains("tier") || setting.key().contains("capacity")));
+    }
+
+    @Test
     void testBlockedCategoriesExist() {
         // Verify that blocked categories are defined (actual values tested in integration tests)
         // This test just ensures the Drawer class loads properly
         assertNotNull(Drawer.class);
+        assertFalse(Drawer.defaultBlockedCategories().isEmpty());
     }
 
     @Test
