@@ -8,6 +8,8 @@ import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -53,6 +55,14 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
 
     @Override
     protected void cleanup() {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (cursed.contains(player.getUniqueId())) {
+                clearCurseEffects(player);
+                if (player.getRemainingAir() != player.getMaximumAir()) {
+                    player.setRemainingAir(player.getMaximumAir());
+                }
+            }
+        }
         outTicks.clear();
         save();
     }
@@ -80,6 +90,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
                 SchedulerUtils.runAtEntity(online, () -> {
                     if (online.isOnline()) {
                         online.setRemainingAir(online.getMaximumAir());
+                        clearCurseEffects(online);
                     }
                 });
             }
@@ -139,6 +150,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
             if (player.getRemainingAir() != player.getMaximumAir()) {
                 player.setRemainingAir(player.getMaximumAir());
             }
+            clearCurseEffects(player);
             return;
         }
 
@@ -149,9 +161,11 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
             } else if (player.getRemainingAir() != player.getMaximumAir()) {
                 player.setRemainingAir(player.getMaximumAir());
             }
+            applyWaterEffects(player);
             return;
         }
 
+        applyLandEffects(player);
         int ticks = outTicks.getOrDefault(id, 0) + (int) TICK_PERIOD_TICKS;
         outTicks.put(id, ticks);
 
@@ -189,6 +203,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         SchedulerUtils.runAtEntity(player, () -> {
             if (cursed.contains(player.getUniqueId())) {
                 player.setRemainingAir(player.getMaximumAir());
+                // effects will be applied on next tick based on water check
             }
         });
     }
@@ -196,5 +211,29 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         outTicks.remove(event.getPlayer().getUniqueId());
+        // clear effects proactively (player entity will despawn, but keep clean)
+        clearCurseEffects(event.getPlayer());
+    }
+
+    private static void applyWaterEffects(Player player) {
+        // Heart of the Sea while in water -> Conduit Power + Dolphin's Grace, clear mining fatigue
+        player.removePotionEffect(PotionEffectType.MINING_FATIGUE);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.CONDUIT_POWER, 60, 0, false, false, true));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.DOLPHINS_GRACE, 60, 0, false, false, true));
+    }
+
+    private static void applyLandEffects(Player player) {
+        // Slows mining when not in water
+        player.removePotionEffect(PotionEffectType.CONDUIT_POWER);
+        player.removePotionEffect(PotionEffectType.DOLPHINS_GRACE);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, 60, 1, false, false, true));
+    }
+
+    private static void clearCurseEffects(Player player) {
+        player.removePotionEffect(PotionEffectType.MINING_FATIGUE);
+        player.removePotionEffect(PotionEffectType.CONDUIT_POWER);
+        player.removePotionEffect(PotionEffectType.DOLPHINS_GRACE);
+        // legacy clean-up if HASTE was given before
+        player.removePotionEffect(PotionEffectType.HASTE);
     }
 }
