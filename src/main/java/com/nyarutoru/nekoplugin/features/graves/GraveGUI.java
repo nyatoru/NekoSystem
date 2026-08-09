@@ -53,6 +53,19 @@ final class GraveGUI extends BaseGUI {
             });
         }
         if (page > 0) setItem(45, createItem(Material.ARROW, "Previous page"), event -> { page--; refresh(); });
+        setItem(48, createItem(Material.CHEST, "Get all items", List.of("Requires enough inventory space")), event -> {
+            if (grave.hasPendingClaim()) return;
+            boolean started = manager.claimAll(grave, player, success -> {
+                if (success || grave.getState() != Grave.State.ACTIVE || grave.isEmpty()) {
+                    player.closeInventory();
+                } else {
+                    player.sendMessage(Component.text("Could not retrieve all items. Check your inventory space.", NamedTextColor.RED));
+                    refresh();
+                }
+            });
+            if (!started) player.sendMessage(Component.text("Not enough inventory space for all grave items.", NamedTextColor.RED));
+            else refresh();
+        });
         if (start + PAGE_SIZE < items.size()) setItem(53, createItem(Material.ARROW, "Next page"), event -> { page++; refresh(); });
         setItem(49, createCloseButton(), event -> player.closeInventory());
         fillEmpty(Material.GRAY_STAINED_GLASS_PANE);

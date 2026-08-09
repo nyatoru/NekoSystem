@@ -18,6 +18,14 @@ public final class Grave {
         @Override public ItemStack item() { return item.clone(); }
     }
 
+    public record AllClaim(List<ItemStack> items, int experience) {
+        public AllClaim {
+            items = cloneItems(items);
+            experience = Math.max(0, experience);
+        }
+        @Override public List<ItemStack> items() { return cloneItems(items); }
+    }
+
     private final UUID id;
     private final UUID ownerId;
     private final String ownerName;
@@ -30,6 +38,7 @@ public final class Grave {
     private State state;
     private Disposition disposition;
     private ItemClaim pendingClaim;
+    private AllClaim pendingAllClaim;
 
     public Grave(UUID id, UUID ownerId, String ownerName, GravePosition deathPosition,
                  GravePosition gravePosition, List<ItemStack> items, int experience,
@@ -72,10 +81,10 @@ public final class Grave {
     public synchronized int getExperience() { return experience; }
     public synchronized State getState() { return state; }
     public synchronized Disposition getDisposition() { return disposition; }
-    public synchronized boolean hasPendingClaim() { return pendingClaim != null; }
+    public synchronized boolean hasPendingClaim() { return pendingClaim != null || pendingAllClaim != null; }
 
     public synchronized ItemClaim claimItem(int index) {
-        if (state != State.ACTIVE || pendingClaim != null || index < 0 || index >= items.size()) return null;
+        if (state != State.ACTIVE || hasPendingClaim() || index < 0 || index >= items.size()) return null;
         pendingClaim = new ItemClaim(index, items.remove(index));
         return pendingClaim;
     }
@@ -90,6 +99,33 @@ public final class Grave {
         if (!sameClaim(claim)) return false;
         items.add(Math.min(claim.index(), items.size()), claim.item());
         pendingClaim = null;
+        return true;
+    }
+
+    public synchronized AllClaim claimAll() {
+        if (state != State.ACTIVE || hasPendingClaim() || items.isEmpty()) return null;
+        pendingAllClaim = new AllClaim(items, experience);
+        items.clear();
+        experience = 0;
+        state = State.REMOVING;
+        disposition = Disposition.LOOTED;
+        return pendingAllClaim;
+    }
+
+    public synchronized boolean commitAll(AllClaim claim) {
+        if (pendingAllClaim != claim) return false;
+        pendingAllClaim = null;
+        return true;
+    }
+
+    public synchronized boolean rollbackAll(AllClaim claim) {
+        if (pendingAllClaim != claim) return false;
+        items.clear();
+        items.addAll(claim.items());
+        experience = claim.experience();
+        state = State.ACTIVE;
+        disposition = Disposition.NONE;
+        pendingAllClaim = null;
         return true;
     }
 

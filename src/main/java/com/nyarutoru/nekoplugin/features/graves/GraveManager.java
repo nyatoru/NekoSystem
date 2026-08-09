@@ -165,6 +165,50 @@ public final class GraveManager {
         }
     }
 
+    public boolean claimAll(Grave grave, Player player, Consumer<Boolean> completion) {
+        List<ItemStack> items = grave.getItems();
+        if (!canFit(player, items)) return false;
+        Grave.AllClaim claim = grave.claimAll();
+        if (claim == null) return false;
+        save(grave, saved -> {
+            if (!saved) {
+                grave.rollbackAll(claim);
+                SchedulerUtils.runAtEntity(player, () -> completion.accept(false));
+                return;
+            }
+            SchedulerUtils.runAtEntity(player, () -> deliverAll(grave, claim, player, completion));
+        });
+        return true;
+    }
+
+    private void deliverAll(Grave grave, Grave.AllClaim claim, Player player, Consumer<Boolean> completion) {
+        List<ItemStack> items = claim.items();
+        if (!canFit(player, items)) {
+            rollbackAll(grave, claim, player, completion);
+            return;
+        }
+        ItemStack[] before = GraveInventoryCapacity.cloneContents(player.getInventory().getStorageContents());
+        Map<Integer, ItemStack> overflow = player.getInventory().addItem(items.toArray(ItemStack[]::new));
+        if (!overflow.isEmpty()) {
+            player.getInventory().setStorageContents(before);
+            rollbackAll(grave, claim, player, completion);
+            return;
+        }
+        grave.commitAll(claim);
+        player.giveExp(claim.experience());
+        performDisposition(grave, player, completion);
+    }
+
+    private void rollbackAll(Grave grave, Grave.AllClaim claim, Player player, Consumer<Boolean> completion) {
+        grave.rollbackAll(claim);
+        save(grave, ignored -> SchedulerUtils.runAtEntity(player, () -> completion.accept(false)));
+    }
+
+    private static boolean canFit(Player player, List<ItemStack> items) {
+        return GraveInventoryCapacity.canFit(player.getInventory().getStorageContents(),
+            player.getInventory().getMaxStackSize(), items);
+    }
+
     public void remove(Grave grave, boolean dropContents) {
         if (!grave.beginRemoval(dropContents ? Grave.Disposition.DROP : Grave.Disposition.LOOTED)) return;
         viewers.remove(grave.getId());

@@ -67,6 +67,13 @@ class GravesValidationTest {
     }
 
     @Test
+    void graveBulkClaimApiExposesAtomicLifecycle() throws Exception {
+        assertEquals(Grave.AllClaim.class, Grave.class.getMethod("claimAll").getReturnType());
+        assertEquals(boolean.class, Grave.class.getMethod("commitAll", Grave.AllClaim.class).getReturnType());
+        assertEquals(boolean.class, Grave.class.getMethod("rollbackAll", Grave.AllClaim.class).getReturnType());
+    }
+
+    @Test
     void removalStateRecordsDispositionAndPhase() {
         Grave grave = grave(List.of(), 7);
         assertTrue(grave.beginRemoval(Grave.Disposition.DROP));
@@ -170,6 +177,14 @@ class GravesValidationTest {
         assertEquals(void.class, GraveListener.class.getMethod("onEntityChangeBlock", org.bukkit.event.entity.EntityChangeBlockEvent.class).getReturnType());
         assertEquals(void.class, GraveListener.class.getMethod("onBlockDestroy", com.destroystokyo.paper.event.block.BlockDestroyEvent.class).getReturnType());
         assertEquals(void.class, GraveListener.class.getMethod("onPhysics", org.bukkit.event.block.BlockPhysicsEvent.class).getReturnType());
+    }
+
+    @Test
+    void graveInventoryCapacityHelperIsNonMutating() throws Exception {
+        assertEquals(boolean.class, GraveInventoryCapacity.class.getDeclaredMethod(
+            "canFit", ItemStack[].class, int.class, List.class).getReturnType());
+        assertEquals(ItemStack[].class, GraveInventoryCapacity.class.getDeclaredMethod(
+            "cloneContents", ItemStack[].class).getReturnType());
     }
 
     @SuppressWarnings("unchecked")
