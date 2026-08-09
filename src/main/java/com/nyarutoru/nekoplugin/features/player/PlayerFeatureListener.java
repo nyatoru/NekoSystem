@@ -591,12 +591,11 @@ public class PlayerFeatureListener implements Listener {
         boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
 
         schedulePlayerLater(player, () -> {
-            // Only replenish if the hand now has an empty bucket
+            // Only replenish if the hand now has an empty bucket (covers water/lava/powder snow/entity buckets)
             ItemStack handItem = isOffhand
                     ? player.getInventory().getItemInOffHand()
                     : player.getInventory().getItemInMainHand();
 
-            // After emptying bucket, the hand will have BUCKET (empty bucket)
             if (handItem.getType() == Material.BUCKET) {
                 replenishItem(player, bucket, isOffhand);
             }
@@ -612,17 +611,19 @@ public class PlayerFeatureListener implements Listener {
 
         if (consumed.getAmount() <= 1) {
             Material type = consumed.getType();
-            // Determine which hand the item was consumed from
             boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
 
             schedulePlayerLater(player, () -> {
-                // Only replenish if the hand is now empty
                 ItemStack handItem = isOffhand
                         ? player.getInventory().getItemInOffHand()
                         : player.getInventory().getItemInMainHand();
-
-                if (handItem.getType() == Material.AIR) {
-                    if (foodFallback && !replenishItem(player, type, isOffhand) && FOODS.contains(type)) {
+                Material handType = handItem.getType();
+                // AIR = fully consumed; BOWL/GLASS_BOTTLE/BUCKET = remainder left (stew/potion/honey/milk)
+                boolean isEmpty = handType == Material.AIR;
+                boolean isRemainder = handType == Material.BOWL || handType == Material.GLASS_BOTTLE || handType == Material.BUCKET;
+                if (isEmpty || isRemainder) {
+                    boolean replenished = replenishItem(player, type, isOffhand);
+                    if (!replenished && foodFallback && FOODS.contains(type)) {
                         replenishAnyFood(player, isOffhand);
                     }
                 }
@@ -669,12 +670,19 @@ public class PlayerFeatureListener implements Listener {
         for (int i = 9; i < 36; i++) {
             ItemStack item = inv.getItem(i);
             if (item != null && item.getType() == type) {
+                ItemStack handItem = toOffhand ? inv.getItemInOffHand() : inv.getItemInMainHand();
+                ItemStack replenishment = item.clone();
                 if (toOffhand) {
-                    inv.setItemInOffHand(item.clone());
+                    inv.setItemInOffHand(replenishment);
                 } else {
-                    inv.setItem(inv.getHeldItemSlot(), item.clone());
+                    inv.setItem(inv.getHeldItemSlot(), replenishment);
                 }
-                inv.setItem(i, null);
+                // Preserve remainder (BUCKET/BOWL/GLASS_BOTTLE) instead of deleting it
+                if (handItem.getType() == Material.AIR) {
+                    inv.setItem(i, null);
+                } else {
+                    inv.setItem(i, handItem.clone());
+                }
                 return true;
             }
         }
@@ -686,12 +694,18 @@ public class PlayerFeatureListener implements Listener {
         for (int i = 9; i < 36; i++) {
             ItemStack item = inv.getItem(i);
             if (item != null && FOODS.contains(item.getType())) {
+                ItemStack handItem = toOffhand ? inv.getItemInOffHand() : inv.getItemInMainHand();
+                ItemStack replenishment = item.clone();
                 if (toOffhand) {
-                    inv.setItemInOffHand(item.clone());
+                    inv.setItemInOffHand(replenishment);
                 } else {
-                    inv.setItem(inv.getHeldItemSlot(), item.clone());
+                    inv.setItem(inv.getHeldItemSlot(), replenishment);
                 }
-                inv.setItem(i, null);
+                if (handItem.getType() == Material.AIR) {
+                    inv.setItem(i, null);
+                } else {
+                    inv.setItem(i, handItem.clone());
+                }
                 return;
             }
         }
