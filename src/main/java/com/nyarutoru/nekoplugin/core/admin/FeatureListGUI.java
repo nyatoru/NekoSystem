@@ -54,7 +54,11 @@ public final class FeatureListGUI extends PreviewGUI {
                             player.closeInventory();
                             return;
                         }
-                        new FeatureSettingsGUI(feature, manager, state, store, settings, 0).open(player);
+                        if ("aquacurse".equals(feature.getId()) && feature instanceof com.nyarutoru.nekoplugin.features.curse.AquaCurseFeature aqua) {
+                            new com.nyarutoru.nekoplugin.features.curse.AquaCurseAdminGUI(aqua, manager, state, store, settings, 0).open(player);
+                        } else {
+                            new FeatureSettingsGUI(feature, manager, state, store, settings, 0).open(player);
+                        }
                     });
                     return;
                 }
@@ -91,7 +95,8 @@ public final class FeatureListGUI extends PreviewGUI {
         lore.add(Component.text("ID: " + feature.getId(), NamedTextColor.GRAY));
         lore.add(Component.text("Actual: " + (enabled ? "enabled" : "disabled"), NamedTextColor.WHITE));
         lore.add(Component.text("Left click: toggle", NamedTextColor.YELLOW));
-        if (settings.get(feature.getId()).isEmpty()) lore.add(Component.text("Right click: no settings registered", NamedTextColor.DARK_GRAY));
+        if ("aquacurse".equals(feature.getId())) lore.add(Component.text("Right click: players (water curse)", NamedTextColor.AQUA));
+        else if (settings.get(feature.getId()).isEmpty()) lore.add(Component.text("Right click: no settings registered", NamedTextColor.DARK_GRAY));
         else lore.add(Component.text("Right click: settings", NamedTextColor.AQUA));
         meta.lore(lore);
         item.setItemMeta(meta);

@@ -19,6 +19,7 @@ import com.nyarutoru.nekoplugin.features.player.PlayerFeature;
 import com.nyarutoru.nekoplugin.features.server.ServerFeature;
 import com.nyarutoru.nekoplugin.features.tool.SandExcavationFeature;
 import com.nyarutoru.nekoplugin.features.treefeller.TreeFellerFeature;
+import com.nyarutoru.nekoplugin.features.curse.AquaCurseFeature;
 import com.nyarutoru.nekoplugin.features.villageroptimize.VillagerOptimizeFeature;
 import com.nyarutoru.nekoplugin.features.woodcutting.WoodcuttingFeature;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -58,6 +59,7 @@ public class NekoPlugin extends JavaPlugin {
         WoodcuttingFeature woodcuttingFeature = new WoodcuttingFeature();
         TreeFellerFeature treeFellerFeature = new TreeFellerFeature();
         VillagerOptimizeFeature villagerOptimizeFeature = new VillagerOptimizeFeature();
+        AquaCurseFeature aquaCurseFeature = new AquaCurseFeature();
 
         FeatureManager.getInstance().registerFeature(carryFeature);
         FeatureManager.getInstance().registerFeature(drawerFeature);
@@ -70,6 +72,7 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(woodcuttingFeature);
         FeatureManager.getInstance().registerFeature(treeFellerFeature);
         FeatureManager.getInstance().registerFeature(villagerOptimizeFeature);
+        FeatureManager.getInstance().registerFeature(aquaCurseFeature);
 
         carryFeature.registerSettings(settingRegistry, adminState);
         drawerFeature.registerSettings(settingRegistry, adminState);
