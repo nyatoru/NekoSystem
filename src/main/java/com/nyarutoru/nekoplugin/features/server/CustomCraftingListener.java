@@ -28,7 +28,8 @@ import java.util.UUID;
 /**
  * Custom Crafting Table with Double Chest GUI.
  * Replaces vanilla crafting table GUI to support custom recipes.
- * Slot 8 = craftable book (vanilla+custom, like vanilla book), Slot 18 = custom recipe book (original).
+ * Slot 8 = craftable book (vanilla+custom, like vanilla book), Slot 18 = recipe catalog (all custom).
+ * Recipe Book GUI (opened from either slot) has Catalog at slot 0 to filter by category and keeps page on preview back.
  */
 public class CustomCraftingListener implements Listener {
 
@@ -349,11 +350,17 @@ public class CustomCraftingListener implements Listener {
     private ItemStack createLimeGlassPane() { return com.nyarutoru.nekoplugin.api.gui.GUIUtils.createLimeGlass(); }
 
     private ItemStack createRecipeBookButton() {
-        ItemStack book = new ItemStack(Material.KNOWLEDGE_BOOK);
+        ItemStack book = new ItemStack(Material.BOOKSHELF);
         ItemMeta meta = book.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text("📖 Recipe Book").color(NamedTextColor.LIGHT_PURPLE).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, true));
-            meta.lore(java.util.List.of(Component.empty(), Component.text("Click to browse custom recipes").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
+            meta.displayName(Component.text("\uD83D\uDCDA Recipe Catalog").color(NamedTextColor.LIGHT_PURPLE).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, true));
+            meta.lore(java.util.List.of(
+                    Component.empty(),
+                    Component.text("Browse all custom recipes").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.text("With category catalog filter").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.empty(),
+                    Component.text("Catalog: All → drawer → hammer...").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.text("Page keeps when previewing").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false)));
             book.setItemMeta(meta);
         }
         return book;
@@ -363,14 +370,14 @@ public class CustomCraftingListener implements Listener {
         ItemStack book = new ItemStack(Material.KNOWLEDGE_BOOK);
         ItemMeta meta = book.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text("📖 Recipe Book §a(Show craftable)").color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, true));
-            // Use MiniMessage would need but keep simple Component
             meta.displayName(Component.text("📖 Craftable Recipes").color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, true));
             meta.lore(java.util.List.of(
                     Component.empty(),
                     Component.text("Show items you can craft").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
                     Component.text("Vanilla + Custom").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
-                    Component.text("like vanilla book").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false)));
+                    Component.text("like vanilla book").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.empty(),
+                    Component.text("Also has catalog filter").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false)));
             book.setItemMeta(meta);
         }
         return book;

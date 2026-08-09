@@ -39,6 +39,7 @@ public class RecipeBookGUI implements Listener {
             37, 38, 39, 40, 41, 42, 43
     };
     private static final int CRAFTABLE_TOGGLE_SLOT = 8;
+    private static final int CATALOG_SLOT = 0;
     private static final Component BOOK_TITLE = Component.text("✦ Recipe Book ✦")
             .color(NamedTextColor.LIGHT_PURPLE)
             .decoration(TextDecoration.BOLD, true);
@@ -71,12 +72,36 @@ public class RecipeBookGUI implements Listener {
             this.vanilla = v;
             this.custom = null;
             this.result = res;
-            this.category = "vanilla";
+            this.category = vanillaCategoryFor(res.getType());
             String k = "vanilla";
             try { k = v.toString(); } catch (Exception ignored) {}
             if (v instanceof ShapedRecipe sr) k = sr.getKey().toString();
             else if (v instanceof ShapelessRecipe sr) k = sr.getKey().toString();
             this.id = k;
+        }
+        private static String vanillaCategoryFor(Material mat) {
+            String n = mat.name();
+            if (n.endsWith("_SWORD")) return "sword";
+            if (n.equals("BOW") || n.equals("CROSSBOW") || n.equals("TRIDENT") || n.equals("MACE")
+                    || n.equals("ARROW") || n.equals("SPECTRAL_ARROW") || n.equals("TIPPED_ARROW")) return "combat";
+            if (n.endsWith("_PICKAXE") || n.endsWith("_AXE") || n.endsWith("_SHOVEL")
+                    || n.endsWith("_HOE") || n.endsWith("_SPEAR")) return "tool";
+            if (n.endsWith("_HELMET") || n.endsWith("_CHESTPLATE") || n.endsWith("_LEGGINGS")
+                    || n.endsWith("_BOOTS")) return "armor";
+            if (n.equals("SHIELD") || n.equals("ELYTRA") || n.equals("TURTLE_HELMET")
+                    || n.endsWith("_HORSE_ARMOR") || n.endsWith("_HARNESS") || n.endsWith("_NAUTILUS_ARMOR")) return "armor";
+            if (n.equals("SHEARS") || n.equals("FISHING_ROD") || n.equals("FLINT_AND_STEEL")
+                    || n.equals("BRUSH") || n.equals("SPYGLASS") || n.equals("COMPASS")
+                    || n.equals("CLOCK") || n.equals("RECOVERY_COMPASS")) return "tool";
+            if (mat.isEdible()) return "food";
+            if (n.contains("REDSTONE") || n.equals("PISTON") || n.equals("STICKY_PISTON")
+                    || n.equals("DISPENSER") || n.equals("DROPPER") || n.equals("HOPPER")
+                    || n.equals("OBSERVER") || n.equals("COMPARATOR") || n.equals("REPEATER")
+                    || n.equals("DAYLIGHT_DETECTOR") || n.equals("TRIPWIRE_HOOK") || n.equals("LEVER")
+                    || n.contains("PRESSURE_PLATE") || n.equals("TARGET") || n.equals("LECTERN")
+                    || n.equals("TRAPPED_CHEST") || n.equals("CRAFTER")) return "redstone";
+            if (mat.isBlock()) return "building";
+            return "misc";
         }
         boolean isCustom() { return custom != null; }
         String dedupKey() {
@@ -204,8 +229,24 @@ public class RecipeBookGUI implements Listener {
         return out;
     }
 
-    private List<Entry> getFilteredEntries(Player player, boolean craftableOnly, boolean includeVanilla) {
+    private List<String> getAvailableCategories(boolean includeVanilla) {
         List<Entry> all = getAllEntries(includeVanilla);
+        Set<String> set = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (Entry e : all) set.add(e.category);
+        return new ArrayList<>(set);
+    }
+
+    private List<Entry> getFilteredEntries(Player player, boolean craftableOnly, boolean includeVanilla) {
+        return getFilteredEntries(player, craftableOnly, includeVanilla, null);
+    }
+
+    private List<Entry> getFilteredEntries(Player player, boolean craftableOnly, boolean includeVanilla, String catalogCategory) {
+        List<Entry> all = getAllEntries(includeVanilla);
+        if (catalogCategory != null && !catalogCategory.isEmpty() && !catalogCategory.equalsIgnoreCase("all")) {
+            List<Entry> byCat = new ArrayList<>();
+            for (Entry e : all) if (e.category.equalsIgnoreCase(catalogCategory)) byCat.add(e);
+            all = byCat;
+        }
         if (!craftableOnly) return all;
         List<Entry> filtered = new ArrayList<>();
         for (Entry e : all) if (canCraft(player, e)) filtered.add(e);
@@ -225,9 +266,26 @@ public class RecipeBookGUI implements Listener {
     }
 
     public void openRecipeBook(Player player, boolean craftableOnly, boolean includeVanilla) {
+        openRecipeBook(player, craftableOnly, includeVanilla, null);
+    }
+
+    public void openRecipeBook(Player player, boolean craftableOnly, boolean includeVanilla, String catalogCategory) {
         if (!running) return;
-        List<Entry> entries = getFilteredEntries(player, craftableOnly, includeVanilla);
-        GUIState state = new GUIState(0, entries, craftableOnly, includeVanilla);
+        List<Entry> entries = getFilteredEntries(player, craftableOnly, includeVanilla, catalogCategory);
+        GUIState state = new GUIState(0, entries, craftableOnly, includeVanilla, catalogCategory);
+        playerStates.put(player.getUniqueId(), state);
+        openRecipeListPage(player, state);
+    }
+
+    /** Re-open preserving page (used when returning from preview) - keeps page, recomputes entries */
+    public void openRecipeBook(Player player, GUIState prevState) {
+        if (!running || prevState == null) { openRecipeBook(player); return; }
+        List<Entry> entries = getFilteredEntries(player, prevState.craftableOnly, prevState.includeVanilla, prevState.catalogCategory);
+        int page = prevState.page;
+        int totalPages = Math.max(1, (int) Math.ceil((double) entries.size() / ITEMS_PER_PAGE));
+        if (page >= totalPages) page = totalPages - 1;
+        if (page < 0) page = 0;
+        GUIState state = new GUIState(page, entries, prevState.craftableOnly, prevState.includeVanilla, prevState.catalogCategory);
         playerStates.put(player.getUniqueId(), state);
         openRecipeListPage(player, state);
     }
@@ -238,7 +296,7 @@ public class RecipeBookGUI implements Listener {
         ItemStack grayGlass = createGlassPane(Material.GRAY_STAINED_GLASS_PANE);
 
         for (int i = 0; i < 9; i++) {
-            if (i == 4 || i == CRAFTABLE_TOGGLE_SLOT) continue;
+            if (i == 4 || i == CRAFTABLE_TOGGLE_SLOT || i == CATALOG_SLOT) continue;
             gui.setItem(i, blackGlass);
         }
         for (int i = 45; i < 54; i++) gui.setItem(i, blackGlass);
@@ -254,8 +312,11 @@ public class RecipeBookGUI implements Listener {
         int totalPages = Math.max(1, (int) Math.ceil((double) state.entries.size() / ITEMS_PER_PAGE));
         gui.setItem(4, createPageIndicator(state.page + 1, totalPages));
 
-        int totalAll = getAllEntries(state.includeVanilla).size();
-        int craftableCount = getFilteredEntries(player, true, state.includeVanilla).size();
+        int totalAll = getFilteredEntries(player, false, state.includeVanilla, state.catalogCategory).size();
+        int totalUnfiltered = getAllEntries(state.includeVanilla).size();
+        int craftableCount = getFilteredEntries(player, true, state.includeVanilla, state.catalogCategory).size();
+        // show catalog-aware counts, but also hint at global if filtered
+        gui.setItem(CATALOG_SLOT, createCatalogButton(state, totalAll, totalUnfiltered, craftableCount));
         gui.setItem(CRAFTABLE_TOGGLE_SLOT, createCraftableToggle(state.craftableOnly, craftableCount, totalAll, state.includeVanilla));
 
         int start = state.page * ITEMS_PER_PAGE;
@@ -276,11 +337,16 @@ public class RecipeBookGUI implements Listener {
             if (meta != null) {
                 if (state.craftableOnly) {
                     meta.displayName(Component.text("No craftable recipes").color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false));
-                    meta.lore(List.of(
-                            Component.text("Gather materials to unlock recipes").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
-                            Component.text("Click toggle to show all").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
+                    List<Component> lore = new ArrayList<>();
+                    if (state.catalogCategory != null) lore.add(Component.text("In catalog: " + state.catalogCategory).color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false));
+                    lore.add(Component.text("Gather materials to unlock recipes").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                    lore.add(Component.text("Click toggle to show all").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                    if (state.catalogCategory != null) lore.add(Component.text("Or click catalog to change").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                    meta.lore(lore);
                 } else {
-                    meta.displayName(Component.text(state.includeVanilla ? "No recipes found" : "No custom recipes").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                    String label = state.catalogCategory != null ? "No recipes in " + state.catalogCategory : (state.includeVanilla ? "No recipes found" : "No custom recipes");
+                    meta.displayName(Component.text(label).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                    if (state.catalogCategory != null) meta.lore(List.of(Component.text("Click catalog to change").color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false)));
                 }
                 empty.setItemMeta(meta);
             }
@@ -331,10 +397,28 @@ public class RecipeBookGUI implements Listener {
     }
 
     private void handleRecipeListClick(Player player, GUIState state, int slot) {
+        if (slot == CATALOG_SLOT) {
+            List<String> cats = getAvailableCategories(state.includeVanilla);
+            if (cats.isEmpty()) return;
+            String cur = state.catalogCategory;
+            String next;
+            if (cur == null) next = cats.get(0);
+            else {
+                int idx = -1;
+                for (int i = 0; i < cats.size(); i++) if (cats.get(i).equalsIgnoreCase(cur)) { idx = i; break; }
+                if (idx == -1 || idx == cats.size() - 1) next = null;
+                else next = cats.get(idx + 1);
+            }
+            List<Entry> filtered = getFilteredEntries(player, state.craftableOnly, state.includeVanilla, next);
+            GUIState nextState = new GUIState(0, filtered, state.craftableOnly, state.includeVanilla, next);
+            playerStates.put(player.getUniqueId(), nextState);
+            openRecipeListPage(player, nextState);
+            return;
+        }
         if (slot == CRAFTABLE_TOGGLE_SLOT) {
             boolean next = !state.craftableOnly;
-            List<Entry> filtered = getFilteredEntries(player, next, state.includeVanilla);
-            GUIState nextState = new GUIState(0, filtered, next, state.includeVanilla);
+            List<Entry> filtered = getFilteredEntries(player, next, state.includeVanilla, state.catalogCategory);
+            GUIState nextState = new GUIState(0, filtered, next, state.includeVanilla, state.catalogCategory);
             playerStates.put(player.getUniqueId(), nextState);
             openRecipeListPage(player, nextState);
             return;
@@ -365,6 +449,58 @@ public class RecipeBookGUI implements Listener {
             if (!event.getView().title().equals(BOOK_TITLE)) return;
         } catch (Exception ignored) {}
         playerStates.remove(player.getUniqueId());
+    }
+
+    private ItemStack createCatalogButton(GUIState state, int filteredTotal, int globalTotal, int craftableCount) {
+        List<String> cats = getAvailableCategories(state.includeVanilla);
+        String cur = state.catalogCategory;
+        String displayCat = cur == null ? "All" : cur;
+        Material mat;
+        if (cur == null) mat = Material.BOOKSHELF;
+        else if ("vanilla".equalsIgnoreCase(cur)) mat = Material.CRAFTING_TABLE;
+        else if ("drawer".equalsIgnoreCase(cur)) mat = Material.BARREL;
+        else if ("hammer".equalsIgnoreCase(cur)) mat = Material.ANVIL;
+        else if ("server".equalsIgnoreCase(cur)) mat = Material.FURNACE;
+        else if ("sword".equalsIgnoreCase(cur)) mat = Material.IRON_SWORD;
+        else if ("combat".equalsIgnoreCase(cur)) mat = Material.BOW;
+        else if ("tool".equalsIgnoreCase(cur)) mat = Material.IRON_PICKAXE;
+        else if ("armor".equalsIgnoreCase(cur)) mat = Material.IRON_CHESTPLATE;
+        else if ("food".equalsIgnoreCase(cur)) mat = Material.BREAD;
+        else if ("redstone".equalsIgnoreCase(cur)) mat = Material.REDSTONE;
+        else if ("building".equalsIgnoreCase(cur)) mat = Material.BRICKS;
+        else if ("misc".equalsIgnoreCase(cur)) mat = Material.CHEST;
+        else mat = Material.KNOWLEDGE_BOOK;
+        ItemStack item = new ItemStack(mat);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Component.text("\uD83D\uDCDA Catalog: " + displayCat).color(NamedTextColor.AQUA).decoration(TextDecoration.ITALIC, false).decoration(TextDecoration.BOLD, true));
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.text("Showing " + filteredTotal + " recipes").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+            if (cur != null) lore.add(Component.text("of " + globalTotal + " total").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+            else lore.add(Component.text(globalTotal + " total • " + craftableCount + " craftable").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+            lore.add(Component.empty());
+            if (!cats.isEmpty()) {
+                lore.add(Component.text("Categories: " + String.join(", ", cats)).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                lore.add(Component.empty());
+                lore.add(Component.text("Click to cycle catalog").color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
+                lore.add(Component.text(cur == null ? "Next: " + cats.get(0) : "Next: " + nextCategoryLabel(cats, cur)).color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+            } else {
+                lore.add(Component.text("No categories").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false));
+            }
+            meta.lore(lore);
+            if (cur != null) meta.setEnchantmentGlintOverride(true);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private String nextCategoryLabel(List<String> cats, String cur) {
+        if (cats.isEmpty()) return "All";
+        if (cur == null) return cats.get(0);
+        int idx = -1;
+        for (int i = 0; i < cats.size(); i++) if (cats.get(i).equalsIgnoreCase(cur)) { idx = i; break; }
+        if (idx == -1 || idx == cats.size() - 1) return "All";
+        return cats.get(idx + 1);
     }
 
     private ItemStack createCraftableToggle(boolean enabled, int craftableCount, int totalCount, boolean includeVanilla) {
@@ -437,11 +573,16 @@ public class RecipeBookGUI implements Listener {
         List<Entry> entries;
         boolean craftableOnly;
         boolean includeVanilla;
+        String catalogCategory;
         GUIState(int page, List<Entry> entries, boolean craftableOnly, boolean includeVanilla) {
+            this(page, entries, craftableOnly, includeVanilla, null);
+        }
+        GUIState(int page, List<Entry> entries, boolean craftableOnly, boolean includeVanilla, String catalogCategory) {
             this.page = page;
             this.entries = entries;
             this.craftableOnly = craftableOnly;
             this.includeVanilla = includeVanilla;
+            this.catalogCategory = catalogCategory;
         }
     }
 }

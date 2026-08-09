@@ -60,7 +60,7 @@ public class RecipePreviewGUI {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
             com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> {
-                if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState.craftableOnly, prevState.includeVanilla);
+                if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState);
                 else recipeBookGUI.openRecipeBook(p);
             });
         });
@@ -112,7 +112,7 @@ public class RecipePreviewGUI {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
             com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> {
-                if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState.craftableOnly, prevState.includeVanilla);
+                if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState);
                 else recipeBookGUI.openRecipeBook(p);
             });
         });
