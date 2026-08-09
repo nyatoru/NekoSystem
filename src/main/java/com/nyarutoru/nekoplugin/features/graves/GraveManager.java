@@ -319,6 +319,7 @@ public final class GraveManager {
         int baseX = origin.getBlockX();
         int baseY = Math.max(world.getMinHeight() + 1, Math.min(origin.getBlockY(), world.getMaxHeight() - 2));
         int baseZ = origin.getBlockZ();
+        boolean inFluid = isInFluid(origin);
         for (int radius = 0; radius <= safeLocationSearchRadius; radius++) {
             for (int yOffset = -radius; yOffset <= radius; yOffset++) for (int xOffset = -radius; xOffset <= radius; xOffset++) for (int zOffset = -radius; zOffset <= radius; zOffset++) {
                 Location candidate = new Location(world, baseX + xOffset, baseY + yOffset, baseZ + zOffset);
@@ -327,15 +328,50 @@ public final class GraveManager {
                 if (reservations.reserve(position)) return candidate;
             }
         }
+        // ponytail: death in water often has no dry spot inside cubic radius (water below = not solid, air above water = water below)
+        // -> lift search upward to surface / nearby shore instead of failing and dropping items in water
+        if (inFluid) {
+            int maxY = Math.min(world.getMaxHeight() - 2, baseY + Math.max(32, safeLocationSearchRadius * 3));
+            for (int y = baseY + 1; y <= maxY; y++) {
+                for (int radius = 0; radius <= safeLocationSearchRadius; radius++) {
+                    for (int xOffset = -radius; xOffset <= radius; xOffset++) for (int zOffset = -radius; zOffset <= radius; zOffset++) {
+                        Location candidate = new Location(world, baseX + xOffset, y, baseZ + zOffset);
+                        if (!Bukkit.isOwnedByCurrentRegion(candidate) || !isSafe(candidate)) continue;
+                        GravePosition position = GravePosition.from(candidate);
+                        if (reservations.reserve(position)) return candidate;
+                    }
+                }
+            }
+        }
         return null;
+    }
+
+    private static boolean isInFluid(Location location) {
+        Block block = location.getBlock();
+        return block.isLiquid() || isWaterlogged(block) || isFluid(block);
     }
 
     private boolean isSafe(Location location) {
         World world = location.getWorld(); int y = location.getBlockY();
         if (world == null || y <= world.getMinHeight() || y >= world.getMaxHeight() - 1) return false;
         Block target = location.getBlock();
-        return target.getType().isAir() && target.getRelative(0, 1, 0).getType().isAir()
-            && target.getRelative(0, -1, 0).getType().isSolid();
+        Block above = target.getRelative(0, 1, 0);
+        Block below = target.getRelative(0, -1, 0);
+        if (!target.getType().isAir() || target.isLiquid() || isWaterlogged(target)) return false;
+        if (!above.getType().isAir() || above.isLiquid() || isWaterlogged(above)) return false;
+        if (!below.getType().isSolid() || below.isLiquid() || isWaterlogged(below)) return false;
+        // explicit fluid types not covered by isLiquid (e.g. bubble column)
+        if (isFluid(above) || isFluid(target) || isFluid(below)) return false;
+        return true;
+    }
+
+    private static boolean isWaterlogged(Block block) {
+        return block.getBlockData() instanceof org.bukkit.block.data.Waterlogged wl && wl.isWaterlogged();
+    }
+
+    private static boolean isFluid(Block block) {
+        Material type = block.getType();
+        return type == Material.WATER || type == Material.LAVA || type == Material.BUBBLE_COLUMN;
     }
 
     private void enforceLimit(UUID ownerId) {
