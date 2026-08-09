@@ -63,10 +63,18 @@ final class CarryManager {
         if (DrawerManager.getInstance().isDrawer(block.getLocation())) return false;
         BlockState state = block.getState();
         if (!CarryPolicy.isCarryableBlock(state, containersEnabled, lecternsEnabled, workstationsEnabled)) return false;
+
+        // ponytail: carry double-chest as single - normalize snapshot to SINGLE so it can be placed as single or merged later
+        boolean wasDouble = false;
+        Material originalType = state.getType();
+        org.bukkit.block.data.type.Chest originalChestData = null;
         if (state instanceof org.bukkit.block.Chest chest
                 && chest.getInventory().getHolder() instanceof org.bukkit.block.DoubleChest) {
-            player.sendActionBar(ComponentUtils.error("Double chests cannot be carried"));
-            return true;
+            wasDouble = true;
+            originalChestData = (org.bukkit.block.data.type.Chest) state.getBlockData();
+            org.bukkit.block.data.type.Chest single = (org.bukkit.block.data.type.Chest) originalChestData.clone();
+            single.setType(org.bukkit.block.data.type.Chest.Type.SINGLE);
+            state.setBlockData(single);
         }
 
         BlockDisplay display = block.getWorld().spawn(block.getLocation().add(0.5, 0.5, 0.5), BlockDisplay.class);
@@ -75,9 +83,10 @@ final class CarryManager {
             display.remove();
             return false;
         }
-        clearLiveInventory(state);
+        clearLiveInventory(state, wasDouble);
         clearLiveFurnaceExp(block);
         block.setType(Material.AIR, false);
+        if (wasDouble && originalChestData != null) fixOrphanedNeighborChest(block, originalChestData, originalType);
         carriedByPlayer.put(player.getUniqueId(), new CarriedObject.Block(state, display));
         player.sendActionBar(ComponentUtils.success("Picked up " + state.getType().key().value().replace('_', ' ')));
         return true;
@@ -101,6 +110,7 @@ final class CarryManager {
             BlockState placed = carriedBlock.state().copy(location);
             applyPlayerFacing(placed, player);
             if (!placed.update(true, false)) return true;
+            tryMergeChest(location.getBlock());
             // ponytail: remove mapping before dismount so EntityDismount/EntityRemove handlers don't duplicate the block (bedrock damage / void case)
             carriedByPlayer.remove(player.getUniqueId());
             removePassenger(player, carriedBlock.passenger());
@@ -158,6 +168,30 @@ final class CarryManager {
         }
     }
 
+    // ponytail: double-chest variant - only clear the picked block's 27 slots, preserve neighbor's inventory
+    static void clearLiveInventory(BlockState state, boolean wasDouble) {
+        if (wasDouble && state instanceof org.bukkit.block.Chest chest) {
+            chest.getBlockInventory().clear();
+            return;
+        }
+        clearLiveInventory(state);
+    }
+
+    private static void fixOrphanedNeighborChest(Block removedBlock, org.bukkit.block.data.type.Chest removedData, Material removedType) {
+        org.bukkit.block.data.type.Chest.Type type = removedData.getType();
+        if (type == org.bukkit.block.data.type.Chest.Type.SINGLE) return;
+        BlockFace connected = getConnectedDirection(removedData);
+        if (connected == null) return;
+        Block neighbor = removedBlock.getRelative(connected);
+        if (neighbor.getType() != removedType) return;
+        BlockData nd = neighbor.getBlockData();
+        if (!(nd instanceof org.bukkit.block.data.type.Chest nData)) return;
+        if (nData.getType() == org.bukkit.block.data.type.Chest.Type.SINGLE) return;
+        if (nData.getFacing() != removedData.getFacing()) return;
+        nData.setType(org.bukkit.block.data.type.Chest.Type.SINGLE);
+        neighbor.setBlockData(nData, false);
+    }
+
     static void clearLiveFurnaceExp(Block block) {
         // ponytail: furnace stores XP in recipesUsed; preRemoveSideEffects drops it on block removal -> dupe each carry
         // clear live BE recipes before setType(AIR) so no orb spawns, snapshot keeps XP for placement without dupe
@@ -165,6 +199,63 @@ final class CarryManager {
         if (live instanceof org.bukkit.block.Furnace furnace) {
             furnace.setRecipesUsed(java.util.Collections.emptyMap());
         }
+    }
+
+    private static void tryMergeChest(Block placedBlock) {
+        BlockData bd = placedBlock.getBlockData();
+        if (!(bd instanceof org.bukkit.block.data.type.Chest chestData)) return;
+        if (chestData.getType() != org.bukkit.block.data.type.Chest.Type.SINGLE) return;
+        BlockFace facing = chestData.getFacing();
+        Material type = placedBlock.getType();
+        BlockFace clockwise = clockwise(facing);
+        BlockFace counter = counterClockwise(facing);
+        for (BlockFace dir : new BlockFace[]{clockwise, counter}) {
+            Block neighbor = placedBlock.getRelative(dir);
+            if (neighbor.getType() != type) continue;
+            BlockData nd = neighbor.getBlockData();
+            if (!(nd instanceof org.bukkit.block.data.type.Chest nData)) continue;
+            if (nData.getType() != org.bukkit.block.data.type.Chest.Type.SINGLE) continue;
+            if (nData.getFacing() != facing) continue;
+            // ponytail: found SINGLE neighbor perpendicular to facing -> form double
+            org.bukkit.block.data.type.Chest.Type placedType = dir == clockwise
+                    ? org.bukkit.block.data.type.Chest.Type.LEFT
+                    : org.bukkit.block.data.type.Chest.Type.RIGHT;
+            org.bukkit.block.data.type.Chest.Type neighborType = dir == clockwise
+                    ? org.bukkit.block.data.type.Chest.Type.RIGHT
+                    : org.bukkit.block.data.type.Chest.Type.LEFT;
+            chestData.setType(placedType);
+            placedBlock.setBlockData(chestData, false);
+            nData.setType(neighborType);
+            neighbor.setBlockData(nData, false);
+            break;
+        }
+    }
+
+    private static BlockFace getConnectedDirection(org.bukkit.block.data.type.Chest chest) {
+        org.bukkit.block.data.type.Chest.Type t = chest.getType();
+        if (t == org.bukkit.block.data.type.Chest.Type.LEFT) return clockwise(chest.getFacing());
+        if (t == org.bukkit.block.data.type.Chest.Type.RIGHT) return counterClockwise(chest.getFacing());
+        return null;
+    }
+
+    private static BlockFace clockwise(BlockFace face) {
+        return switch (face) {
+            case NORTH -> BlockFace.EAST;
+            case EAST -> BlockFace.SOUTH;
+            case SOUTH -> BlockFace.WEST;
+            case WEST -> BlockFace.NORTH;
+            default -> face;
+        };
+    }
+
+    private static BlockFace counterClockwise(BlockFace face) {
+        return switch (face) {
+            case NORTH -> BlockFace.WEST;
+            case WEST -> BlockFace.SOUTH;
+            case SOUTH -> BlockFace.EAST;
+            case EAST -> BlockFace.NORTH;
+            default -> face;
+        };
     }
 
     private static void releaseAt(Player player, CarriedObject carried, Location location) {
@@ -182,6 +273,7 @@ final class CarryManager {
         Block destination = playerLocation.getBlock();
         if (!destination.isReplaceable()) destination = destination.getRelative(BlockFace.UP);
         carried.state().copy(destination.getLocation()).update(true, false);
+        tryMergeChest(destination.getLocation().getBlock());
         carried.passenger().remove();
     }
 
