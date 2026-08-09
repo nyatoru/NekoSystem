@@ -8,6 +8,9 @@ import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
+import org.bukkit.block.data.Rotatable;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -95,6 +98,7 @@ final class CarryManager {
                 new ItemStack(carriedBlock.state().getType()), player, true, EquipmentSlot.HAND);
             if (!event.callEvent() || !event.canBuild()) return true;
             BlockState placed = carriedBlock.state().copy(location);
+            applyPlayerFacing(placed, player);
             if (!placed.update(true, false)) return true;
             // ponytail: remove mapping before dismount so EntityDismount/EntityRemove handlers don't duplicate the block (bedrock damage / void case)
             carriedByPlayer.remove(player.getUniqueId());
@@ -107,7 +111,10 @@ final class CarryManager {
             }
             carriedByPlayer.remove(player.getUniqueId());
             removePassenger(player, entity);
-            entity.teleport(location.clone().add(0.5, 0.0, 0.5));
+            Location dest = location.clone().add(0.5, 0.0, 0.5);
+            dest.setYaw(player.getLocation().getYaw());
+            dest.setPitch(0f);
+            entity.teleport(dest);
         }
 
         player.sendActionBar(ComponentUtils.success("Put down carried object"));
@@ -166,5 +173,45 @@ final class CarryManager {
         if (!destination.isReplaceable()) destination = destination.getRelative(BlockFace.UP);
         carried.state().copy(destination.getLocation()).update(true, false);
         carried.passenger().remove();
+    }
+
+    private static void applyPlayerFacing(BlockState state, Player player) {
+        BlockData data = state.getBlockData();
+        if (data instanceof Directional directional) {
+            // ponytail: preserve old block state but rotate directional face to follow player (mimic vanilla placement)
+            BlockFace playerFacing = yawToHorizontal(player.getLocation().getYaw());
+            BlockFace target = playerFacing.getOppositeFace();
+            if (directional.getFaces().contains(target)) {
+                directional.setFacing(target);
+            } else if (directional.getFaces().contains(playerFacing)) {
+                directional.setFacing(playerFacing);
+            } else return;
+            state.setBlockData(directional);
+        } else if (data instanceof Rotatable rotatable) {
+            rotatable.setRotation(yawToRotation(player.getLocation().getYaw()));
+            state.setBlockData(rotatable);
+        }
+    }
+
+    private static BlockFace yawToHorizontal(float yaw) {
+        yaw %= 360f;
+        if (yaw < 0) yaw += 360f;
+        if (yaw < 45f || yaw >= 315f) return BlockFace.SOUTH;
+        if (yaw < 135f) return BlockFace.WEST;
+        if (yaw < 225f) return BlockFace.NORTH;
+        return BlockFace.EAST;
+    }
+
+    private static BlockFace yawToRotation(float yaw) {
+        yaw %= 360f;
+        if (yaw < 0) yaw += 360f;
+        if (yaw < 22.5f || yaw >= 337.5f) return BlockFace.SOUTH;
+        if (yaw < 67.5f) return BlockFace.SOUTH_WEST;
+        if (yaw < 112.5f) return BlockFace.WEST;
+        if (yaw < 157.5f) return BlockFace.NORTH_WEST;
+        if (yaw < 202.5f) return BlockFace.NORTH;
+        if (yaw < 247.5f) return BlockFace.NORTH_EAST;
+        if (yaw < 292.5f) return BlockFace.EAST;
+        return BlockFace.SOUTH_EAST;
     }
 }
