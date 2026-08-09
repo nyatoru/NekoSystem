@@ -4,6 +4,7 @@ import com.nyarutoru.nekoplugin.api.gui.GUIManager;
 import com.nyarutoru.nekoplugin.api.tool.ActiveToolListener;
 import com.nyarutoru.nekoplugin.core.DatabaseManager;
 import com.nyarutoru.nekoplugin.core.FeatureManager;
+import com.nyarutoru.nekoplugin.features.carry.CarryFeature;
 import com.nyarutoru.nekoplugin.features.drawer.DrawerFeature;
 import com.nyarutoru.nekoplugin.features.graves.GravesFeature;
 import com.nyarutoru.nekoplugin.features.hammer.HammerFeature;
@@ -34,6 +35,7 @@ public class NekoPlugin extends JavaPlugin {
         GUIManager.getInstance().initialize(this);
 
         // Register features
+        FeatureManager.getInstance().registerFeature(new CarryFeature());
         FeatureManager.getInstance().registerFeature(new DrawerFeature());
         FeatureManager.getInstance().registerFeature(new GravesFeature());
         FeatureManager.getInstance().registerFeature(new OreExcavationFeature());

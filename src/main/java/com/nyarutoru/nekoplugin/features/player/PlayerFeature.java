@@ -5,7 +5,7 @@ import com.nyarutoru.nekoplugin.core.AbstractFeature;
 
 /**
  * Player Feature - integrated player quality-of-life improvements.
- * Includes: Pet Carrying, AFK System, Auto Item Replenishment
+ * Includes: AFK System, Auto Item Replenishment
  */
 public class PlayerFeature extends AbstractFeature {
 
