@@ -346,13 +346,16 @@ public final class GraveManager {
     private void rescheduleExpiryTask() {
         cancelExpiryTask();
         if (!started) return;
-        if (SchedulerUtils.isFolia()) {
-            foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
-                task -> checkExpired(), checkIntervalTicks, checkIntervalTicks);
-        } else {
-            paperTask = plugin.getServer().getScheduler().runTaskTimer(plugin,
-                this::checkExpired, checkIntervalTicks, checkIntervalTicks);
-        }
+        if (!plugin.isEnabled()) return;
+        try {
+            if (SchedulerUtils.isFolia()) {
+                foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
+                    task -> checkExpired(), checkIntervalTicks, checkIntervalTicks);
+            } else {
+                paperTask = plugin.getServer().getScheduler().runTaskTimer(plugin,
+                    this::checkExpired, checkIntervalTicks, checkIntervalTicks);
+            }
+        } catch (Exception ignored) {}
     }
 
     private void cancelExpiryTask() {

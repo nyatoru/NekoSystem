@@ -58,12 +58,15 @@ final class GraveDisplayManager {
     }
 
     private void startTask() {
-        if (SchedulerUtils.isFolia()) {
-            foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
-                task -> updateDisplays(), updateIntervalTicks, updateIntervalTicks);
-        } else {
-            paperTask = SchedulerUtils.runGlobalTimer(this::updateDisplays, updateIntervalTicks, updateIntervalTicks);
-        }
+        if (!plugin.isEnabled()) return;
+        try {
+            if (SchedulerUtils.isFolia()) {
+                foliaTask = plugin.getServer().getGlobalRegionScheduler().runAtFixedRate(plugin,
+                    task -> updateDisplays(), updateIntervalTicks, updateIntervalTicks);
+            } else {
+                paperTask = SchedulerUtils.runGlobalTimer(this::updateDisplays, updateIntervalTicks, updateIntervalTicks);
+            }
+        } catch (Exception ignored) {}
     }
 
     private void stopTask() {
