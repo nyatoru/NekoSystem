@@ -201,30 +201,59 @@ public class CustomCraftingListener implements Listener {
                     // Shift-click: craft as many as possible
                     craftAll(player, inv, result);
                 } else {
-                    // Normal click: craft one
+                    // Normal click: craft one — supports continue-craft with items on cursor
                     ItemStack cursor = player.getItemOnCursor();
+                    ItemStack resultClone = result.clone();
                     if (cursor == null || cursor.getType() == Material.AIR) {
-                        // Empty cursor - place result on cursor
-                        player.setItemOnCursor(result.clone());
+                        player.setItemOnCursor(resultClone);
                         inv.setItem(RESULT_SLOT, createResultPlaceholder());
                         consumeCraftingMaterials(inv);
-                        com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
-                                () -> updateCraftingResult(inv));
-                    } else if (cursor.isSimilar(result)) {
-                        // Same item on cursor - stack if possible (vanilla behavior)
-                        int newAmount = cursor.getAmount() + result.getAmount();
-                        if (newAmount <= cursor.getMaxStackSize()) {
-                            cursor.setAmount(newAmount);
+                        scheduleUpdate(player, inv);
+                    } else if (cursor.isSimilar(resultClone)) {
+                        int max = cursor.getMaxStackSize();
+                        int total = cursor.getAmount() + resultClone.getAmount();
+                        if (total <= max) {
+                            cursor.setAmount(total);
                             player.setItemOnCursor(cursor);
                             inv.setItem(RESULT_SLOT, createResultPlaceholder());
                             consumeCraftingMaterials(inv);
-                            if (running) {
-                                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
-                                        () -> {
-                                            if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv);
-                                        });
+                            scheduleUpdate(player, inv);
+                        } else {
+                            int space = max - cursor.getAmount();
+                            if (space > 0) {
+                                ItemStack toInventory = resultClone.clone();
+                                toInventory.setAmount(resultClone.getAmount() - space);
+                                HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(toInventory);
+                                if (leftover.isEmpty()) {
+                                    cursor.setAmount(max);
+                                    player.setItemOnCursor(cursor);
+                                    inv.setItem(RESULT_SLOT, createResultPlaceholder());
+                                    consumeCraftingMaterials(inv);
+                                    scheduleUpdate(player, inv);
+                                } else {
+                                    // inventory full — drop remainder so craft isn't blocked
+                                    for (ItemStack l : leftover.values()) player.getWorld().dropItemNaturally(player.getLocation(), l);
+                                    cursor.setAmount(max);
+                                    player.setItemOnCursor(cursor);
+                                    // remainder already dropped, still consume
+                                    inv.setItem(RESULT_SLOT, createResultPlaceholder());
+                                    consumeCraftingMaterials(inv);
+                                    scheduleUpdate(player, inv);
+                                }
+                            } else {
+                                // cursor full — craft into inventory/drop
+                                giveOrDrop(player, resultClone);
+                                inv.setItem(RESULT_SLOT, createResultPlaceholder());
+                                consumeCraftingMaterials(inv);
+                                scheduleUpdate(player, inv);
                             }
                         }
+                    } else {
+                        // different item on cursor — craft into inventory/drop so holding item doesn't block craft
+                        giveOrDrop(player, resultClone);
+                        inv.setItem(RESULT_SLOT, createResultPlaceholder());
+                        consumeCraftingMaterials(inv);
+                        scheduleUpdate(player, inv);
                     }
                 }
             }
@@ -386,6 +415,17 @@ public class CustomCraftingListener implements Listener {
                 }
             }
         }
+    }
+
+    private void scheduleUpdate(Player player, Inventory inv) {
+        if (!running) return;
+        com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player,
+                () -> { if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv); });
+    }
+
+    private void giveOrDrop(Player player, ItemStack item) {
+        HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(item);
+        for (ItemStack l : leftover.values()) player.getWorld().dropItemNaturally(player.getLocation(), l);
     }
 
     private ItemStack createGlassPane() {
