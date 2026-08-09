@@ -1,12 +1,16 @@
 package com.nyarutoru.nekoplugin.features.carry;
 
+import io.papermc.paper.block.TileStateInventoryHolder;
+import org.bukkit.block.BlockState;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.Inventory;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -54,6 +58,24 @@ class CarryValidationTest {
     }
 
     @Test
+    void pickupClearsLiveInventoryWithoutClearingSnapshot() {
+        AtomicBoolean liveCleared = new AtomicBoolean();
+        AtomicBoolean snapshotCleared = new AtomicBoolean();
+        Inventory live = inventory(liveCleared);
+        Inventory snapshot = inventory(snapshotCleared);
+        BlockState state = proxy(TileStateInventoryHolder.class, (proxy, method, args) -> switch (method.getName()) {
+            case "getInventory" -> live;
+            case "getSnapshotInventory" -> snapshot;
+            default -> defaultValue(method.getReturnType());
+        });
+
+        CarryManager.clearLiveInventory(state);
+
+        assertTrue(liveCleared.get());
+        assertFalse(snapshotCleared.get());
+    }
+
+    @Test
     void listenerHandlesRequiredCleanupEvents() throws Exception {
         assertEquals(void.class, CarryListener.class.getMethod("onPlayerQuit",
             org.bukkit.event.player.PlayerQuitEvent.class).getReturnType());
@@ -63,6 +85,15 @@ class CarryValidationTest {
             org.bukkit.event.player.PlayerTeleportEvent.class).getReturnType());
         assertEquals(void.class, CarryListener.class.getMethod("onEntityDismount",
             org.bukkit.event.entity.EntityDismountEvent.class).getReturnType());
+    }
+
+    private static Inventory inventory(AtomicBoolean cleared) {
+        return proxy(Inventory.class, (proxy, method, args) -> {
+            if (method.getName().equals("clear") && method.getParameterCount() == 0) {
+                cleared.set(true);
+            }
+            return defaultValue(method.getReturnType());
+        });
     }
 
     @SuppressWarnings("unchecked")

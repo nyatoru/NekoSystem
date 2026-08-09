@@ -2,6 +2,7 @@ package com.nyarutoru.nekoplugin.features.carry;
 
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerManager;
 import com.nyarutoru.nekoplugin.utils.ComponentUtils;
+import io.papermc.paper.block.TileStateInventoryHolder;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -51,6 +52,7 @@ final class CarryManager {
             display.remove();
             return false;
         }
+        clearLiveInventory(state);
         block.setType(Material.AIR, false);
         carriedByPlayer.put(player.getUniqueId(), new CarriedObject.Block(state, display));
         player.sendActionBar(ComponentUtils.success("Picked up " + state.getType().key().value().replace('_', ' ')));
@@ -113,6 +115,12 @@ final class CarryManager {
             } else if (carried instanceof CarriedObject.Block block) {
                 block.passenger().remove();
             }
+        }
+    }
+
+    static void clearLiveInventory(BlockState state) {
+        if (state instanceof TileStateInventoryHolder inventoryHolder) {
+            inventoryHolder.getInventory().clear();
         }
     }
 
