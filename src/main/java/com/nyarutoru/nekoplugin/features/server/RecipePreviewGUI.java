@@ -9,17 +9,21 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.Recipe;
+import org.bukkit.inventory.RecipeChoice;
+import org.bukkit.inventory.ShapedRecipe;
+import org.bukkit.inventory.ShapelessRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Recipe Preview GUI for displaying a single recipe's crafting pattern.
- * Uses PreviewGUI from the GuiAPI for reliable non-interactive display.
+ * Supports both custom (RecipeAPI) and vanilla recipes.
  */
 public class RecipePreviewGUI {
 
-    // Preview GUI layout
     private static final int[] CRAFTING_SLOTS = {10, 11, 12, 19, 20, 21, 28, 29, 30};
     private static final int RESULT_SLOT = 24;
     private static final int ARROW_SLOT = 23;
@@ -36,55 +40,101 @@ public class RecipePreviewGUI {
         this.recipeBookGUI = recipeBookGUI;
     }
 
-    /**
-     * Open recipe preview for a specific recipe.
-     */
+    /** Backwards compat */
     public void openPreview(Player player, CustomRecipe recipe) {
+        openPreview(player, recipe, null);
+    }
+
+    public void openPreview(Player player, CustomRecipe recipe, RecipeBookGUI.GUIState prevState) {
         PreviewGUI gui = new PreviewGUI(54, PREVIEW_TITLE);
-
-        // Fill with black glass
         gui.fillWithBlackGlass();
-
-        // Show crafting grid
         CustomRecipe.Ingredient[] ingredients = recipe.getIngredients();
         for (int i = 0; i < CRAFTING_SLOTS.length; i++) {
             ItemStack ingredient = ingredientToItemStack(ingredients[i]);
             gui.setDisplayItem(CRAFTING_SLOTS[i], ingredient);
         }
-
-        // Arrow
         gui.setDisplayItem(ARROW_SLOT, createArrowItem());
-
-        // Result
         gui.setDisplayItem(RESULT_SLOT, recipe.getResult().clone());
-
-        // Recipe info
         gui.setDisplayItem(INFO_SLOT, createRecipeInfoItem(recipe));
-
-        // Back button - uses scheduler to avoid inventory conflicts
         gui.setBackButton(BACK_BUTTON_SLOT, event -> {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
-            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> recipeBookGUI.openRecipeBook(p));
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> {
+                if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState.craftableOnly, prevState.includeVanilla);
+                else recipeBookGUI.openRecipeBook(p);
+            });
         });
-
         gui.open(player);
     }
 
-    // ========== Helper Methods ==========
+    public void openVanillaPreview(Player player, Recipe recipe, RecipeBookGUI.GUIState prevState) {
+        PreviewGUI gui = new PreviewGUI(54, PREVIEW_TITLE);
+        gui.fillWithBlackGlass();
+
+        // Fill grid based on vanilla recipe type
+        // First clear crafting slots to gray pane, then fill with ingredients
+        ItemStack gray = createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+        for (int slot : CRAFTING_SLOTS) gui.setDisplayItem(slot, gray);
+
+        if (recipe instanceof ShapedRecipe sr) {
+            String[] shape = sr.getShape();
+            Map<Character, RecipeChoice> map = sr.getChoiceMap();
+            for (int r = 0; r < shape.length && r < 3; r++) {
+                String row = shape[r];
+                for (int c = 0; c < row.length() && c < 3; c++) {
+                    char ch = row.charAt(c);
+                    if (ch == ' ') continue;
+                    RecipeChoice choice = map.get(ch);
+                    ItemStack display = choiceToDisplay(choice);
+                    int idx = r * 3 + c;
+                    gui.setDisplayItem(CRAFTING_SLOTS[idx], display);
+                }
+            }
+        } else if (recipe instanceof ShapelessRecipe sr) {
+            List<RecipeChoice> choices = sr.getChoiceList();
+            for (int i = 0; i < choices.size() && i < 9; i++) {
+                RecipeChoice choice = choices.get(i);
+                ItemStack display = choiceToDisplay(choice);
+                gui.setDisplayItem(CRAFTING_SLOTS[i], display);
+            }
+        } else {
+            // fallback: try to show something
+        }
+
+        gui.setDisplayItem(ARROW_SLOT, createArrowItem());
+        try {
+            gui.setDisplayItem(RESULT_SLOT, recipe.getResult().clone());
+        } catch (Exception ignored) {
+            gui.setDisplayItem(RESULT_SLOT, new ItemStack(Material.BARRIER));
+        }
+        gui.setDisplayItem(INFO_SLOT, createVanillaInfoItem(recipe));
+        gui.setBackButton(BACK_BUTTON_SLOT, event -> {
+            Player p = (Player) event.getWhoClicked();
+            p.closeInventory();
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> {
+                if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState.craftableOnly, prevState.includeVanilla);
+                else recipeBookGUI.openRecipeBook(p);
+            });
+        });
+        gui.open(player);
+    }
+
+    private ItemStack choiceToDisplay(RecipeChoice choice) {
+        if (choice == null) return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+        try {
+            ItemStack rep = choice.getItemStack();
+            if (rep != null && rep.getType() != Material.AIR) return rep.clone();
+        } catch (Exception ignored) {}
+        // fallback try Material
+        return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
+    }
 
     private ItemStack ingredientToItemStack(CustomRecipe.Ingredient ingredient) {
         if (ingredient == null || ingredient.isEmpty()) {
             return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
         }
-
-        // Use the display item if available (shows custom name, lore, etc.)
         ItemStack displayItem = ingredient.getDisplayItem();
-        if (displayItem != null) {
-
-            return displayItem;
-        }
-
+        if (displayItem != null) return displayItem;
         return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
     }
 
@@ -102,9 +152,7 @@ public class RecipePreviewGUI {
         ItemStack item = new ItemStack(Material.ARROW);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text("→ Crafts →")
-                    .color(NamedTextColor.GREEN)
-                    .decoration(TextDecoration.ITALIC, false));
+            meta.displayName(Component.text("→ Crafts →").color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false));
             item.setItemMeta(meta);
         }
         return item;
@@ -114,17 +162,30 @@ public class RecipePreviewGUI {
         ItemStack item = new ItemStack(Material.CRAFTING_TABLE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Component.text("Recipe: " + recipe.getId())
-                    .color(NamedTextColor.GOLD)
-                    .decoration(TextDecoration.ITALIC, false));
+            meta.displayName(Component.text("Recipe: " + recipe.getId()).color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
             List<Component> lore = List.of(
                     Component.empty(),
-                    Component.text("Category: " + recipe.getCategory())
-                            .color(NamedTextColor.GRAY)
-                            .decoration(TextDecoration.ITALIC, false),
-                    Component.text("Type: " + recipe.getShape().name())
-                            .color(NamedTextColor.GRAY)
-                            .decoration(TextDecoration.ITALIC, false));
+                    Component.text("Category: " + recipe.getCategory()).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.text("Type: " + recipe.getShape().name()).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack createVanillaInfoItem(Recipe recipe) {
+        ItemStack item = new ItemStack(Material.CRAFTING_TABLE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            String key = "vanilla";
+            if (recipe instanceof ShapedRecipe sr) key = sr.getKey().toString();
+            else if (recipe instanceof ShapelessRecipe sr) key = sr.getKey().toString();
+            String type = recipe.getClass().getSimpleName();
+            meta.displayName(Component.text("Recipe: " + key).color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
+            List<Component> lore = List.of(
+                    Component.empty(),
+                    Component.text("Category: vanilla").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.text("Type: " + type).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
             meta.lore(lore);
             item.setItemMeta(meta);
         }
