@@ -95,10 +95,18 @@ final class CarryManager {
     void release(Player player) {
         CarriedObject carried = carriedByPlayer.remove(player.getUniqueId());
         if (carried == null) return;
-        removePassenger(player, carried.passenger());
-        if (carried instanceof CarriedObject.Block carriedBlock) {
-            restoreBlock(player.getLocation(), carriedBlock);
-        }
+        releaseAt(player, carried, player.getLocation());
+    }
+
+    void releasePassenger(Entity passenger, Location location) {
+        Map.Entry<UUID, CarriedObject> entry = carriedByPlayer.entrySet().stream()
+            .filter(candidate -> candidate.getValue().passenger().getUniqueId().equals(passenger.getUniqueId()))
+            .findFirst()
+            .orElse(null);
+        if (entry == null) return;
+        carriedByPlayer.remove(entry.getKey());
+        Player player = org.bukkit.Bukkit.getPlayer(entry.getKey());
+        releaseAt(player, entry.getValue(), location);
     }
 
     void forget(Entity entity) {
@@ -109,12 +117,8 @@ final class CarryManager {
         for (UUID playerId : java.util.List.copyOf(carriedByPlayer.keySet())) {
             CarriedObject carried = carriedByPlayer.remove(playerId);
             Player player = org.bukkit.Bukkit.getPlayer(playerId);
-            if (player != null) {
-                removePassenger(player, carried.passenger());
-                if (carried instanceof CarriedObject.Block block) restoreBlock(player.getLocation(), block);
-            } else if (carried instanceof CarriedObject.Block block) {
-                block.passenger().remove();
-            }
+            Location location = player != null ? player.getLocation() : carried.passenger().getLocation();
+            releaseAt(player, carried, location);
         }
     }
 
@@ -122,6 +126,12 @@ final class CarryManager {
         if (state instanceof TileStateInventoryHolder inventoryHolder) {
             inventoryHolder.getInventory().clear();
         }
+    }
+
+    private static void releaseAt(Player player, CarriedObject carried, Location location) {
+        if (player != null) player.removePassenger(carried.passenger());
+        else carried.passenger().leaveVehicle();
+        if (carried instanceof CarriedObject.Block carriedBlock) restoreBlock(location, carriedBlock);
     }
 
     private static void removePassenger(Player player, Entity passenger) {

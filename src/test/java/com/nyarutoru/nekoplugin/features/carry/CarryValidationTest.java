@@ -85,6 +85,8 @@ class CarryValidationTest {
             org.bukkit.event.player.PlayerTeleportEvent.class).getReturnType());
         assertEquals(void.class, CarryListener.class.getMethod("onEntityDismount",
             org.bukkit.event.entity.EntityDismountEvent.class).getReturnType());
+        assertEquals(void.class, CarryManager.class.getDeclaredMethod("releasePassenger",
+            Entity.class, org.bukkit.Location.class).getReturnType());
     }
 
     private static Inventory inventory(AtomicBoolean cleared) {

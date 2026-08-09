@@ -66,6 +66,6 @@ final class CarryListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityDismount(EntityDismountEvent event) {
-        manager.forget(event.getEntity());
+        manager.releasePassenger(event.getEntity(), event.getDismounted().getLocation());
     }
 }
