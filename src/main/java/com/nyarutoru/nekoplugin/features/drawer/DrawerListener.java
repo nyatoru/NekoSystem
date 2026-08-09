@@ -34,8 +34,9 @@ import java.util.List;
  */
 public class DrawerListener implements Listener {
 
-    @EventHandler(priority = EventPriority.HIGH)
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
+        if (!event.canBuild()) return;
         ItemStack item = event.getItemInHand();
         if (item == null) {
             return;

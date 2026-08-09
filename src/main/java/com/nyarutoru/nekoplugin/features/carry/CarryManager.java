@@ -96,6 +96,8 @@ final class CarryManager {
             if (!event.callEvent() || !event.canBuild()) return true;
             BlockState placed = carriedBlock.state().copy(location);
             if (!placed.update(true, false)) return true;
+            // ponytail: remove mapping before dismount so EntityDismount/EntityRemove handlers don't duplicate the block (bedrock damage / void case)
+            carriedByPlayer.remove(player.getUniqueId());
             removePassenger(player, carriedBlock.passenger());
         } else {
             Entity entity = carried.passenger();
@@ -103,11 +105,11 @@ final class CarryManager {
                 player.sendActionBar(ComponentUtils.error("There is no room to put that down"));
                 return true;
             }
+            carriedByPlayer.remove(player.getUniqueId());
             removePassenger(player, entity);
             entity.teleport(location.clone().add(0.5, 0.0, 0.5));
         }
 
-        carriedByPlayer.remove(player.getUniqueId());
         player.sendActionBar(ComponentUtils.success("Put down carried object"));
         return true;
     }
