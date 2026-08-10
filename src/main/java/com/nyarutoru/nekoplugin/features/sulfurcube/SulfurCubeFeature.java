@@ -8,6 +8,7 @@ import io.papermc.paper.datacomponent.item.SulfurCubeContent;
 import io.papermc.paper.event.entity.SulfurCubeSwallowItemEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -22,6 +23,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -45,6 +47,8 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
 
     private final Set<SulfurCube> tracked = ConcurrentHashMap.newKeySet();
     private long tickCount = 0;
+    private NamespacedKey wetKey;
+    private NamespacedKey spongeKey;
 
     public SulfurCubeFeature() {
         super("sulfurcube", "Sulfur Cube Sponge");
@@ -52,6 +56,8 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
 
     @Override
     public void onEnable(NekoPlugin plugin) {
+        wetKey = new NamespacedKey(plugin, "sulfurcube_sponge_wet");
+        spongeKey = new NamespacedKey(plugin, "sulfurcube_has_sponge");
         registerListener(this, plugin);
         // initial population - safe during onEnable before regions tick
         try {
@@ -70,22 +76,48 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
         tracked.clear();
     }
 
-    // immediate drain when swallowing sponge
+    // immediate drain when swallowing sponge - also clears wet flag like vanilla dry sponge
     @EventHandler(ignoreCancelled = true)
     public void onSwallow(SulfurCubeSwallowItemEvent event) {
         ItemStack newItem = event.getNewItem();
+        ItemStack oldItem = event.getOldItem();
+        SulfurCube cube = event.getEntity();
+        // track any swallow
+        tracked.add(cube);
         if (newItem != null && newItem.getType() == Material.SPONGE) {
-            SulfurCube cube = event.getEntity();
-            tracked.add(cube);
+            // dry sponge -> clear wet flag, mark has_sponge
+            try {
+                cube.getPersistentDataContainer().remove(wetKey);
+                cube.getPersistentDataContainer().set(spongeKey, PersistentDataType.BYTE, (byte) 1);
+            } catch (Throwable ignored) {}
             SchedulerUtils.runAtEntityLater(cube, () -> {
                 try {
-                    if (cube.isValid() && isSpongeCube(cube)) {
+                    if (cube.isValid() && isSpongeCube(cube) && !isWet(cube)) {
                         SchedulerUtils.runAtLocation(cube.getLocation(), () -> drainAround(cube));
                     }
                 } catch (Throwable t) {
                     NekoPlugin.getInstance().getLogger().log(Level.WARNING, "SulfurCube swallow drain failed", t);
                 }
             }, 1L);
+        } else if (newItem != null && newItem.getType() == Material.WET_SPONGE) {
+            // wet sponge never drains - mark wet
+            try {
+                cube.getPersistentDataContainer().set(wetKey, PersistentDataType.BYTE, (byte) 1);
+                cube.getPersistentDataContainer().set(spongeKey, PersistentDataType.BYTE, (byte) 1);
+            } catch (Throwable ignored) {}
+        } else {
+            // any other item (including air) -> sponge removed
+            try {
+                cube.getPersistentDataContainer().remove(wetKey);
+                cube.getPersistentDataContainer().remove(spongeKey);
+            } catch (Throwable ignored) {}
+        }
+        // handle old sponge removal explicitly if needed
+        if (oldItem != null && oldItem.getType() == Material.SPONGE && (newItem == null || newItem.getType() == Material.AIR)) {
+            try {
+                cube.getPersistentDataContainer().remove(wetKey);
+                cube.getPersistentDataContainer().remove(spongeKey);
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -136,6 +168,7 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
                 continue;
             }
             // Folia-safe: all block/entity checks inside region task
+            // ponytail: no hasNearbyWater early-out here - it skipped water at distance 3-6, breaking vanilla shape
             SchedulerUtils.runAtLocation(cube.getLocation(), () -> {
                 try {
                     if (!cube.isValid()) {
@@ -143,7 +176,8 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
                         return;
                     }
                     if (!isSpongeCube(cube)) return;
-                    if (!hasNearbyWater(cube)) return;
+                    // wet check via PDC - vanilla sponge becomes wet after draining
+                    if (isWet(cube)) return;
                     drainAround(cube);
                 } catch (Throwable t) {
                     NekoPlugin.getInstance().getLogger().log(Level.WARNING, "SulfurCube drain failed", t);
@@ -152,43 +186,51 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
         }
     }
 
-    private static boolean hasNearbyWater(SulfurCube cube) {
+    private boolean isWet(SulfurCube cube) {
         try {
-            World world = cube.getWorld();
-            int bx = cube.getLocation().getBlockX();
-            int by = cube.getLocation().getBlockY();
-            int bz = cube.getLocation().getBlockZ();
-            for (int dx = -2; dx <= 2; dx++) {
-                for (int dy = -2; dy <= 2; dy++) {
-                    for (int dz = -2; dz <= 2; dz++) {
-                        Block b = world.getBlockAt(bx + dx, by + dy, bz + dz);
-                        Material type = b.getType();
-                        if (type == Material.WATER || type == Material.BUBBLE_COLUMN) return true;
-                        BlockData data = b.getBlockData();
-                        if (data instanceof Waterlogged wl && wl.isWaterlogged()) return true;
-                        if (type == Material.KELP || type == Material.KELP_PLANT || type == Material.SEAGRASS || type == Material.TALL_SEAGRASS) return true;
-                    }
-                }
-            }
-        } catch (Throwable ignored) {
-            return true;
+            if (wetKey == null) return false;
+            Byte v = cube.getPersistentDataContainer().get(wetKey, PersistentDataType.BYTE);
+            return v != null && v != 0;
+        } catch (Throwable t) {
+            return false;
         }
-        return false;
     }
 
-    private static boolean isSpongeCube(SulfurCube cube) {
+    private boolean isSpongeCube(SulfurCube cube) {
+        // primary: DataComponent (vanilla), fallback: PDC has_sponge flag (for cases where DataComponent read fails or timing)
         try {
             SulfurCubeContent content = cube.getData(DataComponentTypes.SULFUR_CUBE_CONTENT);
-            if (content == null) return false;
-            ItemStack item = content.absorbedItem();
-            if (item == null) return false;
-            return item.getType() == Material.SPONGE;
+            if (content != null) {
+                ItemStack item = content.absorbedItem();
+                if (item != null) {
+                    if (item.getType() == Material.SPONGE) return true;
+                    if (item.getType() == Material.WET_SPONGE) return false;
+                    // if content is other item, fall through to PDC check
+                }
+            }
+        } catch (Throwable ignored) {}
+        try {
+            if (spongeKey != null) {
+                Byte v = cube.getPersistentDataContainer().get(spongeKey, PersistentDataType.BYTE);
+                if (v != null && v != 0) {
+                    // has_sponge but check not wet (wet handled outside, but double-check)
+                    Byte wet = wetKey != null ? cube.getPersistentDataContainer().get(wetKey, PersistentDataType.BYTE) : null;
+                    return wet == null || wet == 0;
+                }
+            }
+        } catch (Throwable ignored) {}
+        // final fallback: no sponge
+        try {
+            SulfurCubeContent c = cube.getData(DataComponentTypes.SULFUR_CUBE_CONTENT);
+            return c != null && c.absorbedItem() != null && c.absorbedItem().getType() == Material.SPONGE;
         } catch (Throwable t) {
             return false;
         }
     }
 
     // must be called on region thread for the cube's location
+    // replicates net.minecraft.world.level.block.SpongeBlock.removeWaterBreadthFirstSearch
+    // MAX_DEPTH=6, MAX_COUNT=65, checks FluidTags.WATER via BucketPickup/Waterlogged/LiquidBlock/KELP
     private void drainAround(SulfurCube cube) {
         try {
             if (!cube.isValid()) return;
@@ -225,31 +267,38 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
                     }
 
                     Material type = block.getType();
+                    // vanilla: checks FluidTags.WATER via BucketPickup then LiquidBlock then kelp/seagrass
+                    // Bukkit mapping: WATER = LiquidBlock, waterlogged = BucketPickup, kelp = special
                     if (type == Material.WATER) {
-                        block.setType(Material.AIR, false);
+                        // true = apply physics, like Level.setBlock UPDATE_ALL
+                        block.setType(Material.AIR);
                         count++;
                         queue.add(nb);
                         if (count >= MAX_BLOCKS) break;
                         continue;
                     }
                     if (type == Material.BUBBLE_COLUMN) {
-                        block.setType(Material.AIR, false);
+                        block.setType(Material.AIR);
                         count++;
                         queue.add(nb);
                         if (count >= MAX_BLOCKS) break;
                         continue;
                     }
                     if (type == Material.KELP || type == Material.KELP_PLANT || type == Material.SEAGRASS || type == Material.TALL_SEAGRASS) {
-                        block.setType(Material.AIR, false);
+                        // vanilla drops resources for these
+                        try { block.breakNaturally(true); } catch (Throwable ignored) { block.setType(Material.AIR); }
+                        // ensure air if breakNaturally didn't
+                        if (block.getType() != Material.AIR) block.setType(Material.AIR);
                         count++;
                         queue.add(nb);
                         if (count >= MAX_BLOCKS) break;
                         continue;
                     }
+                    // BucketPickup path for waterlogged blocks (fluid WATER)
                     BlockData data = block.getBlockData();
                     if (data instanceof Waterlogged wl && wl.isWaterlogged()) {
                         wl.setWaterlogged(false);
-                        block.setBlockData(wl, false);
+                        block.setBlockData(wl);
                         count++;
                         queue.add(nb);
                         if (count >= MAX_BLOCKS) break;
@@ -260,6 +309,10 @@ public class SulfurCubeFeature extends AbstractFeature implements Listener {
             if (count > 0) {
                 try {
                     world.playSound(cube.getLocation(), Sound.BLOCK_SPONGE_ABSORB, 1.0f, 1.0f);
+                } catch (Throwable ignored) {}
+                // vanilla: sponge -> wet_sponge after absorbing. mimic via PDC so it drains once per sponge like vanilla
+                try {
+                    cube.getPersistentDataContainer().set(wetKey, PersistentDataType.BYTE, (byte) 1);
                 } catch (Throwable ignored) {}
             }
         } catch (Throwable t) {
