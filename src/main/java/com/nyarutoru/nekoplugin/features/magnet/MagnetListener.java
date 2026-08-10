@@ -80,7 +80,31 @@ public class MagnetListener implements Listener {
     public void onPlayerSneak(PlayerToggleSneakEvent event) {
         if (!event.isSneaking()) return;
         Player player = event.getPlayer();
-        ActiveToolAPI.getInstance().onShift(player, TOOL_NAME, this::isHoldingMagnet, null);
+        ActiveToolAPI.getInstance().onShift(player, TOOL_NAME, this::isHoldingMagnet, () -> {
+            // Fix 2: when magnet activates, immediately consider ground items that were lying before activation
+            // (previously only ItemSpawnEvent after activation was handled)
+            scanGroundItemsFor(player);
+        });
+    }
+
+    private void scanGroundItemsFor(Player player) {
+        if (player == null || !player.isOnline()) return;
+        if (!ActiveToolAPI.getInstance().isActive(player, TOOL_NAME)) return;
+        if (!isHoldingMagnet(player)) return;
+        Location pLoc = player.getLocation().add(0, 0.5, 0);
+        if (pLoc.getWorld() == null) return;
+        try {
+            // cap nearby scan to avoid lag: getNearbyEntities with small box already limited
+            for (org.bukkit.entity.Entity e : pLoc.getWorld().getNearbyEntities(pLoc, range, range, range, en -> en instanceof Item)) {
+                Item item = (Item) e;
+                if (item.getThrower() != null) continue;
+                if (pulling.containsKey(item.getUniqueId())) continue;
+                if (item.getLocation().distanceSquared(pLoc) > (double) range * range) continue;
+                if (item.getItemStack() == null || item.getItemStack().getType().isAir()) continue;
+                pulling.put(item.getUniqueId(), new PullEntry(item, player));
+                if (item.getPickupDelay() > 10) item.setPickupDelay(0);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static final class PullEntry {
@@ -89,7 +113,42 @@ public class MagnetListener implements Listener {
         PullEntry(Item item, Player player) { this.item = item; this.player = player; }
     }
 
+    private int groundScanTick = 0;
+
     private void tick() {
+        // Fix 2: periodic ground scan so items lying before activation are also pulled (previously only ItemSpawnEvent)
+        // Run every 10 ticks (0.5s) to avoid per-tick world scan lag
+        if (++groundScanTick % 10 == 0) {
+            // also auto-deactivate magnet if player no longer holds it in either hand (covers offhand swap/removal)
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (ActiveToolAPI.getInstance().isActive(p, TOOL_NAME) && !isHoldingMagnet(p)) {
+                    ActiveToolAPI.getInstance().deactivate(p, "no magnet");
+                }
+            }
+            // scan ground items for each active holder (cap players per scan to avoid lag)
+            int scannedPlayers = 0;
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                if (scannedPlayers++ > 6) break; // ponytail: cap scanned players per ground sweep
+                if (!ActiveToolAPI.getInstance().isActive(p, TOOL_NAME) || !isHoldingMagnet(p)) continue;
+                Location pLoc = p.getLocation().add(0, 0.5, 0);
+                if (pLoc.getWorld() == null) continue;
+                try {
+                    // getNearbyEntities already bounded by range, usually < 30 entities
+                    for (org.bukkit.entity.Entity e : pLoc.getWorld().getNearbyEntities(pLoc, range, range, range, en -> en instanceof Item)) {
+                        if (pulling.size() > 80) break; // cap total tracked to avoid explosion
+                        Item item = (Item) e;
+                        if (item.getThrower() != null) continue;
+                        if (pulling.containsKey(item.getUniqueId())) continue;
+                        ItemStack st = item.getItemStack();
+                        if (st == null || st.getType().isAir()) continue;
+                        if (item.getLocation().distanceSquared(pLoc) > (double) range * range) continue;
+                        pulling.put(item.getUniqueId(), new PullEntry(item, p));
+                        if (item.getPickupDelay() > 10) item.setPickupDelay(0);
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
+
         if (pulling.isEmpty()) return;
         int processed = 0;
         // cap per-tick work to avoid lag spikes when many drops (e.g. 500 logs)
