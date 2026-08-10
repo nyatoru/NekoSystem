@@ -20,6 +20,7 @@ import com.nyarutoru.nekoplugin.features.server.ServerFeature;
 import com.nyarutoru.nekoplugin.features.tool.SandExcavationFeature;
 import com.nyarutoru.nekoplugin.features.treefeller.TreeFellerFeature;
 import com.nyarutoru.nekoplugin.features.curse.AquaCurseFeature;
+import com.nyarutoru.nekoplugin.features.magnet.MagnetFeature;
 import com.nyarutoru.nekoplugin.features.villageroptimize.VillagerOptimizeFeature;
 import com.nyarutoru.nekoplugin.features.woodcutting.WoodcuttingFeature;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -60,6 +61,7 @@ public class NekoPlugin extends JavaPlugin {
         TreeFellerFeature treeFellerFeature = new TreeFellerFeature();
         VillagerOptimizeFeature villagerOptimizeFeature = new VillagerOptimizeFeature();
         AquaCurseFeature aquaCurseFeature = new AquaCurseFeature();
+        MagnetFeature magnetFeature = new MagnetFeature();
 
         FeatureManager.getInstance().registerFeature(carryFeature);
         FeatureManager.getInstance().registerFeature(drawerFeature);
@@ -73,6 +75,7 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(treeFellerFeature);
         FeatureManager.getInstance().registerFeature(villagerOptimizeFeature);
         FeatureManager.getInstance().registerFeature(aquaCurseFeature);
+        FeatureManager.getInstance().registerFeature(magnetFeature);
 
         carryFeature.registerSettings(settingRegistry, adminState);
         drawerFeature.registerSettings(settingRegistry, adminState);
@@ -85,6 +88,7 @@ public class NekoPlugin extends JavaPlugin {
         woodcuttingFeature.registerSettings(settingRegistry, adminState);
         treeFellerFeature.registerSettings(settingRegistry, adminState);
         villagerOptimizeFeature.registerSettings(settingRegistry, adminState);
+        magnetFeature.registerSettings(settingRegistry, adminState);
 
         // Register the single core command and honor persisted startup selection.
         registerCommand("neko", "Opens the Neko operator feature manager",
