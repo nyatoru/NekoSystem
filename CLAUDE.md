@@ -1,47 +1,116 @@
-# Minecraft PaperMC Plugin Developer
+# CLAUDE.md
 
-You are an expert Minecraft plugin developer specializing in **PaperMC 1.21.1** (Java Edition).
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## File Access Rules
+# NekoSystem — NekoPlugin (PaperMC)
 
-- **Never read, modify, or reference files inside the `.git/` directory**
-- Only work with source files: `src/`, `pom.xml`, `build.gradle.kts`, `gradle.properties`, `settings.gradle.kts`, `*.yml`, `*.json`, `*.java`
+Modular Paper/Folia plugin. Published name `NekoPlugin`, entry point `com.nyarutoru.nekoplugin.NekoPlugin`, descriptor `src/main/resources/paper-plugin.yml` (`api-version: 26.2`, `folia-supported: true`).
 
-## Core Behavior
+## Tech Stack
 
-- **Always fetch the Javadocs before using any unfamiliar API**, class, method, or event:
-    - Base URL: `https://jd.papermc.io/paper/1.21.1/`
-    - Example: before using `PlayerJoinEvent`, fetch `https://jd.papermc.io/paper/1.21.1/org/bukkit/event/player/PlayerJoinEvent.html`
-- **Never assume** API signatures, method names, or behavior from memory alone — PaperMC APIs evolve between versions.
-- When in doubt about whether a method exists or its exact signature, **look it up first**.
+- Java 25 (see `build.gradle` `targetJavaVersion`; toolchain fallback if host < 25), UTF-8, `-Xlint:all`
+- Gradle Wrapper (Groovy DSL) + Paperweight `2.0.0-beta.21` + `paperDevBundle("26.2.build.+")`
+- Paper/Adventure APIs only — no extra runtime deps
+- JUnit 5.10.2 + Mockito 5.11.0 (available but most tests are pure domain validation without Bukkit init)
+- SQLite via `core/DatabaseManager` (WAL mode, per-feature DB files under `plugins/NekoPlugin/database/<feature>/<feature>.db`)
 
-## Technical Standards
+## Commands
 
-- **Java version**: Java 21
-- **Build tool**: Maven or Gradle (Kotlin DSL preferred)
-- **API**: PaperMC 1.21.1 (never use deprecated Bukkit-only APIs when Paper alternatives exist)
-- Use `getLogger()` instead of `System.out.println()`
-- Handle async vs sync carefully — never modify world state off the main thread unless using Paper's async APIs
+Run from repository root. Prefer `./gradlew` over `build.sh` (which requires system `gradle`).
 
-## Code Quality
+```bash
+./gradlew test                          # full JUnit 5 suite (logs passed/skipped/failed)
+./gradlew test --tests 'com.nyarutoru.nekoplugin.features.treefeller.TreeFellerValidationTest'  # single test
+./gradlew build                         # compile + test + jar + resource pack zip
+./gradlew clean build                   # use when diagnosing stale output
+./gradlew buildResourcePack             # -> build/libs/NekoPlugin-ResourcePack.zip (pack.mcmeta + assets/nekoplugin)
+```
 
-- Write clean, well-commented code
-- Use Paper-specific APIs over Bukkit equivalents (e.g., `Component` via Adventure API for text, not legacy color codes)
-- Use `MiniMessage` or `Component` for all player-facing text
-- Avoid blocking the main thread — use `BukkitScheduler` or `CompletableFuture` for heavy tasks
-- Validate inputs and handle edge cases (null checks, player offline, etc.)
+Outputs: plugin jar + resource pack in `build/libs/`. No checked-in dev server — copy jar to a Paper/Folia `plugins/` dir for manual testing.
 
-## Javadoc Lookup Strategy
+## Repository Layout
 
-When implementing any feature:
-1. Identify the relevant classes/events/interfaces needed
-2. Fetch the Javadoc page for each unfamiliar one
-3. Confirm method signatures, available constructors, and deprecation status
-4. Then write the code
+```
+src/main/java/com/nyarutoru/nekoplugin/
+├── NekoPlugin.java            # JavaPlugin; initializes managers, registers features, enables via AdminState
+├── core/                      # Feature interface, AbstractFeature, FeatureManager, DatabaseManager, admin, settings
+├── api/                       # Reusable: gui (BaseGUI/GUIManager/AnvilTextInputGUI), recipe (CustomRecipe/RecipeAPI), tool (AbstractVeinMiner/ActiveToolAPI)
+├── features/                  # carry, curse (AquaCurse), drawer, graves, hammer, oreexcavation, player, server, tool (SandExcavation), treefeller, villageroptimize, woodcutting
+└── utils/                     # BlockPos, ComponentUtils, ItemUtils, LocationUtils, SchedulerUtils, ServerPerformanceUtils
 
-Key Javadoc entry points:
-- Events: `org/bukkit/event/`
-- Entities: `org/bukkit/entity/`
-- World/Block: `org/bukkit/World.html`, `org/bukkit/block/`
-- Paper-specific: `io/papermc/paper/`
-- Adventure (text): `net/kyori/adventure/`
+src/main/resources/
+├── paper-plugin.yml           # name/version/main/api-version/folia/permissions (nekoplugin.grave.use/.admin)
+├── pack.mcmeta + assets/nekoplugin/{models,textures}/item/hammer_*.{json,png}
+
+src/test/java/com/nyarutoru/nekoplugin/
+└── mirrors src/main/java; validation tests per feature
+```
+
+## Architecture
+
+### Plugin lifecycle (`NekoPlugin`)
+
+`onEnable()`: `AdminConfigStore.load()` → `DatabaseManager.initialize()` → `FeatureManager.initialize()` → `GUIManager.initialize()` → instantiate+`registerFeature()` for all 12 features → `registerSettings()` each feature against `SettingRegistry`/`AdminState` → `registerCommand("neko", new NekoCommand(...))` → `FeatureManager.enableDesired(adminState::desiredEnabled)` → register `ActiveToolListener`.
+
+`onDisable()`: `FeatureManager.shutdown()` (reverse-order disable + clear) → `ActiveToolAPI.shutdown()` → `RecipeAPI.clear()` → `AdminConfigStore.flush()` → `DatabaseManager.shutdown()`.
+
+### Feature system
+
+- Contract: `core/Feature` (`getId()`, `getName()`, `onEnable(NekoPlugin)`, `onDisable()`, `isEnabled()`, `registerSettings(SettingRegistry, AdminState)` default no-op).
+- Base: `core/AbstractFeature` — store `id`/`name`, track owned `Listener`s + `SchedulerUtils.TaskHandle`s. `registerListener(listener, plugin)` auto-unregisters on disable; `ownTask(task)` tracks for cancellation. Override `cleanup()` for feature teardown; if overriding `onDisable()` preserve super behavior. `enabled` flag managed by `super.onEnable`/`onDisable`.
+- Manager: `core/FeatureManager` — singleton, `LinkedHashMap` insertion-order, `synchronized` transitions. `registerFeature` dedupes ids. `enable`/`disable`/`setEnabled` return `TransitionResult(status, enabled, message)` (`CHANGED`/`ALREADY_IN_STATE`/`NOT_FOUND`/`FAILED`). Enable failure triggers `onDisable` rollback. `enableDesired(Predicate<String>)` / `enableAll` / `disableAll` (reverse order) / `shutdown`/`reset`. Fatal `VirtualMachineError`/`LinkageError` rethrown.
+- Adding a feature: extend `AbstractFeature`, implement `registerSettings` if needed, register instance in `NekoPlugin.onEnable()` before `enableDesired`.
+
+### Admin / settings
+
+- `core/admin/AdminState` — thread-safe maps for `desiredFeatures` (default enabled=true) + `settingValues` (`featureId.settingKey`). `canonicalizeSetting` repairs invalid persisted values to descriptor default. `Snapshot`/`replace` for persistence.
+- `core/admin/AdminConfigStore` — load/flush snapshot to disk.
+- `core/settings/SettingRegistry` + `SettingDescriptor<T>`/`SettingType`/`ApplySemantics` — group settings by featureId, duplicate key check, typed parse/format.
+- UI: `core/admin/NekoCommand` (`/neko` — operator feature manager), `FeatureListGUI`, `FeatureSettingsGUI`, `features/curse/AquaCurseAdminGUI`.
+
+### Shared APIs — check before creating new abstractions
+
+- `api/gui`: `BaseGUI`, `PreviewGUI`, `GUIManager`, `GUIUtils`, `AnvilTextInputGUI`
+- `api/recipe`: `CustomRecipe`, `RecipeAPI`, `PDCUtils`
+- `api/tool`: `AbstractVeinMiner`, `ActiveToolAPI`, `ActiveToolListener` (global listener registered in `NekoPlugin`)
+- `utils/ComponentUtils` (Adventure `Component`/`MiniMessage` for all player text), `ItemUtils` (durability), `SchedulerUtils` (Paper/Folia-aware), `BlockPos`/`LocationUtils`, `ServerPerformanceUtils`
+
+### Notable features
+
+- **graves**: `GraveManager`/`GraveRepository`/`GravePersistenceQueue`/`GraveListener`/`GraveGUI`/`GraveCommands` — inventory snapshot, async persistence, location reservations, water-check placement.
+- **drawer**: `Drawer`/`DrawerManager`/`DrawerTier`/`DrawerListener`/`DrawerGUI`/`DrawerRecipes`
+- **treefeller**: `TreeDetector`/`TreeStructure`/`TreeType` + `animation/FallingTreeAnimation` + `tool/ToolMatcher` + `TreeFellerConfig`
+- **hammer/oreexcavation/tool(SandExcavation)**: vein-mining via `api/tool`
+- **curse/AquaCurse**: land Mining Fatigue + water Conduit/Dolphin effects
+- **server**: `CustomCraftingListener`/`ServerRecipes`/`ConcreteConverter`/`TPSBossBarTask`/`RecipeBookGUI`
+- **carry**: `CarryManager`/`CarryPolicy`/`CarriedObject`
+
+### Database and scheduling constraints
+
+- Use `DatabaseManager.getConnection(featureName)` / `createTable(...)`, not raw connections. Concurrent access via WAL; 5s reconnect cooldown.
+- Never mutate world/block/entity/inventory/player off the main/region thread. Use `SchedulerUtils` (`runAtEntity`, `runAtLocation`, `runGlobal`, `runAsync` + `*Later`/`*Timer` variants returning `TaskHandle`) instead of raw `BukkitScheduler`. Folia detection via `RegionizedServer` class check; `NekoPlugin` enabled guard returns dummy cancelled handle on shutdown to avoid `IllegalPluginAccessException`. Validate thread ownership for region/entity work.
+
+## Paper API Usage
+
+Version is defined by `build.gradle` `paperDevBundle` and `paper-plugin.yml` `api-version` (currently `26.2`). Do not copy stale version numbers from docs/comments.
+
+- **Mandatory — always use WebSearch for Paper docs:** Before using any unfamiliar class/event/method/registry/scheduler API, run `WebSearch` (or `WebFetch` for a known Javadoc URL) — never answer from memory. Reconcile hits against the active bundle version and local Paper sources. Verify signature and deprecation; prefer Paper + Adventure `Component`/`MiniMessage` over legacy Bukkit/color codes.
+  - Javadocs base for this project: `https://jd.papermc.io/paper/26.2/` (derived from `build.gradle` `paperDevBundle("26.2.build.+")` / `paper-plugin.yml` `api-version: '26.2'`). Never fall back to the old `1.21.1` Javadocs for this repo — always resolve against `26.2`.
+  - If `WebSearch` is deferred, load it via `ToolSearch(query="select:WebSearch,WebFetch")` first.
+- Key entry points: `org/bukkit/event/`, `org/bukkit/entity/`, `org/bukkit/block/`, `io/papermc/paper/`, `net/kyori/adventure/`.
+
+## Development Conventions
+
+- Java 25, 4-space indent, braces same line. Package root `com.nyarutoru.nekoplugin`. Keep feature code under `features/<name>`; only promote to `api`/`core`/`utils` when genuinely reusable. Small cohesive classes, explicit names. `getLogger()` not `System.out`. Adventure `Component` for player text.
+- Compiler: `-Xlint:all` (-processing/-deprecation adjusted); do not silence broadly — fix warnings your change introduces.
+- Tests: mirror production packages, JUnit Jupiter + Mockito. Prefer pure domain logic tests (existing validation tests avoid Bukkit enum init). For event/scheduler/registry/world behavior add manual Paper/Folia verification note. Run focused test → `./gradlew test` → `./gradlew build` before completing.
+- Config: `paper-plugin.yml` currently metadata+permissions only; some features (notably TreeFeller) hardcode config in Java — inspect impl before assuming YAML/reload exists.
+- Persistence: use `DatabaseManager`; release listener/task/GUI/feature state on disable and player quit.
+
+## Guardrails
+
+- Never read/modify `.git/`; do not edit `build/` output, `logs/latest.log`, or IDE metadata (`.gradle`, `.settings`, `.classpath`, `.project`). Preserve unrelated working-tree changes.
+- No secrets/player data/worlds/DBs in commits.
+- `PLANS.md` is historical design — verify against source/tests, do not infer unfinished work from it.
+- Do not add dependencies until Paper API proven insufficient and the dep is suitable for server deployment.
+- Never block main/region thread with heavy compute or I/O.

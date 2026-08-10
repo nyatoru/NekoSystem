@@ -33,7 +33,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
     private static final String FILE_NAME = "aqua-curse.yml";
     private static final int GRACE_SECONDS = 25;
     private static final int GRACE_TICKS = GRACE_SECONDS * 20;
-    private static final long TICK_PERIOD_TICKS = 20L;
+    private static final long TICK_PERIOD_TICKS = 10L;
     private static final double DAMAGE = 2.0;
 
     private final Set<UUID> cursed = ConcurrentHashMap.newKeySet();
@@ -186,13 +186,28 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         } catch (Throwable ignored) {
         }
         try {
+            // Paper 1.19+ - covers water + bubble column in one check
+            if (player.isInWaterOrBubbleColumn()) return true;
+        } catch (Throwable ignored) {
+        }
+        try {
             if (player.isSwimming()) return true;
         } catch (Throwable ignored) {
         }
-        Material feet = player.getLocation().getBlock().getType();
-        if (feet == Material.WATER || feet == Material.BUBBLE_COLUMN) return true;
-        Material eye = player.getEyeLocation().getBlock().getType();
-        return eye == Material.WATER || eye == Material.BUBBLE_COLUMN;
+        try {
+            org.bukkit.block.Block feet = player.getLocation().getBlock();
+            if (feet.isLiquid()) return true;
+            Material feetType = feet.getType();
+            if (feetType == Material.WATER || feetType == Material.BUBBLE_COLUMN) return true;
+            if (feet.getBlockData() instanceof org.bukkit.block.data.Waterlogged wl && wl.isWaterlogged()) return true;
+            org.bukkit.block.Block eye = player.getEyeLocation().getBlock();
+            if (eye.isLiquid()) return true;
+            Material eyeType = eye.getType();
+            if (eyeType == Material.WATER || eyeType == Material.BUBBLE_COLUMN) return true;
+            if (eye.getBlockData() instanceof org.bukkit.block.data.Waterlogged wl2 && wl2.isWaterlogged()) return true;
+        } catch (Throwable ignored) {
+        }
+        return false;
     }
 
     @EventHandler
@@ -215,18 +230,48 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         clearCurseEffects(event.getPlayer());
     }
 
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockDamage(org.bukkit.event.block.BlockDamageEvent event) {
+        Player player = event.getPlayer();
+        if (!cursed.contains(player.getUniqueId())) return;
+        if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
+        // Instant correction when starting to mine: ensure Haste/AquaAffinity present before break speed is calculated
+        SchedulerUtils.runAtEntity(player, () -> {
+            if (!cursed.contains(player.getUniqueId())) return;
+            if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
+            if (isInWater(player)) {
+                // Remove fatigue immediately so first block doesn't feel slow
+                if (player.hasPotionEffect(PotionEffectType.MINING_FATIGUE)) {
+                    player.removePotionEffect(PotionEffectType.MINING_FATIGUE);
+                }
+                if (!player.hasPotionEffect(PotionEffectType.HASTE)) {
+                    player.addPotionEffect(new PotionEffect(PotionEffectType.HASTE, 300, 1, false, false, true));
+                }
+                if (!player.hasPotionEffect(PotionEffectType.CONDUIT_POWER)) {
+                    player.addPotionEffect(new PotionEffect(PotionEffectType.CONDUIT_POWER, 300, 0, false, false, true));
+                }
+                applyAquaAffinity(player);
+            }
+        });
+    }
+
     private static void applyWaterEffects(Player player) {
-        // Heart of the Sea while in water -> Conduit Power + Dolphin's Grace, clear mining fatigue
+        // Heart of the Sea while in water -> Conduit Power + Dolphin's Grace + Haste, clear mining fatigue
         // 300 ticks (15s) + refresh every 20 ticks keeps remaining >200 ticks so icon never flashes (<10s flashes)
+        // Haste II counters vanilla underwater mining penalty (5x slower without Aqua Affinity) + floating penalty
         player.removePotionEffect(PotionEffectType.MINING_FATIGUE);
         player.addPotionEffect(new PotionEffect(PotionEffectType.CONDUIT_POWER, 300, 0, false, false, true));
         player.addPotionEffect(new PotionEffect(PotionEffectType.DOLPHINS_GRACE, 300, 0, false, false, true));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.HASTE, 300, 1, false, false, true));
+        applyAquaAffinity(player);
     }
 
     private static void applyLandEffects(Player player) {
         // Slows mining when not in water
         player.removePotionEffect(PotionEffectType.CONDUIT_POWER);
         player.removePotionEffect(PotionEffectType.DOLPHINS_GRACE);
+        player.removePotionEffect(PotionEffectType.HASTE);
+        removeAquaAffinity(player);
         player.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, 300, 1, false, false, true));
     }
 
@@ -236,5 +281,133 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         player.removePotionEffect(PotionEffectType.DOLPHINS_GRACE);
         // legacy clean-up if HASTE was given before
         player.removePotionEffect(PotionEffectType.HASTE);
+        removeAquaAffinity(player);
+    }
+
+    private static final java.util.UUID SUBMERGED_MODIFIER_UUID =
+            java.util.UUID.fromString("a7c2f1a0-5b3e-4e2a-9c1d-0f4a8e9b6c2d");
+
+    private static void applyAquaAffinity(Player player) {
+        // Try to negate vanilla submerged penalty via attribute (Paper 1.21.4+).
+        // Falls back to HASTE already applied above if attribute is unavailable.
+        try {
+            // Reflect to avoid hard compile dependency on attribute name which varies across mappings
+            Class<?> attributeClass = Class.forName("org.bukkit.attribute.Attribute");
+            Object attribute = null;
+            for (String name : new String[]{"SUBMERGED_MINING_SPEED", "PLAYER_SUBMERGED_MINING_SPEED", "GENERIC_SUBMERGED_MINING_SPEED"}) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Object v = Enum.valueOf((Class<Enum>) attributeClass, name);
+                    attribute = v;
+                    break;
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            if (attribute == null) return;
+
+            java.lang.reflect.Method getAttribute = player.getClass().getMethod("getAttribute", attributeClass);
+            Object instance = getAttribute.invoke(player, attribute);
+            if (instance == null) return;
+
+            Class<?> instanceClass = instance.getClass();
+            // check existing modifier by UUID/key to avoid duplicates
+            try {
+                java.lang.reflect.Method getModifiers = instanceClass.getMethod("getModifiers");
+                @SuppressWarnings("unchecked")
+                java.util.Collection<?> mods = (java.util.Collection<?>) getModifiers.invoke(instance);
+                for (Object mod : mods) {
+                    try {
+                        java.lang.reflect.Method getUniqueId = mod.getClass().getMethod("getUniqueId");
+                        java.util.UUID uid = (java.util.UUID) getUniqueId.invoke(mod);
+                        if (SUBMERGED_MODIFIER_UUID.equals(uid)) return; // already applied
+                    } catch (Throwable ignored) {
+                    }
+                    try {
+                        // Paper modern uses NamespacedKey; check key string contains aqua_curse
+                        java.lang.reflect.Method getKey = mod.getClass().getMethod("getKey");
+                        Object key = getKey.invoke(mod);
+                        if (key != null && key.toString().contains("aqua_curse")) return;
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+
+            // Build modifier: try modern (NamespacedKey, amount, operation) then legacy (UUID, name, amount, operation)
+            Class<?> modifierClass = Class.forName("org.bukkit.attribute.AttributeModifier");
+            Class<?> operationClass = Class.forName("org.bukkit.attribute.AttributeModifier$Operation");
+            Object operation = Enum.valueOf((Class<Enum>) operationClass, "ADD_NUMBER");
+            // some mappings use ADD_SCALAR; prefer ADD_NUMBER
+            Object modifier = null;
+            try {
+                Class<?> keyClass = Class.forName("org.bukkit.NamespacedKey");
+                java.lang.reflect.Method minecraft = keyClass.getMethod("minecraft", String.class);
+                // try with 3-arg constructor (key, amount, operation) variant
+                Object key = minecraft.invoke(null, "aqua_curse_submerged");
+                try {
+                    java.lang.reflect.Constructor<?> ctor = modifierClass.getConstructor(keyClass, double.class, operationClass);
+                    modifier = ctor.newInstance(key, 5.0, operation);
+                } catch (NoSuchMethodException e) {
+                    // try (NamespacedKey, amount, operation, EquipmentSlotGroup) variant? ignore
+                    throw e;
+                }
+            } catch (Throwable ignored) {
+                // legacy fallback: UUID, name, amount, operation
+                try {
+                    java.lang.reflect.Constructor<?> ctor = modifierClass.getConstructor(java.util.UUID.class, String.class, double.class, operationClass);
+                    modifier = ctor.newInstance(SUBMERGED_MODIFIER_UUID, "aqua_curse_submerged", 5.0, operation);
+                } catch (Throwable ignored2) {
+                }
+            }
+            if (modifier == null) return;
+            java.lang.reflect.Method addModifier = instanceClass.getMethod("addTransientModifier", modifierClass);
+            addModifier.invoke(instance, modifier);
+        } catch (Throwable ignored) {
+            // attribute not available on this server version -> HASTE alone mitigates
+        }
+    }
+
+    private static void removeAquaAffinity(Player player) {
+        try {
+            Class<?> attributeClass = Class.forName("org.bukkit.attribute.Attribute");
+            Object attribute = null;
+            for (String name : new String[]{"SUBMERGED_MINING_SPEED", "PLAYER_SUBMERGED_MINING_SPEED", "GENERIC_SUBMERGED_MINING_SPEED"}) {
+                try {
+                    @SuppressWarnings("unchecked")
+                    Object v = Enum.valueOf((Class<Enum>) attributeClass, name);
+                    attribute = v;
+                    break;
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            if (attribute == null) return;
+            java.lang.reflect.Method getAttribute = player.getClass().getMethod("getAttribute", attributeClass);
+            Object instance = getAttribute.invoke(player, attribute);
+            if (instance == null) return;
+            Class<?> instanceClass = instance.getClass();
+            java.lang.reflect.Method getModifiers = instanceClass.getMethod("getModifiers");
+            @SuppressWarnings("unchecked")
+            java.util.Collection<?> mods = (java.util.Collection<?>) getModifiers.invoke(instance);
+            Object target = null;
+            for (Object mod : mods) {
+                try {
+                    java.lang.reflect.Method getUniqueId = mod.getClass().getMethod("getUniqueId");
+                    java.util.UUID uid = (java.util.UUID) getUniqueId.invoke(mod);
+                    if (SUBMERGED_MODIFIER_UUID.equals(uid)) { target = mod; break; }
+                } catch (Throwable ignored) {
+                }
+                try {
+                    java.lang.reflect.Method getKey = mod.getClass().getMethod("getKey");
+                    Object key = getKey.invoke(mod);
+                    if (key != null && key.toString().contains("aqua_curse")) { target = mod; break; }
+                } catch (Throwable ignored) {
+                }
+            }
+            if (target != null) {
+                java.lang.reflect.Method removeModifier = instanceClass.getMethod("removeModifier", Class.forName("org.bukkit.attribute.AttributeModifier"));
+                removeModifier.invoke(instance, target);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 }
