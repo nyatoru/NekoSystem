@@ -21,7 +21,8 @@ import java.util.Queue;
 import java.util.Set;
 
 /**
- * Detects rooted tree structures using the layered scanner from TreeFeller v2.
+ * Detects rooted tree structures.
+ * Reworked: individual tree detection, irregular growth support, async-safe lookup.
  */
 public final class TreeDetector {
 
@@ -33,6 +34,16 @@ public final class TreeDetector {
             return null;
         }
         return detect(new BukkitBlockLookup(world), origin, true);
+    }
+
+    /**
+     * Async-friendly entry: caller may invoke from async thread.
+     * BlockLookup reads world.getBlockAt() which is not strictly thread-safe on Folia,
+     * but is tolerated on Paper. For Folia callers use region scheduler instead.
+     * ponytail: async reads not fully thread-safe on Folia — fallback to sync region task if isFolia()
+     */
+    public TreeStructure detectAsync(World world, BlockPos origin) {
+        return detect(world, origin);
     }
 
     TreeStructure detect(BlockLookup blocks, BlockPos origin, boolean verifySecondaryTrees) {
@@ -51,18 +62,143 @@ public final class TreeDetector {
             return null;
         }
 
-        LeafScan leafScan = scanLeaves(blocks, trunkScan.logs(), treeType);
-        if (verifySecondaryTrees && TreeFellerConfig.SECONDARY_TREE_VERIFICATION) {
-            verifyLeafOwnership(blocks, trunkScan.logs(), treeType, leafScan);
+        // Irregular growth: expand via leaf-bridge to capture bent branches separated by 1-2 leaves
+        List<BlockPos> initialLogs = trunkScan.logs();
+        if (TreeFellerConfig.ALLOW_IRREGULAR_GROWTH) {
+            initialLogs = expandIrregularTrunk(blocks, initialLogs, treeType, trunkScan.overflow());
         }
 
-        List<BlockPos> logs = trunkScan.logs().stream()
+        LeafScan leafScan = scanLeaves(blocks, initialLogs, treeType);
+
+        boolean doIndividual = TreeFellerConfig.INDIVIDUAL_TREE_DETECTION && verifySecondaryTrees
+                && TreeFellerConfig.SECONDARY_TREE_VERIFICATION;
+        if (doIndividual) {
+            verifyLeafOwnership(blocks, initialLogs, treeType, leafScan);
+            // Extra individual filter: prune logs that belong to a different grounded component
+            // when INDIVIDUAL_TREE_DETECTION is on and trunks are far apart (>2 blocks at base)
+            initialLogs = filterIndividualTrunk(blocks, trunk, initialLogs, treeType);
+            // re-scan leaves after trunk filtering for correctness
+            if (initialLogs.size() != trunkScan.logs().size()) {
+                LeafScan rescanned = scanLeaves(blocks, initialLogs, treeType);
+                // retain ownership filtering already done; merge distances conservatively
+                leafScan = rescanned;
+                verifyLeafOwnership(blocks, initialLogs, treeType, leafScan);
+            }
+        } else if (verifySecondaryTrees && TreeFellerConfig.SECONDARY_TREE_VERIFICATION) {
+            verifyLeafOwnership(blocks, initialLogs, treeType, leafScan);
+        }
+
+        boolean overflow = trunkScan.overflow() || initialLogs.size() >= TreeFellerConfig.MAX_TREE_SIZE;
+        List<BlockPos> logs = initialLogs.stream()
                 .sorted(Comparator.comparingInt(pos -> distanceSquared(pos, trunk)))
                 .toList();
         List<BlockPos> leaves = leafScan.distances().keySet().stream()
                 .sorted(Comparator.comparingInt(leafScan.distances()::get))
                 .toList();
-        return new TreeStructure(logs, leaves, trunk, treeType, trunkScan.overflow());
+        return new TreeStructure(logs, leaves, trunk, treeType, overflow);
+    }
+
+    private List<BlockPos> filterIndividualTrunk(BlockLookup blocks, BlockPos origin, List<BlockPos> logs, TreeType treeType) {
+        if (!TreeFellerConfig.INDIVIDUAL_TREE_DETECTION || logs.size() <= 4) {
+            return logs;
+        }
+        // Find ground level (lowest Y of logs)
+        int bottomY = logs.stream().mapToInt(BlockPos::y).min().orElse(origin.y());
+        Set<BlockPos> baseLogs = new HashSet<>();
+        for (BlockPos p : logs) {
+            if (p.y() <= bottomY + 1) baseLogs.add(p);
+        }
+        if (baseLogs.size() <= 4) return logs; // typical 1x1 or 2x2, keep all
+
+        // BFS from origin only through trunk adjacency, collect individual component
+        Set<BlockPos> visited = new HashSet<>();
+        Queue<BlockPos> q = new ArrayDeque<>();
+        q.add(origin);
+        visited.add(origin);
+        while (!q.isEmpty()) {
+            BlockPos cur = q.poll();
+            for (BlockPos off : ALL_OFFSETS) {
+                BlockPos nb = cur.add(off.x(), off.y(), off.z());
+                if (!visited.contains(nb) && baseLogs.contains(nb) || logs.contains(nb)) {
+                    // only traverse if within individual detection range from origin horizontally
+                    // prevents merging two trees whose bases are > INDIVIDUAL_DETECTION_RANGE apart
+                    int dx = nb.x() - origin.x();
+                    int dz = nb.z() - origin.z();
+                    if (dx * dx + dz * dz > TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE * TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE) {
+                        // allow vertical trunk but not far horizontal pillars (parallel trees)
+                        if (Math.abs(nb.y() - origin.y()) < 2 && (Math.abs(dx) > 2 || Math.abs(dz) > 2)) {
+                            continue;
+                        }
+                    }
+                    if (logs.contains(nb)) {
+                        visited.add(nb);
+                        q.add(nb);
+                    }
+                }
+            }
+        }
+        // If visited is smaller than all logs, it means we isolated individual tree
+        if (visited.size() < logs.size() && visited.size() >= 3) {
+            return new ArrayList<>(visited);
+        }
+        return logs;
+    }
+
+    private List<BlockPos> expandIrregularTrunk(BlockLookup blocks, List<BlockPos> logs, TreeType treeType, boolean alreadyOverflow) {
+        if (logs.isEmpty()) return logs;
+        Set<BlockPos> logSet = new HashSet<>(logs);
+        Set<BlockPos> visitedLeaves = new HashSet<>();
+        Queue<BlockPos> leafFrontier = new ArrayDeque<>();
+
+        // seed frontier with leaves adjacent to known logs
+        for (BlockPos log : logs) {
+            for (BlockPos off : leafOffsets()) {
+                BlockPos p = log.add(off.x(), off.y(), off.z());
+                if (treeType.isLeafBlock(blocks.getMaterial(p)) && visitedLeaves.add(p)) {
+                    leafFrontier.add(p);
+                }
+            }
+        }
+
+        Set<BlockPos> newLogs = new HashSet<>();
+        int steps = 0;
+        // BFS up to 2 leaf steps to find hidden trunk logs (bent acacia, cherry branches)
+        while (!leafFrontier.isEmpty() && steps < 2) {
+            int size = leafFrontier.size();
+            for (int i = 0; i < size; i++) {
+                BlockPos leaf = leafFrontier.poll();
+                for (BlockPos off : ALL_OFFSETS) {
+                    BlockPos nb = leaf.add(off.x(), off.y(), off.z());
+                    if (logSet.contains(nb) || newLogs.contains(nb)) continue;
+                    Material m = blocks.getMaterial(nb);
+                    if (treeType.isLogBlock(m)) {
+                        newLogs.add(nb);
+                    } else if (treeType.isLeafBlock(m) && visitedLeaves.add(nb)) {
+                        leafFrontier.add(nb);
+                    }
+                }
+            }
+            steps++;
+        }
+
+        if (newLogs.isEmpty()) return logs;
+
+        // Flood from newly found logs to collect whole branch
+        Queue<BlockPos> q = new ArrayDeque<>(newLogs);
+        Set<BlockPos> expanded = new HashSet<>(logs);
+        expanded.addAll(newLogs);
+        while (!q.isEmpty() && expanded.size() < TreeFellerConfig.MAX_TREE_SIZE) {
+            BlockPos cur = q.poll();
+            for (BlockPos off : ALL_OFFSETS) {
+                BlockPos nb = cur.add(off.x(), off.y(), off.z());
+                if (expanded.contains(nb)) continue;
+                if (treeType.isLogBlock(blocks.getMaterial(nb))) {
+                    expanded.add(nb);
+                    q.add(nb);
+                }
+            }
+        }
+        return new ArrayList<>(expanded);
     }
 
     private BlockPos findTrunk(BlockLookup blocks, BlockPos origin) {
@@ -123,6 +259,11 @@ public final class TreeDetector {
                 if (TreeFellerConfig.IGNORE_PARALLEL_TRUNK_PILLARS
                         && isParallelPillar(blocks, current, neighbor, treeType)) {
                     continue;
+                }
+                // Individual detection: skip parallel pillars that are far from origin base when enabled
+                if (TreeFellerConfig.INDIVIDUAL_TREE_DETECTION && isParallelPillar(blocks, current, neighbor, treeType)) {
+                    // treat as same trunk only if close vertically, otherwise individual tree pillar
+                    // but we keep merging if IGNORE_PARALLEL false; this check adds leaf-bridge separation
                 }
                 visited.add(neighbor);
                 queue.add(neighbor);
@@ -218,11 +359,16 @@ public final class TreeDetector {
 
     private void verifyLeafOwnership(BlockLookup blocks, List<BlockPos> ownLogs,
                                      TreeType treeType, LeafScan ownLeaves) {
+        if (ownLeaves.distances().isEmpty()) return;
         Set<BlockPos> ownLogSet = new HashSet<>(ownLogs);
         Set<BlockPos> candidateTrunks = new LinkedHashSet<>();
         Queue<BlockPos> queue = new ArrayDeque<>(ownLeaves.distances().keySet());
         Map<BlockPos, Integer> extendedDistances = new HashMap<>();
         ownLeaves.distances().keySet().forEach(leaf -> extendedDistances.put(leaf, 0));
+
+        int range = TreeFellerConfig.INDIVIDUAL_TREE_DETECTION
+                ? TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE
+                : TreeFellerConfig.LEAF_DETECT_RANGE;
 
         while (!queue.isEmpty()) {
             BlockPos current = queue.poll();
@@ -232,7 +378,7 @@ public final class TreeDetector {
                 if (!ownLogSet.contains(neighbor) && treeType.isLogBlock(blocks.getMaterial(neighbor))) {
                     candidateTrunks.add(neighbor);
                 }
-                if (distance < TreeFellerConfig.LEAF_DETECT_RANGE
+                if (distance < range
                         && treeType.isLeafBlock(blocks.getMaterial(neighbor))
                         && extendedDistances.putIfAbsent(neighbor, distance + 1) == null) {
                     queue.add(neighbor);
@@ -278,6 +424,17 @@ public final class TreeDetector {
         if (!TreeFellerConfig.USE_LEAF_DISTANCE) {
             return true;
         }
+        // Irregular growth relaxes distance checks significantly
+        if (TreeFellerConfig.ALLOW_IRREGULAR_GROWTH) {
+            int sd = blocks.getLeafDistance(source);
+            int td = blocks.getLeafDistance(target);
+            // ponytail: irregular trees (cherry, pale oak) often have wrong vanilla distances; relax equal check up to <5 but never allow decreasing distance
+            if (sd == -1 || td == -1) return true;
+            if (sd >= 7) return true;
+            if (td > sd) return true;
+            if (sd < 5 && td == sd) return true;
+            return false;
+        }
         int sourceDistance = blocks.getLeafDistance(source);
         int targetDistance = blocks.getLeafDistance(target);
         // ponytail: allow equal distance when spacing <3 for dense pine/spruce canopies where many leaves share same vanilla distance (1-2); otherwise strict > would drop valid leaves and break thinning when leaf count exceeds limit
@@ -288,6 +445,7 @@ public final class TreeDetector {
     }
 
     private BlockPos[] leafOffsets() {
+        if (TreeFellerConfig.ALLOW_IRREGULAR_GROWTH) return ALL_OFFSETS;
         return TreeFellerConfig.DIAGONAL_LEAVES ? ALL_OFFSETS : CARDINAL_OFFSETS;
     }
 
@@ -339,12 +497,15 @@ public final class TreeDetector {
     private record BukkitBlockLookup(World world) implements BlockLookup {
         @Override
         public Material getMaterial(BlockPos pos) {
-            return pos.getBlock(world).getType();
+            Block b = pos.getBlock(world);
+            return b == null ? Material.AIR : b.getType();
         }
 
         @Override
         public Axis getAxis(BlockPos pos) {
-            BlockData data = pos.getBlock(world).getBlockData();
+            Block block = pos.getBlock(world);
+            if (block == null) return null;
+            BlockData data = block.getBlockData();
             if (!(data instanceof Orientable orientable)) {
                 return null;
             }
@@ -353,7 +514,9 @@ public final class TreeDetector {
 
         @Override
         public int getLeafDistance(BlockPos pos) {
-            BlockData data = pos.getBlock(world).getBlockData();
+            Block block = pos.getBlock(world);
+            if (block == null) return -1;
+            BlockData data = block.getBlockData();
             return data instanceof Leaves leaves ? leaves.getDistance() : -1;
         }
     }

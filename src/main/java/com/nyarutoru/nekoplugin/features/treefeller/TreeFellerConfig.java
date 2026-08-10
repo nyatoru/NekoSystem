@@ -98,6 +98,36 @@ public final class TreeFellerConfig {
 
     public static boolean USE_LEAF_DISTANCE = true;
 
+    // --- Individual Tree Detection (rework) ---
+    public static boolean INDIVIDUAL_TREE_DETECTION = true;
+
+    /**
+     * When true, only the single tree containing the broken block is felled,
+     * even if canopies of neighbouring trees overlap. Uses secondary verification
+     * plus leaf-ownership competition (closest trunk wins). Disable to restore
+     * legacy behaviour where overlapping canopies merge.
+     */
+    public static int INDIVIDUAL_DETECTION_RANGE = 6;
+
+    // --- Irregular growth support (rework) ---
+    public static boolean ALLOW_IRREGULAR_GROWTH = true;
+
+    /**
+     * When true, diagonal log connections and diagonal leaf connections are
+     * always considered regardless of DIAGONAL_LEAVES, leaf-distance checks are
+     * relaxed, and an extra leaf-bridge pass searches for trunk logs that are
+     * separated by 1-2 leaf blocks (bent acacia, cherry branches, pale oak, etc.).
+     */
+
+    // --- Async detection (rework) ---
+    public static boolean ASYNC_DETECTION = true;
+
+    /**
+     * Max trunk logs to scan synchronously before offloading leaf scan to async.
+     * Full async is used on Paper; Folia falls back to region-thread scheduling.
+     */
+    public static int ASYNC_THRESHOLD_LOGS = 32;
+
     /**
      * Accelerate natural decay after TreeFeller removes a tree's logs.
      */

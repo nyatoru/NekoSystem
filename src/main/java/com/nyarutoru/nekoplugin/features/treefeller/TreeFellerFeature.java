@@ -40,6 +40,10 @@ public class TreeFellerFeature extends AbstractFeature {
         register(registry, state, SettingDescriptor.bool("use-leaf-distance", "Use leaf distance", true, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.USE_LEAF_DISTANCE = value));
         register(registry, state, SettingDescriptor.bool("fast-leaf-decay", "Fast leaf decay", true, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.FAST_LEAF_DECAY_ENABLED = value));
         registerFastLeafDecayDelaySettings(registry, state);
+        register(registry, state, SettingDescriptor.bool("individual-tree-detection", "Individual tree detection (isolate overlapping canopies)", true, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.INDIVIDUAL_TREE_DETECTION = value));
+        register(registry, state, SettingDescriptor.integer("individual-detection-range", "Individual detection range", 6, 1, 16, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE = value));
+        register(registry, state, SettingDescriptor.bool("allow-irregular-growth", "Allow irregular/bent tree shapes (acacia, cherry, pale oak)", true, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.ALLOW_IRREGULAR_GROWTH = value));
+        register(registry, state, SettingDescriptor.bool("async-detection", "Async tree detection (Paper async, Folia region)", true, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.ASYNC_DETECTION = value));
         register(registry, state, SettingDescriptor.bool("ignore-leaf-data", "Ignore leaf data", false, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.IGNORE_LEAF_DATA = value));
         register(registry, state, SettingDescriptor.bool("allow-player-placed", "Allow player-placed logs", false, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.ALLOW_PLAYER_PLACED = value));
         register(registry, state, SettingDescriptor.bool("replant-saplings", "Replant saplings", false, ApplySemantics.IMMEDIATE, value -> TreeFellerConfig.REPLANT_SAPLINGS = value));
@@ -146,6 +150,9 @@ public class TreeFellerFeature extends AbstractFeature {
         plugin.getLogger().info("Fast Leaf Decay: " + TreeFellerConfig.FAST_LEAF_DECAY_ENABLED);
         plugin.getLogger().info("Diagonal Leaves: " + TreeFellerConfig.DIAGONAL_LEAVES);
         plugin.getLogger().info("Secondary Tree Verification: " + TreeFellerConfig.SECONDARY_TREE_VERIFICATION);
+        plugin.getLogger().info("Individual Tree Detection: " + TreeFellerConfig.INDIVIDUAL_TREE_DETECTION + " (range " + TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE + ")");
+        plugin.getLogger().info("Allow Irregular Growth: " + TreeFellerConfig.ALLOW_IRREGULAR_GROWTH);
+        plugin.getLogger().info("Async Detection: " + TreeFellerConfig.ASYNC_DETECTION);
         plugin.getLogger().info("Allow Player Placed: " + TreeFellerConfig.ALLOW_PLAYER_PLACED);
         plugin.getLogger().info("Replant Saplings: " + TreeFellerConfig.REPLANT_SAPLINGS);
         plugin.getLogger().info("Animation Enabled: " + TreeFellerConfig.ANIMATION_ENABLED);
