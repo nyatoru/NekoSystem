@@ -56,3 +56,17 @@ processResources {
         expand props
     }
 }
+
+// ponytail: minimal resource pack build — zips pack.mcmeta + assets/nekoplugin from resources.
+// Run ./gradlew buildResourcePack -> build/libs/NekoPlugin-ResourcePack.zip (host via server.properties resource-pack or external http)
+tasks.register('buildResourcePack', Zip) {
+    archiveBaseName = 'NekoPlugin-ResourcePack'
+    archiveVersion = ''
+    archiveClassifier = ''
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    from('src/main/resources') {
+        include 'pack.mcmeta'
+        include 'assets/**'
+    }
+}
+build.dependsOn buildResourcePack

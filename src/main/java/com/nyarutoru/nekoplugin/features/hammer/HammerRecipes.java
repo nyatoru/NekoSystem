@@ -66,6 +66,9 @@ public class HammerRecipes {
             // Mark as hammer
             meta.getPersistentDataContainer().set(HAMMER_KEY, PersistentDataType.BYTE, (byte) 1);
             meta.getPersistentDataContainer().set(HAMMER_TIER_KEY, PersistentDataType.STRING, tierName);
+            // Resource pack model (copied from hammer mod textures: OnlyHammers/JustHammers)
+            NamespacedKey modelKey = new NamespacedKey("nekoplugin", "hammer_" + tierName);
+            meta.setItemModel(modelKey);
 
             hammer.setItemMeta(meta);
         }
@@ -73,19 +76,51 @@ public class HammerRecipes {
         return hammer;
     }
 
+    /** Ensure hammer has correct item_model (heals old/crafted stacks that lost component). */
+    public static ItemStack ensureHammerModel(ItemStack item) {
+        if (item == null || !isHammer(item)) return item;
+        String tier = getHammerTier(item);
+        if (tier == null) return item;
+        NamespacedKey expected = new NamespacedKey("nekoplugin", "hammer_" + tier);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            NamespacedKey current = meta.getItemModel();
+            if (!expected.equals(current)) {
+                meta.setItemModel(expected);
+                item.setItemMeta(meta);
+            }
+        }
+        return item;
+    }
+
     public static boolean isHammer(ItemStack item) {
         if (item == null || !item.hasItemMeta())
             return false;
         ItemMeta meta = item.getItemMeta();
         Byte value = meta.getPersistentDataContainer().get(HAMMER_KEY, PersistentDataType.BYTE);
-        return value != null && value == 1;
+        if (value != null && value == 1) return true;
+        // component fallback: allow check via item_model (for packs / external give)
+        NamespacedKey model = meta.getItemModel();
+        if (model != null && "nekoplugin".equals(model.getNamespace()) && model.getKey().startsWith("hammer_")) {
+            String tier = model.getKey().substring(7);
+            return TIERS.containsKey(tier);
+        }
+        return false;
     }
 
     public static String getHammerTier(ItemStack item) {
         if (item == null || !item.hasItemMeta())
             return null;
         ItemMeta meta = item.getItemMeta();
-        return meta.getPersistentDataContainer().get(HAMMER_TIER_KEY, PersistentDataType.STRING);
+        String tier = meta.getPersistentDataContainer().get(HAMMER_TIER_KEY, PersistentDataType.STRING);
+        if (tier != null) return tier;
+        // component fallback: derive tier from item_model
+        NamespacedKey model = meta.getItemModel();
+        if (model != null && "nekoplugin".equals(model.getNamespace()) && model.getKey().startsWith("hammer_")) {
+            String t = model.getKey().substring(7);
+            if (TIERS.containsKey(t)) return t;
+        }
+        return null;
     }
 
     public void registerAll() {

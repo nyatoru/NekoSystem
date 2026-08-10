@@ -284,6 +284,7 @@ public class CustomCraftingListener implements Listener {
         }
         ItemStack result = com.nyarutoru.nekoplugin.api.recipe.RecipeAPI.getInstance().findMatchingRecipe(matrix);
         if (result == null) result = Bukkit.craftItem(matrix, Bukkit.getWorlds().get(0));
+        if (result != null) com.nyarutoru.nekoplugin.features.hammer.HammerRecipes.ensureHammerModel(result);
         return result;
     }
 
@@ -309,6 +310,7 @@ public class CustomCraftingListener implements Listener {
         }
         ItemStack result = com.nyarutoru.nekoplugin.api.recipe.RecipeAPI.getInstance().findMatchingRecipe(matrix);
         if (result == null) result = Bukkit.craftItem(matrix, Bukkit.getWorlds().get(0));
+        if (result != null) com.nyarutoru.nekoplugin.features.hammer.HammerRecipes.ensureHammerModel(result);
         boolean hasResult = result != null && result.getType() != Material.AIR;
         if (hasResult) inv.setItem(RESULT_SLOT, result);
         else inv.setItem(RESULT_SLOT, createResultPlaceholder());

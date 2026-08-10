@@ -398,6 +398,7 @@ public class HammerListener implements Listener {
 
     private void updateMiningSpeedModifier(Player player, ItemStack item) {
         if (HammerRecipes.isHammer(item)) {
+            HammerRecipes.ensureHammerModel(item);
             applyMiningSpeedModifier(player);
         } else {
             removeMiningSpeedModifier(player);

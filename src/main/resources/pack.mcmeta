@@ -1,0 +1,10 @@
+{
+  "pack": {
+    "pack_format": 88,
+    "description": "NekoPlugin Hammers §7(copied from OnlyHammers hammer mod)",
+    "supported_formats": {
+      "min_inclusive": 34,
+      "max_inclusive": 88
+    }
+  }
+}
