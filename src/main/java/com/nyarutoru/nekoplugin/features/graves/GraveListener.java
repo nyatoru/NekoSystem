@@ -44,7 +44,7 @@ public final class GraveListener implements Listener {
         if (event.getKeepInventory() || event.getDrops().isEmpty()) return;
         Player player = event.getEntity();
         List<ItemStack> drops = event.getDrops().stream().filter(item -> item != null && !item.isEmpty()).map(ItemStack::clone).toList();
-        int experience = Math.max(0, event.getDroppedExp());
+        int experience = event.getKeepLevel() ? 0 : Math.max(0, player.calculateTotalExperiencePoints());
         Grave grave = manager.create(player, player.getLocation(), drops, experience);
         if (grave == null) {
             player.sendMessage(Component.text("A grave could not be created; your items will drop normally.", NamedTextColor.RED));
@@ -52,6 +52,12 @@ public final class GraveListener implements Listener {
         }
         event.getDrops().clear();
         event.setDroppedExp(0);
+        if (!event.getKeepLevel()) {
+            event.setNewExp(0);
+            event.setNewLevel(0);
+            event.setNewTotalExp(0);
+            event.setKeepLevel(false);
+        }
         GravePosition position = grave.getGravePosition();
         player.sendMessage(Component.text("Your grave is at " + position.worldName() + " (" + position.x() + ", " + position.y() + ", " + position.z() + ").", NamedTextColor.YELLOW));
     }
