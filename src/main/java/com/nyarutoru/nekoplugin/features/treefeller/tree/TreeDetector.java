@@ -249,7 +249,11 @@ public final class TreeDetector {
             Set<BlockPos> removed = new HashSet<>();
             for (Map.Entry<BlockPos, Integer> entry : ownLeaves.distances().entrySet()) {
                 Integer secondaryDistance = secondaryLeaves.distances().get(entry.getKey());
+                // ponytail: when spacing <3 and leaf count exceeds limit (dense pine), don't steal leaves where both distances are <3 — vanilla distance is unreliable for tight canopies and causes over-trimming
                 if (secondaryDistance != null && secondaryDistance < entry.getValue()) {
+                    if (secondaryDistance < 3 && entry.getValue() < 3) {
+                        continue;
+                    }
                     removed.add(entry.getKey());
                 }
             }
@@ -276,6 +280,10 @@ public final class TreeDetector {
         }
         int sourceDistance = blocks.getLeafDistance(source);
         int targetDistance = blocks.getLeafDistance(target);
+        // ponytail: allow equal distance when spacing <3 for dense pine/spruce canopies where many leaves share same vanilla distance (1-2); otherwise strict > would drop valid leaves and break thinning when leaf count exceeds limit
+        if (sourceDistance != -1 && targetDistance != -1 && sourceDistance < 3 && targetDistance == sourceDistance) {
+            return true;
+        }
         return sourceDistance == -1 || targetDistance == -1 || sourceDistance >= 7 || targetDistance > sourceDistance;
     }
 

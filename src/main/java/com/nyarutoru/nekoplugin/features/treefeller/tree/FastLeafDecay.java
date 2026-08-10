@@ -43,12 +43,38 @@ public final class FastLeafDecay {
             long delay = initialDelayTicks + ThreadLocalRandom.current().nextLong(
                     minimumDelay,
                     maximumDelay + 1L);
-            taskOwner.accept(SchedulerUtils.runAtLocationLaterTask(leafPos.toLocation(world), () -> {
-                if (isCurrent.getAsBoolean()) {
-                    decayIfUnsupported(world, leafPos);
-                }
-            }, delay));
+            scheduleWithRetry(world, leafPos, delay, isCurrent, taskOwner, 0);
         }
+    }
+
+    private void scheduleWithRetry(World world, BlockPos leafPos, long delay,
+                                   BooleanSupplier isCurrent, Consumer<SchedulerUtils.TaskHandle> taskOwner, int attempt) {
+        taskOwner.accept(SchedulerUtils.runAtLocationLaterTask(leafPos.toLocation(world), () -> {
+            if (!isCurrent.getAsBoolean()) {
+                return;
+            }
+            Block block = leafPos.getBlock(world);
+            if (block == null || !(block.getBlockData() instanceof Leaves leaves)) {
+                return;
+            }
+            if (shouldDecay(leaves.isPersistent(), leaves.getDistance())) {
+                Material type = block.getType();
+                if (type.name().endsWith("_LEAVES")) {
+                    block.breakNaturally();
+                }
+                return;
+            }
+            // ponytail: spacing <3 dense canopies keep vanilla distance at 1-2 for several ticks after logs gone, single check would leave them floating -> retry 3 times then force-break non-persistent leaves
+            if (attempt < 3 && !leaves.isPersistent()) {
+                scheduleWithRetry(world, leafPos, 20L, isCurrent, taskOwner, attempt + 1);
+            } else if (!leaves.isPersistent()) {
+                // final fallback: force decay for non-persistent leaves even if distance hasn't reached 7 yet (spacing too short case)
+                Material type = block.getType();
+                if (type.name().endsWith("_LEAVES")) {
+                    block.breakNaturally();
+                }
+            }
+        }, delay));
     }
 
     private void decayIfUnsupported(World world, BlockPos leafPos) {
