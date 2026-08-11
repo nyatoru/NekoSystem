@@ -17,6 +17,7 @@ public class ServerRecipes {
 
     private static final String RECIPE_KEY = "rotten_flesh_to_leather";
     private static final String MOSS_RECIPE_ID = "dirt_leaves_to_moss";
+    private static final String CHEST_RECIPE_ID = "logs_to_chests";
     private final NekoPlugin plugin;
     private NamespacedKey recipeKey;
 
@@ -31,6 +32,7 @@ public class ServerRecipes {
         unregisterAll();
         registerRottenFleshToLeather();
         registerMossRecipe();
+        registerChestFromLogs();
     }
 
     /**
@@ -65,11 +67,25 @@ public class ServerRecipes {
         RecipeAPI.getInstance().registerRecipe(recipe);
     }
 
+    private void registerChestFromLogs() {
+        // 8 any logs (hollow like vanilla chest) -> 4 chests
+        ItemStack result = new ItemStack(Material.CHEST, 4);
+        CustomRecipe recipe = CustomRecipe.builder(CHEST_RECIPE_ID)
+                .category("server")
+                .result(result)
+                .shaped()
+                .pattern("LLL", "L L", "LLL", java.util.Map.of(
+                        'L', CustomRecipe.Ingredient.ofTag(Tag.LOGS)))
+                .build();
+        RecipeAPI.getInstance().registerRecipe(recipe);
+    }
+
     public void unregisterAll() {
         if (recipeKey != null) {
             plugin.getServer().removeRecipe(recipeKey);
             recipeKey = null;
         }
         RecipeAPI.getInstance().unregisterRecipe(MOSS_RECIPE_ID);
+        RecipeAPI.getInstance().unregisterRecipe(CHEST_RECIPE_ID);
     }
 }
