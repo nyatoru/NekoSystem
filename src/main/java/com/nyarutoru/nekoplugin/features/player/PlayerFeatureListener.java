@@ -562,7 +562,7 @@ public class PlayerFeatureListener implements Listener {
         ItemStack placed = event.getItemInHand();
         updateActivity(player);
 
-        if (placed.getType().isAir()) return;
+        if (placed == null || placed.isEmpty()) return;
         if (placed.getAmount() <= 1) {
             Material type = placed.getType();
             boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
@@ -571,7 +571,7 @@ public class PlayerFeatureListener implements Listener {
             schedulePlayerLater(player, () -> {
                 PlayerInventory inv = player.getInventory();
                 ItemStack handItem = isOffhand ? inv.getItemInOffHand() : inv.getItem(heldSlot);
-                if (handItem == null || handItem.getType().isAir()) {
+                if (handItem == null || handItem.isEmpty()) {
                     replenishItem(player, type, isOffhand, heldSlot);
                 }
             });
@@ -604,7 +604,7 @@ public class PlayerFeatureListener implements Listener {
         ItemStack consumed = event.getItem();
         updateActivity(player);
 
-        if (consumed.getType().isAir()) return;
+        if (consumed == null || consumed.isEmpty()) return;
         if (consumed.getAmount() <= 1) {
             Material type = consumed.getType();
             boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
@@ -615,7 +615,7 @@ public class PlayerFeatureListener implements Listener {
                 ItemStack handItem = isOffhand ? inv.getItemInOffHand() : inv.getItem(heldSlot);
                 if (handItem == null) return;
                 Material handType = handItem.getType();
-                boolean isEmpty = handType.isAir();
+                boolean isEmpty = handItem.isEmpty();
                 boolean isRemainder = handType == Material.BOWL || handType == Material.GLASS_BOTTLE || handType == Material.BUCKET;
                 if (isEmpty || isRemainder) {
                     boolean replenished = replenishItem(player, type, isOffhand, heldSlot);
@@ -652,7 +652,7 @@ public class PlayerFeatureListener implements Listener {
             schedulePlayerLater(player, () -> {
                 PlayerInventory inv = player.getInventory();
                 ItemStack handItem = isOffhand ? inv.getItemInOffHand() : inv.getItem(heldSlot);
-                if (handItem == null || handItem.getType().isAir()) {
+                if (handItem == null || handItem.isEmpty()) {
                     replenishItem(player, finalType, isOffhand, heldSlot);
                 }
             });
@@ -671,7 +671,7 @@ public class PlayerFeatureListener implements Listener {
             for (int i = start; i < end; i++) {
                 if (!toOffhand && i == heldSlot) continue;
                 ItemStack item = inv.getItem(i);
-                if (item == null || item.getType() != type) continue;
+                if (item == null || item.isEmpty() || item.getType() != type) continue;
                 ItemStack handItem = toOffhand ? inv.getItemInOffHand() : inv.getItem(heldSlot);
                 ItemStack replenishment = item.clone();
                 if (toOffhand) {
@@ -679,7 +679,7 @@ public class PlayerFeatureListener implements Listener {
                 } else {
                     inv.setItem(heldSlot, replenishment);
                 }
-                if (handItem == null || handItem.getType().isAir()) {
+                if (handItem == null || handItem.isEmpty()) {
                     inv.setItem(i, null);
                 } else {
                     inv.setItem(i, handItem.clone());
@@ -702,7 +702,7 @@ public class PlayerFeatureListener implements Listener {
             for (int i = start; i < end; i++) {
                 if (!toOffhand && i == heldSlot) continue;
                 ItemStack item = inv.getItem(i);
-                if (item == null || !FOODS.contains(item.getType())) continue;
+                if (item == null || item.isEmpty() || !FOODS.contains(item.getType())) continue;
                 ItemStack handItem = toOffhand ? inv.getItemInOffHand() : inv.getItem(heldSlot);
                 ItemStack replenishment = item.clone();
                 if (toOffhand) {
@@ -710,7 +710,7 @@ public class PlayerFeatureListener implements Listener {
                 } else {
                     inv.setItem(heldSlot, replenishment);
                 }
-                if (handItem == null || handItem.getType().isAir()) {
+                if (handItem == null || handItem.isEmpty()) {
                     inv.setItem(i, null);
                 } else {
                     inv.setItem(i, handItem.clone());
