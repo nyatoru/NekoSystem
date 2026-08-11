@@ -70,3 +70,217 @@ tasks.register('buildResourcePack', Zip) {
     }
 }
 build.dependsOn buildResourcePack
+
+// ponytail: Bedrock/Geyser conversion — generates Bedrock pack + Geyser v2 mappings.
+// Java pack uses 1.21.4 item_model (nekoplugin:hammer_* / magnet on pickaxe/compass).
+// Bedrock has no item_model, so Geyser maps each Java item+model -> Bedrock custom item.
+// Output: build/libs/NekoPlugin-BedrockPack.mcpack (copy to Geyser packs/ or Bedrock client)
+//         build/libs/NekoPlugin-GeyserMappings.json (copy to Geyser custom_mappings/)
+def bedrockStaging = layout.buildDirectory.dir("tmp/bedrockStaging")
+tasks.register('prepareBedrockStaging') {
+    doLast {
+        def dir = bedrockStaging.get().asFile
+        delete dir
+        dir.mkdirs()
+        new File(dir, "manifest.json").text = """{
+  "format_version": 2,
+  "header": {
+    "name": "NekoPlugin Bedrock",
+    "description": "NekoPlugin Hammers & Magnet — GeyserMC Bedrock Pack",
+    "uuid": "fdde5a82-a4f9-4456-8a26-d1682358d313",
+    "version": [1, 0, 0],
+    "min_engine_version": [1, 20, 0]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "6edb27d4-aa51-49a9-9b3c-e7c0196735cd",
+      "version": [1, 0, 0]
+    }
+  ]
+}"""
+        def texDir = new File(dir, "textures")
+        texDir.mkdirs()
+        new File(texDir, "item_texture.json").text = """{
+  "resource_pack_name": "NekoPlugin",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "nekoplugin:hammer_wooden": { "textures": "textures/items/hammer_wooden" },
+    "nekoplugin:hammer_stone": { "textures": "textures/items/hammer_stone" },
+    "nekoplugin:hammer_iron": { "textures": "textures/items/hammer_iron" },
+    "nekoplugin:hammer_golden": { "textures": "textures/items/hammer_golden" },
+    "nekoplugin:hammer_diamond": { "textures": "textures/items/hammer_diamond" },
+    "nekoplugin:hammer_netherite": { "textures": "textures/items/hammer_netherite" },
+    "nekoplugin:magnet": { "textures": "textures/items/magnet" },
+    "nekoplugin:magnet_recovery": { "textures": "textures/items/magnet" }
+  }
+}"""
+        def textsDir = new File(dir, "texts")
+        textsDir.mkdirs()
+        new File(textsDir, "en_US.lang").text = """## NekoPlugin Bedrock — custom item names
+item.nekoplugin:hammer_wooden=Wooden Hammer
+item.nekoplugin:hammer_stone=Stone Hammer
+item.nekoplugin:hammer_iron=Iron Hammer
+item.nekoplugin:hammer_golden=Golden Hammer
+item.nekoplugin:hammer_diamond=Diamond Hammer
+item.nekoplugin:hammer_netherite=Netherite Hammer
+item.nekoplugin:magnet=Magnet
+item.nekoplugin:magnet_recovery=Magnet
+
+## pack description
+pack.description=NekoPlugin Hammers & Magnet — GeyserMC Bedrock Pack
+"""
+        // pack_icon.png = copy magnet.png (16x16) — Bedrock shows any png, 256 recommended but not required
+        def srcIcon = file("src/main/resources/assets/nekoplugin/textures/item/magnet.png")
+        if (srcIcon.exists()) {
+            copy {
+                from srcIcon
+                into dir
+                rename { "pack_icon.png" }
+            }
+        }
+    }
+}
+
+tasks.register('buildBedrockPack', Zip) {
+    dependsOn 'prepareBedrockStaging'
+    archiveBaseName = 'NekoPlugin-BedrockPack'
+    archiveVersion = ''
+    archiveClassifier = ''
+    archiveExtension = 'mcpack'
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    from(bedrockStaging)
+    from("src/main/resources/assets/nekoplugin/textures/item") {
+        into "textures/items"
+        include "*.png"
+        // duplicate magnet for recovery variant
+        rename { name -> name }
+    }
+    // also include duplicate for recovery
+    doLast {
+        // ensure magnet_recovery texture exists (copy magnet.png)
+        def zipFile = archiveFile.get().asFile
+        // Geyser/Bedrock will resolve magnet_recovery via item_texture pointing to same png file, no duplicate file needed
+    }
+}
+
+tasks.register('buildGeyserMappings') {
+    doLast {
+        def out = layout.buildDirectory.file("libs/NekoPlugin-GeyserMappings.json").get().asFile
+        out.parentFile.mkdirs()
+        out.text = """{
+  "format_version": 2,
+  "items": {
+    "minecraft:wooden_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_wooden",
+        "bedrock_identifier": "nekoplugin:hammer_wooden",
+        "display_name": "Wooden Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_wooden",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:stone_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_stone",
+        "bedrock_identifier": "nekoplugin:hammer_stone",
+        "display_name": "Stone Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_stone",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:iron_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_iron",
+        "bedrock_identifier": "nekoplugin:hammer_iron",
+        "display_name": "Iron Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_iron",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:golden_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_golden",
+        "bedrock_identifier": "nekoplugin:hammer_golden",
+        "display_name": "Golden Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_golden",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:diamond_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_diamond",
+        "bedrock_identifier": "nekoplugin:hammer_diamond",
+        "display_name": "Diamond Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_diamond",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:netherite_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_netherite",
+        "bedrock_identifier": "nekoplugin:hammer_netherite",
+        "display_name": "Netherite Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_netherite",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:compass": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:magnet",
+        "bedrock_identifier": "nekoplugin:magnet",
+        "display_name": "Magnet",
+        "bedrock_options": {
+          "icon": "nekoplugin:magnet",
+          "creative_category": "items"
+        }
+      }
+    ],
+    "minecraft:recovery_compass": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:magnet",
+        "bedrock_identifier": "nekoplugin:magnet_recovery",
+        "display_name": "Magnet",
+        "bedrock_options": {
+          "icon": "nekoplugin:magnet_recovery",
+          "creative_category": "items"
+        }
+      }
+    ]
+  }
+}"""
+        // also copy to geyser/ for version control convenience
+        def geyserDir = file("geyser")
+        geyserDir.mkdirs()
+        new File(geyserDir, "nekoplugin.json").text = out.text
+    }
+}
+
+build.dependsOn buildBedrockPack
+build.dependsOn buildGeyserMappings

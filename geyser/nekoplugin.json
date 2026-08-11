@@ -1,0 +1,107 @@
+{
+  "format_version": 2,
+  "items": {
+    "minecraft:wooden_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_wooden",
+        "bedrock_identifier": "nekoplugin:hammer_wooden",
+        "display_name": "Wooden Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_wooden",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:stone_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_stone",
+        "bedrock_identifier": "nekoplugin:hammer_stone",
+        "display_name": "Stone Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_stone",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:iron_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_iron",
+        "bedrock_identifier": "nekoplugin:hammer_iron",
+        "display_name": "Iron Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_iron",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:golden_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_golden",
+        "bedrock_identifier": "nekoplugin:hammer_golden",
+        "display_name": "Golden Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_golden",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:diamond_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_diamond",
+        "bedrock_identifier": "nekoplugin:hammer_diamond",
+        "display_name": "Diamond Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_diamond",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:netherite_pickaxe": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:hammer_netherite",
+        "bedrock_identifier": "nekoplugin:hammer_netherite",
+        "display_name": "Netherite Hammer",
+        "bedrock_options": {
+          "icon": "nekoplugin:hammer_netherite",
+          "display_handheld": true,
+          "creative_category": "equipment"
+        }
+      }
+    ],
+    "minecraft:compass": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:magnet",
+        "bedrock_identifier": "nekoplugin:magnet",
+        "display_name": "Magnet",
+        "bedrock_options": {
+          "icon": "nekoplugin:magnet",
+          "creative_category": "items"
+        }
+      }
+    ],
+    "minecraft:recovery_compass": [
+      {
+        "type": "definition",
+        "model": "nekoplugin:magnet",
+        "bedrock_identifier": "nekoplugin:magnet_recovery",
+        "display_name": "Magnet",
+        "bedrock_options": {
+          "icon": "nekoplugin:magnet_recovery",
+          "creative_category": "items"
+        }
+      }
+    ]
+  }
+}
