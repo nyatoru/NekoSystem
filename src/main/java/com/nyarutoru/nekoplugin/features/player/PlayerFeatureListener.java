@@ -598,6 +598,30 @@ public class PlayerFeatureListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBucketFill(org.bukkit.event.player.PlayerBucketFillEvent event) {
+        if (!autoReplenish) return;
+        Player player = event.getPlayer();
+        updateActivity(player);
+
+        boolean isOffhand = event.getHand() == org.bukkit.inventory.EquipmentSlot.OFF_HAND;
+        int heldSlot = player.getInventory().getHeldItemSlot();
+        PlayerInventory inv = player.getInventory();
+        ItemStack handBefore = isOffhand ? inv.getItemInOffHand() : inv.getItem(heldSlot);
+        if (handBefore == null || handBefore.isEmpty() || handBefore.getType() != Material.BUCKET) return;
+        if (handBefore.getAmount() > 1) return;
+
+        schedulePlayerLater(player, () -> {
+            PlayerInventory inv2 = player.getInventory();
+            ItemStack handItem = isOffhand ? inv2.getItemInOffHand() : inv2.getItem(heldSlot);
+            if (handItem == null || handItem.isEmpty()) return;
+            Material handType = handItem.getType();
+            if (handType == Material.BUCKET || handType.isAir()) return;
+            if (!handType.name().endsWith("_BUCKET")) return;
+            replenishItem(player, Material.BUCKET, isOffhand, heldSlot);
+        });
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onItemConsume(PlayerItemConsumeEvent event) {
         if (!autoReplenish) return;
         Player player = event.getPlayer();
