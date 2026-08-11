@@ -186,11 +186,6 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         } catch (Throwable ignored) {
         }
         try {
-            // Paper 1.19+ - covers water + bubble column in one check
-            if (player.isInWaterOrBubbleColumn()) return true;
-        } catch (Throwable ignored) {
-        }
-        try {
             if (player.isSwimming()) return true;
         } catch (Throwable ignored) {
         }

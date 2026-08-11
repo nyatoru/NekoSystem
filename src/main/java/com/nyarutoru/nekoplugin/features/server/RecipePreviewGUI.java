@@ -122,10 +122,29 @@ public class RecipePreviewGUI {
     private ItemStack choiceToDisplay(RecipeChoice choice) {
         if (choice == null) return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
         try {
-            ItemStack rep = choice.getItemStack();
-            if (rep != null && rep.getType() != Material.AIR) return rep.clone();
+            if (choice instanceof RecipeChoice.ExactChoice ec) {
+                var list = ec.getChoices();
+                if (!list.isEmpty()) {
+                    ItemStack rep = list.get(0);
+                    if (rep != null && rep.getType() != Material.AIR) return rep.clone();
+                }
+            } else if (choice instanceof RecipeChoice.MaterialChoice mc) {
+                var mats = mc.getChoices();
+                if (!mats.isEmpty()) {
+                    Material m = mats.get(0);
+                    if (m != null && m != Material.AIR) return new ItemStack(m);
+                }
+            } else if (choice instanceof RecipeChoice.ItemTypeChoice itc) {
+                var types = itc.itemTypes().resolve(org.bukkit.Registry.ITEM);
+                if (!types.isEmpty()) {
+                    var first = types.iterator().next();
+                    if (first != null) {
+                        ItemStack rep = first.createItemStack();
+                        if (rep != null && rep.getType() != Material.AIR) return rep;
+                    }
+                }
+            }
         } catch (Exception ignored) {}
-        // fallback try Material
         return createGlassPane(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
     }
 

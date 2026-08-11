@@ -83,7 +83,6 @@ public class WoodOnStoneCutter {
                     NamespacedKey key = new NamespacedKey(plugin, recipeKeyPath(woodType, itemType));
                     ItemStack result = new ItemStack(outputMaterial, outputAmount);
                     StonecuttingRecipe recipe = new StonecuttingRecipe(key, result, input);
-                    recipe.setGroup("woodcutting_" + woodType.toLowerCase());
 
                     // Remove a stale recipe left by an earlier feature instance.
                     plugin.getServer().removeRecipe(key);
