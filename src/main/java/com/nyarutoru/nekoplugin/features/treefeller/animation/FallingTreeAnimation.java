@@ -57,17 +57,35 @@ public final class FallingTreeAnimation {
     private void scheduleBlockBreak(World world, BlockPos pos, ItemStack tool,
                                     TreeFellerEffects effects, long delay, BooleanSupplier isCurrent,
                                     Consumer<SchedulerUtils.TaskHandle> taskOwner) {
-        Material expectedMaterial = pos.getBlock(world).getType();
         Runnable breakBlock = () -> {
             if (!isCurrent.getAsBoolean()) {
                 return;
             }
-            Block block = pos.getBlock(world);
-            if (block.getType() != expectedMaterial) {
+            Block block;
+            try {
+                block = pos.getBlock(world);
+            } catch (Throwable ex) {
                 return;
             }
+            if (block == null) return;
+            Material type;
+            try {
+                type = block.getType();
+            } catch (Throwable ex) {
+                return;
+            }
+            if (type == Material.AIR) return;
+            // Only break logs; avoids breaking if block was replaced
+            if (!type.name().endsWith("_LOG") && !type.name().endsWith("_WOOD") && type != Material.MANGROVE_ROOTS) {
+                // strict check could miss stripped logs; fallback to not AIR only
+                // keep break for any non-air to handle stripped variants, but skip if not log
+                // Use TreeFeller LOGS set would require import; broad check: if not log-like, skip
+                if (!type.name().contains("LOG") && !type.name().contains("WOOD") && type != Material.MANGROVE_ROOTS) return;
+            }
             effects.playEffects(block);
-            block.breakNaturally(tool);
+            try {
+                block.breakNaturally(tool);
+            } catch (Throwable ignored) {}
         };
         SchedulerUtils.TaskHandle task = delay <= 0
                 ? SchedulerUtils.runAtLocationTask(pos.toLocation(world), breakBlock)

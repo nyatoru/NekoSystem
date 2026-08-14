@@ -149,6 +149,63 @@ public class OreExcavationListener extends AbstractVeinMiner {
         Material originalToolType = tool.getType();
         boolean hasSilkTouch = tool.containsEnchantment(Enchantment.SILK_TOUCH);
 
+        if (com.nyarutoru.nekoplugin.utils.SchedulerUtils.isFolia()) {
+            for (BlockPos pos : blocksToBreak) {
+                if (pos.equals(origin))
+                    continue;
+
+                ItemStack currentTool;
+                try {
+                    currentTool = player.getInventory().getItemInMainHand();
+                } catch (Throwable ex) {
+                    break;
+                }
+                if (currentTool == null || currentTool.getType() != originalToolType)
+                    break;
+
+                try {
+                    if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentTool, 1, getToolName())) {
+                        break;
+                    }
+                } catch (Throwable ex) {
+                    break;
+                }
+
+                BlockPos targetPos = pos;
+                ItemStack dropTool = currentTool.clone();
+                boolean silk = hasSilkTouch;
+                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtLocation(targetPos.toLocation(world), () -> {
+                    Block block;
+                    try {
+                        block = targetPos.getBlock(world);
+                    } catch (Throwable ex) {
+                        return;
+                    }
+                    if (block == null) return;
+                    Material oreType;
+                    try {
+                        oreType = block.getType();
+                    } catch (Throwable ex) {
+                        return;
+                    }
+                    if (oreType == Material.AIR || !getTargetMaterials().contains(oreType)) return;
+                    try {
+                        if (silk) {
+                            world.dropItemNaturally(targetPos.toLocation(world), new ItemStack(oreType));
+                        } else {
+                            for (ItemStack drop : block.getDrops(dropTool)) {
+                                world.dropItemNaturally(targetPos.toLocation(world), drop);
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                    try {
+                        block.setType(Material.AIR);
+                    } catch (Throwable ignored) {}
+                });
+            }
+            return;
+        }
+
         for (BlockPos pos : blocksToBreak) {
             if (pos.equals(origin))
                 continue;

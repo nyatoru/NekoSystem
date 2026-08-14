@@ -101,7 +101,13 @@ public class ActiveToolAPI {
         shiftCount.put(key, count);
         lastShiftTime.put(key, now);
         int required = shiftsRequired;
-        player.sendActionBar(ComponentUtils.progressBar(Math.min(count, required), required, '█', '░'));
+        if (SchedulerUtils.isFolia()) {
+            SchedulerUtils.runAtEntity(player, () -> {
+                try { if (player.isOnline()) player.sendActionBar(ComponentUtils.progressBar(Math.min(count, required), required, '█', '░')); } catch (Throwable ignored) {}
+            });
+        } else {
+            player.sendActionBar(ComponentUtils.progressBar(Math.min(count, required), required, '█', '░'));
+        }
         startShiftTimeout(player, key);
 
         if (count >= required) {
@@ -130,16 +136,46 @@ public class ActiveToolAPI {
 
     public void activate(Player player, String toolName, Runnable onActivate) {
         UUID uuid = player.getUniqueId();
-        cleanupTool(uuid, toolName);
-        activeTools.put(uuid, new ActiveToolState(toolName, player.getInventory().getItemInMainHand().clone()));
+        // clone tool on entity thread if Folia, otherwise directly
+        ItemStack held;
+        if (SchedulerUtils.isFolia()) {
+            // player.getInventory() must be on entity thread; event already is, but fallback
+            try {
+                held = player.getInventory().getItemInMainHand().clone();
+            } catch (Throwable ex) {
+                held = null;
+            }
+        } else {
+            held = player.getInventory().getItemInMainHand().clone();
+        }
+        if (held != null) {
+            cleanupTool(uuid, toolName);
+            activeTools.put(uuid, new ActiveToolState(toolName, held));
+        } else {
+            cleanupTool(uuid, toolName);
+            try { activeTools.put(uuid, new ActiveToolState(toolName, player.getInventory().getItemInMainHand().clone())); } catch(Throwable ignored) {}
+        }
         cancelActionBarTask(actionBarTasks.remove(uuid));
         ActionBarTask actionBarTask = new ActionBarTask();
         actionBarTasks.put(uuid, actionBarTask);
         scheduleActionBarRefresh(player, uuid, toolName, actionBarTask, 0L, actionBarRefreshTicks);
 
-        player.sendActionBar(ComponentUtils.activeStatus(toolName));
-        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 2.0f);
-        if (onActivate != null) onActivate.run();
+        if (SchedulerUtils.isFolia()) {
+            SchedulerUtils.runAtEntity(player, () -> {
+                try {
+                    if (!player.isOnline()) return;
+                    player.sendActionBar(ComponentUtils.activeStatus(toolName));
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 2.0f);
+                } catch (Throwable ignored) {}
+            });
+        } else {
+            player.sendActionBar(ComponentUtils.activeStatus(toolName));
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 2.0f);
+        }
+        if (onActivate != null) {
+            if (SchedulerUtils.isFolia()) SchedulerUtils.runAtEntity(player, onActivate);
+            else onActivate.run();
+        }
     }
 
     private void scheduleActionBarRefresh(Player player, UUID uuid, String toolName, ActionBarTask actionBarTask,
@@ -173,8 +209,19 @@ public class ActiveToolAPI {
         if (state == null) return;
         cancelActionBarTask(actionBarTasks.remove(uuid));
         cleanupTool(uuid, state.toolName);
-        player.sendActionBar(ComponentUtils.disabledStatus(state.toolName, reason));
-        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
+        String tName = state.toolName;
+        if (SchedulerUtils.isFolia()) {
+            SchedulerUtils.runAtEntity(player, () -> {
+                try {
+                    if (!player.isOnline()) return;
+                    player.sendActionBar(ComponentUtils.disabledStatus(tName, reason));
+                    player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
+                } catch (Throwable ignored) {}
+            });
+        } else {
+            player.sendActionBar(ComponentUtils.disabledStatus(tName, reason));
+            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BASS, 1.0f, 0.5f);
+        }
     }
 
     /** Clears pending and active state for one tool without disturbing other tools. */

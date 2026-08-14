@@ -2,6 +2,7 @@ package com.nyarutoru.nekoplugin.api.tool;
 
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -21,6 +22,8 @@ import java.util.function.Predicate;
  * Reduces code duplication between OreExcavation, SandExcavation, and similar
  * features.
  * Provides optimized BFS traversal with configurable parameters.
+ * Folia-safe: BFS is best-effort on Folia (cross-region reads may be skipped),
+ * and block breaks are scheduled per-location on Folia.
  */
 public abstract class AbstractVeinMiner implements Listener {
 
@@ -138,8 +141,20 @@ public abstract class AbstractVeinMiner implements Listener {
                 continue;
             }
 
-            Block block = current.getBlock(world);
-            if (block.getType() != targetType)
+            Block block;
+            try {
+                block = current.getBlock(world);
+            } catch (Throwable ex) {
+                // Folia cross-region read may fail; skip this block
+                continue;
+            }
+            Material type;
+            try {
+                type = block.getType();
+            } catch (Throwable ex) {
+                continue;
+            }
+            if (type != targetType)
                 continue;
 
             blocksToBreak.add(current);
@@ -149,8 +164,14 @@ public abstract class AbstractVeinMiner implements Listener {
                 BlockPos adjacent = current.add(offset[0], offset[1], offset[2]);
                 if (!visited.contains(adjacent)) {
                     visited.add(adjacent);
-                    Block adjBlock = adjacent.getBlock(world);
-                    if (adjBlock.getType() == targetType) {
+                    Material adjType;
+                    try {
+                        Block adjBlock = adjacent.getBlock(world);
+                        adjType = adjBlock.getType();
+                    } catch (Throwable ex) {
+                        continue;
+                    }
+                    if (adjType == targetType) {
                         // Early radius check for efficiency
                         if (radiusSquared <= 0 || adjacent.isWithinRadius(origin, radiusSquared)) {
                             toCheck.add(adjacent);
@@ -167,17 +188,77 @@ public abstract class AbstractVeinMiner implements Listener {
     /**
      * Breaks the collected blocks and handles drops.
      * Can be overridden for custom behavior (e.g., silk touch handling).
+     * Folia-safe: on Folia schedules each block break on its region thread and handles durability
+     * on the player thread before scheduling.
      */
     protected void breakBlocks(Player player, ItemStack tool, World world,
             BlockPos origin, List<BlockPos> blocksToBreak) {
+        if (world == null || player == null || tool == null) return;
         Material originalToolType = tool.getType();
 
+        if (SchedulerUtils.isFolia()) {
+            // Folia: durability and tool checks on player thread, then schedule per-block break
+            for (BlockPos pos : blocksToBreak) {
+                if (pos.equals(origin))
+                    continue;
+
+                ItemStack currentTool;
+                try {
+                    currentTool = player.getInventory().getItemInMainHand();
+                } catch (Throwable ex) {
+                    break;
+                }
+                if (currentTool == null || currentTool.getType() != originalToolType)
+                    break;
+
+                // Check and consume durability on player thread before scheduling
+                try {
+                    if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentTool, 1, getToolName())) {
+                        break;
+                    }
+                } catch (Throwable ex) {
+                    break;
+                }
+
+                // Schedule block break on its region thread
+                BlockPos targetPos = pos;
+                // Capture drop handling for Folia: use same logic as Paper but on region thread
+                SchedulerUtils.runAtLocation(targetPos.toLocation(world), () -> {
+                    Block block;
+                    try {
+                        block = targetPos.getBlock(world);
+                    } catch (Throwable ex) {
+                        return;
+                    }
+                    Material t;
+                    try {
+                        t = block.getType();
+                    } catch (Throwable ex) {
+                        return;
+                    }
+                    if (t == Material.AIR || !getTargetMaterials().contains(t)) return;
+                    // Drop items at origin for easy collection (origin is nearby, but drop must be on block's region)
+                    // For Folia, drop at block location instead of origin to stay on same region
+                    try {
+                        for (ItemStack drop : block.getDrops(currentTool)) {
+                            world.dropItemNaturally(targetPos.toLocation(world), drop);
+                        }
+                    } catch (Throwable ignored) {}
+                    try {
+                        block.setType(Material.AIR);
+                    } catch (Throwable ignored) {}
+                });
+            }
+            return;
+        }
+
+        // Paper path: direct loop
         for (BlockPos pos : blocksToBreak) {
             if (pos.equals(origin))
                 continue;
 
             ItemStack currentTool = player.getInventory().getItemInMainHand();
-            if (currentTool.getType() != originalToolType)
+            if (currentTool == null || currentTool.getType() != originalToolType)
                 break;
 
             // Check and consume durability

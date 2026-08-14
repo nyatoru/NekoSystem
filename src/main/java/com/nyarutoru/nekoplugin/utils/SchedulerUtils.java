@@ -81,11 +81,17 @@ public final class SchedulerUtils {
         if (!isPluginEnabled()) return dummyTask();
         try {
             if (IS_FOLIA) {
+                if (delayTicks <= 0) {
+                    return runAtEntityTask(entity, task);
+                }
                 try {
                     return folia(entity.getScheduler().runDelayed(getPlugin(), ignored -> task.run(), null, delayTicks));
                 } catch (UnsupportedOperationException exception) {
                     return runGlobalLaterTask(task, delayTicks);
                 }
+            }
+            if (delayTicks <= 0) {
+                return bukkit(Bukkit.getScheduler().runTask(getPlugin(), task));
             }
             return bukkit(Bukkit.getScheduler().runTaskLater(getPlugin(), task, delayTicks));
         } catch (Exception ignored) {
@@ -117,7 +123,13 @@ public final class SchedulerUtils {
         if (!isPluginEnabled()) return dummyTask();
         try {
             if (IS_FOLIA) {
+                if (delayTicks <= 0) {
+                    return runAtLocationTask(location, task);
+                }
                 return folia(Bukkit.getRegionScheduler().runDelayed(getPlugin(), location, ignored -> task.run(), delayTicks));
+            }
+            if (delayTicks <= 0) {
+                return bukkit(Bukkit.getScheduler().runTask(getPlugin(), task));
             }
             return bukkit(Bukkit.getScheduler().runTaskLater(getPlugin(), task, delayTicks));
         } catch (Exception ignored) {
@@ -149,7 +161,13 @@ public final class SchedulerUtils {
         if (!isPluginEnabled()) return dummyTask();
         try {
             if (IS_FOLIA) {
+                if (delayTicks <= 0) {
+                    return runGlobalTask(task);
+                }
                 return folia(Bukkit.getGlobalRegionScheduler().runDelayed(getPlugin(), ignored -> task.run(), delayTicks));
+            }
+            if (delayTicks <= 0) {
+                return bukkit(Bukkit.getScheduler().runTask(getPlugin(), task));
             }
             return bukkit(Bukkit.getScheduler().runTaskLater(getPlugin(), task, delayTicks));
         } catch (Exception ignored) {
@@ -209,8 +227,14 @@ public final class SchedulerUtils {
         if (!isPluginEnabled()) return dummyTask();
         try {
             if (IS_FOLIA) {
+                if (delayTicks <= 0) {
+                    return runAsyncTask(task);
+                }
                 return folia(Bukkit.getAsyncScheduler().runDelayed(
                         getPlugin(), ignored -> task.run(), delayTicks * 50, TimeUnit.MILLISECONDS));
+            }
+            if (delayTicks <= 0) {
+                return bukkit(Bukkit.getScheduler().runTaskAsynchronously(getPlugin(), task));
             }
             return bukkit(Bukkit.getScheduler().runTaskLaterAsynchronously(getPlugin(), task, delayTicks));
         } catch (Exception ignored) {

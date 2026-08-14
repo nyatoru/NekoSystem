@@ -497,27 +497,39 @@ public final class TreeDetector {
     private record BukkitBlockLookup(World world) implements BlockLookup {
         @Override
         public Material getMaterial(BlockPos pos) {
-            Block b = pos.getBlock(world);
-            return b == null ? Material.AIR : b.getType();
+            try {
+                Block b = pos.getBlock(world);
+                return b == null ? Material.AIR : b.getType();
+            } catch (Throwable ex) {
+                return Material.AIR;
+            }
         }
 
         @Override
         public Axis getAxis(BlockPos pos) {
-            Block block = pos.getBlock(world);
-            if (block == null) return null;
-            BlockData data = block.getBlockData();
-            if (!(data instanceof Orientable orientable)) {
+            try {
+                Block block = pos.getBlock(world);
+                if (block == null) return null;
+                BlockData data = block.getBlockData();
+                if (!(data instanceof Orientable orientable)) {
+                    return null;
+                }
+                return Axis.valueOf(orientable.getAxis().name());
+            } catch (Throwable ex) {
                 return null;
             }
-            return Axis.valueOf(orientable.getAxis().name());
         }
 
         @Override
         public int getLeafDistance(BlockPos pos) {
-            Block block = pos.getBlock(world);
-            if (block == null) return -1;
-            BlockData data = block.getBlockData();
-            return data instanceof Leaves leaves ? leaves.getDistance() : -1;
+            try {
+                Block block = pos.getBlock(world);
+                if (block == null) return -1;
+                BlockData data = block.getBlockData();
+                return data instanceof Leaves leaves ? leaves.getDistance() : -1;
+            } catch (Throwable ex) {
+                return -1;
+            }
         }
     }
 

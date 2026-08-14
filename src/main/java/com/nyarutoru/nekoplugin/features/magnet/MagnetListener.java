@@ -5,6 +5,7 @@ import com.nyarutoru.nekoplugin.core.admin.AdminState;
 import com.nyarutoru.nekoplugin.core.settings.ApplySemantics;
 import com.nyarutoru.nekoplugin.core.settings.SettingDescriptor;
 import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -38,7 +39,7 @@ public class MagnetListener implements Listener {
     // ponytail: single global tick (cap 40 items/tick) avoids per-item tasks; per-item tasks if this becomes bottleneck
     private volatile double pullSpeed = 0.85;
     private final java.util.concurrent.ConcurrentHashMap<java.util.UUID, PullEntry> pulling = new java.util.concurrent.ConcurrentHashMap<>();
-    private com.nyarutoru.nekoplugin.utils.SchedulerUtils.TaskHandle pullTask;
+    private SchedulerUtils.TaskHandle pullTask;
 
     public void registerSettings(SettingRegistry registry, AdminState state) {
         SettingDescriptor<Integer> rangeDesc = SettingDescriptor.integer(
@@ -50,11 +51,11 @@ public class MagnetListener implements Listener {
 
     public void start() {
         if (pullTask != null && !pullTask.isCancelled()) return;
-        pullTask = com.nyarutoru.nekoplugin.utils.SchedulerUtils.runGlobalTimerTask(this::tick, 1, 1);
+        pullTask = SchedulerUtils.runGlobalTimerTask(this::tick, 1, 1);
     }
 
     public void stop() {
-        com.nyarutoru.nekoplugin.utils.SchedulerUtils.cancelTask(pullTask);
+        SchedulerUtils.cancelTask(pullTask);
         pullTask = null;
         pulling.clear();
     }
@@ -94,15 +95,30 @@ public class MagnetListener implements Listener {
         Location pLoc = player.getLocation().add(0, 0.5, 0);
         if (pLoc.getWorld() == null) return;
         try {
-            // cap nearby scan to avoid lag: getNearbyEntities with small box already limited
+            // On Folia this runs on player's entity thread (via onShift -> activate), so nearby lookup is safe
             for (org.bukkit.entity.Entity e : pLoc.getWorld().getNearbyEntities(pLoc, range, range, range, en -> en instanceof Item)) {
                 Item item = (Item) e;
                 if (item.getThrower() != null) continue;
                 if (pulling.containsKey(item.getUniqueId())) continue;
-                if (item.getLocation().distanceSquared(pLoc) > (double) range * range) continue;
+                try {
+                    if (item.getLocation().distanceSquared(pLoc) > (double) range * range) continue;
+                } catch (Throwable ignored) {
+                    continue;
+                }
                 if (item.getItemStack() == null || item.getItemStack().getType().isAir()) continue;
                 pulling.put(item.getUniqueId(), new PullEntry(item, player));
-                if (item.getPickupDelay() > 10) item.setPickupDelay(0);
+                try {
+                    if (item.getPickupDelay() > 10) {
+                        // Folia: item access must be on item's thread, try direct then fallback
+                        try {
+                            item.setPickupDelay(0);
+                        } catch (Throwable ex) {
+                            SchedulerUtils.runAtEntity(item, () -> {
+                                try { item.setPickupDelay(0); } catch (Throwable ignored) {}
+                            });
+                        }
+                    }
+                } catch (Throwable ignored) {}
             }
         } catch (Throwable ignored) {}
     }
@@ -116,6 +132,15 @@ public class MagnetListener implements Listener {
     private int groundScanTick = 0;
 
     private void tick() {
+        if (SchedulerUtils.isFolia()) {
+            tickFolia();
+        } else {
+            tickPaper();
+        }
+    }
+
+    // Paper path: efficient single global tick that directly accesses world/entities (safe off Folia)
+    private void tickPaper() {
         // Fix 2: periodic ground scan so items lying before activation are also pulled (previously only ItemSpawnEvent)
         // Run every 10 ticks (0.5s) to avoid per-tick world scan lag
         if (++groundScanTick % 10 == 0) {
@@ -198,8 +223,155 @@ public class MagnetListener implements Listener {
         }
     }
 
+    // Folia path: global tick only schedules per-player/per-item tasks on correct threads
+    private void tickFolia() {
+        if (++groundScanTick % 10 == 0) {
+            // Deactivate and ground scan must run on each player's entity thread
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                // Schedule on player's thread to safely check inventory and location
+                SchedulerUtils.runAtEntity(p, () -> handleFoliaGroundScanForPlayer(p));
+            }
+        }
+
+        if (pulling.isEmpty()) return;
+        int processed = 0;
+        for (java.util.Map.Entry<java.util.UUID, PullEntry> e : pulling.entrySet()) {
+            if (processed++ > 40) break;
+            java.util.UUID itemId = e.getKey();
+            PullEntry entry = e.getValue();
+            Player player = entry.player;
+            if (player == null || !player.isOnline()) {
+                pulling.remove(itemId);
+                continue;
+            }
+            // Schedule pull handling on player's entity thread (player and nearby item likely same region)
+            SchedulerUtils.runAtEntity(player, () -> handleFoliaPull(itemId, entry));
+        }
+    }
+
+    private void handleFoliaGroundScanForPlayer(Player p) {
+        try {
+            if (!p.isOnline()) return;
+            if (ActiveToolAPI.getInstance().isActive(p, TOOL_NAME) && !isHoldingMagnet(p)) {
+                ActiveToolAPI.getInstance().deactivate(p, "no magnet");
+                return;
+            }
+            if (!ActiveToolAPI.getInstance().isActive(p, TOOL_NAME) || !isHoldingMagnet(p)) return;
+            Location pLoc = p.getLocation().add(0, 0.5, 0);
+            if (pLoc.getWorld() == null) return;
+            int scanned = 0;
+            try {
+                for (org.bukkit.entity.Entity e : pLoc.getWorld().getNearbyEntities(pLoc, range, range, range, en -> en instanceof Item)) {
+                    if (pulling.size() > 80) break;
+                    if (scanned++ > 40) break; // cap per player per scan
+                    Item item = (Item) e;
+                    if (item.getThrower() != null) continue;
+                    if (pulling.containsKey(item.getUniqueId())) continue;
+                    ItemStack st;
+                    try { st = item.getItemStack(); } catch (Throwable ignored) { continue; }
+                    if (st == null || st.getType().isAir()) continue;
+                    try {
+                        if (item.getLocation().distanceSquared(pLoc) > (double) range * range) continue;
+                    } catch (Throwable ignored) {
+                        continue;
+                    }
+                    pulling.put(item.getUniqueId(), new PullEntry(item, p));
+                    // Pickup delay must be set on item's thread; try direct then schedule
+                    try {
+                        if (item.getPickupDelay() > 10) item.setPickupDelay(0);
+                    } catch (Throwable ex) {
+                        SchedulerUtils.runAtEntity(item, () -> {
+                            try { if (item.getPickupDelay() > 10) item.setPickupDelay(0); } catch (Throwable ignored) {}
+                        });
+                    }
+                }
+            } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {}
+    }
+
+    private void handleFoliaPull(java.util.UUID itemId, PullEntry entry) {
+        Item item = entry.item;
+        Player player = entry.player;
+        try {
+            if (item == null) { pulling.remove(itemId); return; }
+            try {
+                if (!item.isValid() || item.isDead()) { pulling.remove(itemId); return; }
+            } catch (Throwable t) {
+                // isValid may require item's thread; if we fail, try via item scheduler
+                SchedulerUtils.runAtEntity(item, () -> {
+                    try {
+                        if (!item.isValid() || item.isDead()) pulling.remove(itemId);
+                    } catch (Throwable ignored) { pulling.remove(itemId); }
+                });
+                return;
+            }
+            if (player == null || !player.isOnline()) { pulling.remove(itemId); return; }
+            if (!ActiveToolAPI.getInstance().isActive(player, TOOL_NAME) || !isHoldingMagnet(player)) { pulling.remove(itemId); return; }
+            Location iLoc;
+            Location pLoc;
+            try {
+                iLoc = item.getLocation();
+                pLoc = player.getLocation().add(0, 0.5, 0);
+            } catch (Throwable t) {
+                // Cross-region access failure, reschedule on item thread
+                SchedulerUtils.runAtEntity(item, () -> handleFoliaPull(itemId, entry));
+                return;
+            }
+            if (iLoc.getWorld() == null || pLoc.getWorld() == null || !iLoc.getWorld().equals(pLoc.getWorld())) { pulling.remove(itemId); return; }
+            double distSq;
+            try { distSq = iLoc.distanceSquared(pLoc); } catch (Throwable t) { pulling.remove(itemId); return; }
+            if (distSq > (double) range * range + 4) { pulling.remove(itemId); return; }
+            if (distSq < 2.25) {
+                ItemStack stack;
+                try { stack = item.getItemStack(); } catch (Throwable t) { pulling.remove(itemId); return; }
+                if (stack == null || stack.getType().isAir()) {
+                    pulling.remove(itemId);
+                    SchedulerUtils.runAtEntity(item, () -> { try { item.remove(); } catch (Throwable ignored) {} });
+                    return;
+                }
+                ItemStack[] before = Arrays.stream(player.getInventory().getStorageContents())
+                        .map(s -> s == null ? null : s.clone())
+                        .toArray(ItemStack[]::new);
+                HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(stack.clone());
+                if (leftover.isEmpty()) {
+                    SchedulerUtils.runAtEntity(item, () -> { try { item.remove(); } catch (Throwable ignored) {} });
+                    pulling.remove(itemId);
+                } else {
+                    player.getInventory().setStorageContents(before);
+                    pulling.remove(itemId);
+                }
+                return;
+            }
+            org.bukkit.util.Vector dir = pLoc.toVector().subtract(iLoc.toVector());
+            double len = dir.length();
+            if (len > 0) {
+                dir.normalize().multiply(pullSpeed);
+                try {
+                    if (item.isOnGround()) dir.setY(dir.getY() + 0.15);
+                } catch (Throwable ignored) {}
+                try {
+                    item.setVelocity(dir);
+                    item.setPickupDelay(0);
+                } catch (Throwable ex) {
+                    SchedulerUtils.runAtEntity(item, () -> {
+                        try { item.setVelocity(dir); item.setPickupDelay(0); } catch (Throwable ignored) {}
+                    });
+                }
+            }
+        } catch (Throwable ignored) {
+            pulling.remove(itemId);
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onItemSpawn(ItemSpawnEvent event) {
+        // Folia: ItemSpawn runs on item's region thread; iterating all players and accessing their locations from here
+        // would be cross-region and unsafe. Rely on periodic ground scan instead (0.5s).
+        if (SchedulerUtils.isFolia()) {
+            // Still handle immediate very-close pickup via scheduling to avoid lag, but defer correctly
+            // For Folia we skip immediate handling; tickFolia will pick it up within 0.5s
+            return;
+        }
         Item item = event.getEntity();
         // Except for player drops (thrower != null means player dropped via Q)
         if (item.getThrower() != null) return;

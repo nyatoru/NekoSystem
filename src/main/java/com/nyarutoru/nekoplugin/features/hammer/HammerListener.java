@@ -147,7 +147,7 @@ public class HammerListener implements Listener {
     private final Set<SchedulerUtils.TaskHandle> ownedTasks = ConcurrentHashMap.newKeySet();
     private volatile boolean running;
     // Track blocks being broken to prevent recursion using BlockPos
-    private final Set<BlockPos> breakingBlocks = new HashSet<>();
+    private final Set<BlockPos> breakingBlocks = ConcurrentHashMap.newKeySet();
 
     public HammerListener(NekoPlugin plugin) {
         this.plugin = plugin;
@@ -262,43 +262,82 @@ public class HammerListener implements Listener {
         int[][] offsets = get3x3Offsets(face);
         BlockPos centerPos = BlockPos.from(center.getLocation());
         World world = center.getWorld();
-        
-        // Null safety: world can be null in some edge cases
+
         if (world == null) {
             return;
         }
-        
+
         boolean hasSilkTouch = hammer.containsEnchantment(Enchantment.SILK_TOUCH);
 
-        // Check durability once at the start
         if (!ItemUtils.isUnbreakable(hammer) && ItemUtils.wouldBreakFromDamage(hammer, 1)) {
+            return;
+        }
+
+        if (SchedulerUtils.isFolia()) {
+            // Folia: each adjacent block break must be on its region thread.
+            // Collect targets best-effort, then schedule per-location.
+            java.util.List<BlockPos> scheduled = new java.util.ArrayList<>();
+            for (int[] offset : offsets) {
+                if (offset[0] == 0 && offset[1] == 0 && offset[2] == 0)
+                    continue;
+                BlockPos targetPos = centerPos.add(offset[0], offset[1], offset[2]);
+                if (breakingBlocks.contains(targetPos))
+                    continue;
+                // best-effort pre-check to avoid scheduling air; cross-region reads are caught
+                try {
+                    Block pre = targetPos.getBlock(world);
+                    if (pre == null) continue;
+                    Material preType;
+                    try { preType = pre.getType(); } catch (Throwable ex) { continue; }
+                    if (preType == Material.AIR || !isMineable(preType)) continue;
+                } catch (Throwable ex) {
+                    // cross-region read failed; still schedule and re-check on target thread
+                }
+                scheduled.add(targetPos);
+                ItemStack hammerCopy = hammer.clone();
+                SchedulerUtils.runAtLocation(targetPos.toLocation(world), () -> {
+                    if (breakingBlocks.contains(targetPos)) return;
+                    Block target;
+                    try { target = targetPos.getBlock(world); } catch (Throwable ex) { return; }
+                    if (target == null) return;
+                    Material type;
+                    try { type = target.getType(); } catch (Throwable ex) { return; }
+                    if (type == Material.AIR || !isMineable(type)) return;
+                    breakingBlocks.add(targetPos);
+                    try {
+                        if (hasSilkTouch) target.breakNaturally(hammerCopy, true);
+                        else target.breakNaturally(hammerCopy);
+                    } catch (Throwable ignored) {
+                    } finally {
+                        breakingBlocks.remove(targetPos);
+                    }
+                });
+            }
+            if (!scheduled.isEmpty()) {
+                ItemUtils.applyDurabilityDamage(hammer, 1);
+            }
             return;
         }
 
         boolean brokeAnyBlock = false;
 
         for (int[] offset : offsets) {
-            // Skip center block (already being broken)
             if (offset[0] == 0 && offset[1] == 0 && offset[2] == 0)
                 continue;
 
             BlockPos targetPos = centerPos.add(offset[0], offset[1], offset[2]);
 
-            // Skip if already being broken
             if (breakingBlocks.contains(targetPos))
                 continue;
 
             Block target = targetPos.getBlock(world);
             Material type = target.getType();
 
-            // Skip if not mineable or air
             if (type == Material.AIR || !isMineable(type))
                 continue;
 
-            // Break block with appropriate drops
             breakingBlocks.add(targetPos);
             try {
-                // Use breakNaturally for both silk touch and normal mining.
                 if (hasSilkTouch) {
                     target.breakNaturally(hammer, true);
                 } else {
@@ -310,7 +349,6 @@ public class HammerListener implements Listener {
             }
         }
 
-        // Apply only 1 durability for the entire 3x3 operation
         if (brokeAnyBlock) {
             ItemUtils.applyDurabilityDamage(hammer, 1);
         }

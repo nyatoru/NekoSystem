@@ -129,9 +129,10 @@ public class TreeFellerListener implements Listener {
     private boolean hasPlayerPlacedLog(World world, List<BlockPos> logs) {
         if (!TreeFellerConfig.ALLOW_PLAYER_PLACED) {
             for (BlockPos logPos : logs) {
-                Block logBlock = logPos.getBlock(world);
-                if (logBlock != null && isPlayerPlaced(logBlock)) {
-                    return true;
+                Block logBlock;
+                try { logBlock = logPos.getBlock(world); } catch (Throwable ex) { continue; }
+                if (logBlock != null) {
+                    try { if (isPlayerPlaced(logBlock)) return true; } catch (Throwable ignored) {}
                 }
             }
         }
@@ -139,8 +140,22 @@ public class TreeFellerListener implements Listener {
     }
 
     private boolean isHoldingAxe(Player player) {
-        ItemStack item = player.getInventory().getItemInMainHand();
-        return ItemUtils.isAxe(item);
+        try {
+            ItemStack item = player.getInventory().getItemInMainHand();
+            return ItemUtils.isAxe(item);
+        } catch (Throwable ex) {
+            return false;
+        }
+    }
+
+    private void sendDebug(Player player, Component message) {
+        if (SchedulerUtils.isFolia()) {
+            SchedulerUtils.runAtEntity(player, () -> {
+                try { if (player.isOnline()) player.sendMessage(message); } catch (Throwable ignored) {}
+            });
+        } else {
+            player.sendMessage(message);
+        }
     }
 
     private boolean isValidCutHeight(TreeStructure tree, Block brokenBlock) {
@@ -263,46 +278,46 @@ public class TreeFellerListener implements Listener {
 
         // Re-validate synchronously (same checks as handleFell but without async fallback)
         if (hasPlayerPlacedLog(world, tree.getLogs())) {
-            if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Cannot fell player-placed trees", NamedTextColor.YELLOW));
+            if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Cannot fell player-placed trees", NamedTextColor.YELLOW));
             return;
         }
         if (!isValidCutHeight(tree, block)) {
-            if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Must cut within " + TreeFellerConfig.MAX_HEIGHT_FROM_BOTTOM + " blocks from bottom (cut at Y=" + block.getY() + ", tree bottom at Y=" + tree.getBottomY() + ")", NamedTextColor.YELLOW));
+            if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Must cut within " + TreeFellerConfig.MAX_HEIGHT_FROM_BOTTOM + " blocks from bottom (cut at Y=" + block.getY() + ", tree bottom at Y=" + tree.getBottomY() + ")", NamedTextColor.YELLOW));
             return;
         }
         ItemStack tool = player.getInventory().getItemInMainHand();
         ToolConfig toolConfig = toolMatcher.match(tool);
         if (toolConfig == null) return;
         if (tree.getLogCount() < TreeFellerConfig.REQUIRED_LOGS) {
-            if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Insufficient logs detected (" + tree.getLogCount() + " < " + TreeFellerConfig.REQUIRED_LOGS + ")", NamedTextColor.YELLOW));
+            if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Insufficient logs detected (" + tree.getLogCount() + " < " + TreeFellerConfig.REQUIRED_LOGS + ")", NamedTextColor.YELLOW));
             return;
         }
         if (!isValidVerticalRatio(tree)) {
-            if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Insufficient vertical logs (ratio too low)", NamedTextColor.YELLOW));
+            if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Insufficient vertical logs (ratio too low)", NamedTextColor.YELLOW));
             return;
         }
         LeafValidator validator = new LeafValidator(tree.getTreeType());
         if (!validator.validate(world, tree.getLogs(), tree.getLeaves())) {
-            if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Insufficient leaves detected", NamedTextColor.YELLOW));
+            if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Insufficient leaves detected", NamedTextColor.YELLOW));
             return;
         }
         List<BlockPos> logsToFell = tree.getLogs();
         if (tree.isOverflow() && !TreeFellerConfig.ALLOW_PARTIAL) {
-            if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Tree exceeds the maximum size and partial felling is disabled", NamedTextColor.YELLOW));
+            if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Tree exceeds the maximum size and partial felling is disabled", NamedTextColor.YELLOW));
             return;
         }
         int logCount = logsToFell.size();
         int totalDurabilityCost = toolConfig.getDurabilityCost() * logCount;
         ItemStack dropTool = tool.clone();
         if (!ItemUtils.consumeDurabilityOrDeactivate(player, tool, totalDurabilityCost, toolConfig.getName())) {
-            if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Tool would break (cost: " + totalDurabilityCost + ")", NamedTextColor.YELLOW));
+            if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Tool would break (cost: " + totalDurabilityCost + ")", NamedTextColor.YELLOW));
             return;
         }
         event.setCancelled(true);
         cleanupPlayerPlaced(block);
         breakTree(player, tree, logsToFell, dropTool);
         if (TreeFellerConfig.CASCADE) handleCascade(player, tree, tool, toolConfig);
-        if (TreeFellerConfig.DEBUG) player.sendMessage(Component.text("TreeFeller: Felled " + logsToFell.size() + " logs", NamedTextColor.GREEN));
+        if (TreeFellerConfig.DEBUG) sendDebug(player, Component.text("TreeFeller: Felled " + logsToFell.size() + " logs", NamedTextColor.GREEN));
     }
 
     private void handleFell(Player player, Block block, boolean originPlayerPlaced, TreeStructure tree, ItemStack toolSnapshot, World world) {
@@ -310,7 +325,7 @@ public class TreeFellerListener implements Listener {
         // origin placed check already done for async path
         if (originPlayerPlaced || hasPlayerPlacedLog(world, tree.getLogs())) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Cannot fell player-placed trees", NamedTextColor.YELLOW));
+                sendDebug(player, Component.text("TreeFeller: Cannot fell player-placed trees", NamedTextColor.YELLOW));
             }
             // restore single break if we previously cancelled async
             if (TreeFellerConfig.ASYNC_DETECTION) {
@@ -324,7 +339,7 @@ public class TreeFellerListener implements Listener {
 
         if (!isValidCutHeight(tree, block)) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Must cut within " + TreeFellerConfig.MAX_HEIGHT_FROM_BOTTOM +
+                sendDebug(player, Component.text("TreeFeller: Must cut within " + TreeFellerConfig.MAX_HEIGHT_FROM_BOTTOM +
                         " blocks from bottom (cut at Y=" + block.getY() + ", tree bottom at Y=" + tree.getBottomY() + ")", NamedTextColor.YELLOW));
             }
             if (TreeFellerConfig.ASYNC_DETECTION) {
@@ -341,7 +356,7 @@ public class TreeFellerListener implements Listener {
 
         if (tree.getLogCount() < TreeFellerConfig.REQUIRED_LOGS) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Insufficient logs detected (" +
+                sendDebug(player, Component.text("TreeFeller: Insufficient logs detected (" +
                         tree.getLogCount() + " < " + TreeFellerConfig.REQUIRED_LOGS + ")", NamedTextColor.YELLOW));
             }
             if (TreeFellerConfig.ASYNC_DETECTION) block.breakNaturally(toolSnapshot);
@@ -350,7 +365,7 @@ public class TreeFellerListener implements Listener {
 
         if (!isValidVerticalRatio(tree)) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Insufficient vertical logs (ratio too low)", NamedTextColor.YELLOW));
+                sendDebug(player, Component.text("TreeFeller: Insufficient vertical logs (ratio too low)", NamedTextColor.YELLOW));
             }
             if (TreeFellerConfig.ASYNC_DETECTION) block.breakNaturally(toolSnapshot);
             return;
@@ -359,7 +374,7 @@ public class TreeFellerListener implements Listener {
         LeafValidator validator = new LeafValidator(tree.getTreeType());
         if (!validator.validate(world, tree.getLogs(), tree.getLeaves())) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Insufficient leaves detected", NamedTextColor.YELLOW));
+                sendDebug(player, Component.text("TreeFeller: Insufficient leaves detected", NamedTextColor.YELLOW));
             }
             if (TreeFellerConfig.ASYNC_DETECTION) block.breakNaturally(toolSnapshot);
             return;
@@ -368,7 +383,7 @@ public class TreeFellerListener implements Listener {
         List<BlockPos> logsToFell = tree.getLogs();
         if (tree.isOverflow() && !TreeFellerConfig.ALLOW_PARTIAL) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Tree exceeds the maximum size and partial felling is disabled",
+                sendDebug(player, Component.text("TreeFeller: Tree exceeds the maximum size and partial felling is disabled",
                         NamedTextColor.YELLOW));
             }
             if (TreeFellerConfig.ASYNC_DETECTION) block.breakNaturally(toolSnapshot);
@@ -385,7 +400,7 @@ public class TreeFellerListener implements Listener {
 
         if (!ItemUtils.consumeDurabilityOrDeactivate(player, targetTool, totalDurabilityCost, toolConfig.getName())) {
             if (TreeFellerConfig.DEBUG) {
-                player.sendMessage(Component.text("TreeFeller: Tool would break (cost: " + totalDurabilityCost + ")", NamedTextColor.YELLOW));
+                sendDebug(player, Component.text("TreeFeller: Tool would break (cost: " + totalDurabilityCost + ")", NamedTextColor.YELLOW));
             }
             return;
         }
@@ -423,7 +438,7 @@ public class TreeFellerListener implements Listener {
         }
 
         if (TreeFellerConfig.DEBUG) {
-            player.sendMessage(Component.text("TreeFeller: Felled " + logsToFell.size() + " logs",
+            sendDebug(player, Component.text("TreeFeller: Felled " + logsToFell.size() + " logs",
                     NamedTextColor.GREEN));
         }
     }
@@ -436,11 +451,23 @@ public class TreeFellerListener implements Listener {
                 : 0L;
         fastLeafDecay.schedule(world, tree.getLeaves(), decayStartDelay, isCurrent, taskOwner);
         if (TreeFellerConfig.SOUNDS_ENABLED) {
-            world.playSound(player.getLocation(), TreeFellerConfig.FELL_SOUND,
-                    TreeFellerConfig.SOUND_VOLUME, TreeFellerConfig.SOUND_PITCH);
+            try {
+                Location loc;
+                try { loc = player.getLocation(); } catch (Throwable ex) { loc = tree.getOrigin().toLocation(world); }
+                // playSound must be on block's region thread; breakTree is already called on that thread
+                world.playSound(loc, TreeFellerConfig.FELL_SOUND,
+                        TreeFellerConfig.SOUND_VOLUME, TreeFellerConfig.SOUND_PITCH);
+            } catch (Throwable ignored) {}
         }
         if (TreeFellerConfig.REPLANT_SAPLINGS && Math.random() <= TreeFellerConfig.REPLANT_CHANCE) {
-            replantSapling(world, tree.getOrigin());
+            // replant must be on sapling block's region thread
+            BlockPos origin = tree.getOrigin();
+            if (origin != null) {
+                BlockPos saplingPos = new BlockPos(origin.x(), origin.y() + 1, origin.z());
+                SchedulerUtils.runAtLocation(saplingPos.toLocation(world), () -> replantSapling(world, origin));
+            } else {
+                replantSapling(world, origin);
+            }
         }
     }
 
@@ -482,7 +509,7 @@ public class TreeFellerListener implements Listener {
                 int durabilityCost = toolConfig.getDurabilityCost() * logCount;
                 if (!ItemUtils.consumeDurabilityOrDeactivate(player, tool, durabilityCost, toolConfig.getName())) {
                     if (TreeFellerConfig.DEBUG) {
-                        player.sendMessage(Component.text("TreeFeller Cascade: Tool would break", NamedTextColor.YELLOW));
+                        sendDebug(player, Component.text("TreeFeller Cascade: Tool would break", NamedTextColor.YELLOW));
                     }
                     return;
                 }
@@ -490,12 +517,12 @@ public class TreeFellerListener implements Listener {
                 cascadedTrees++;
                 cascadeQueue.addAll(adjacentTree.getLogs());
                 if (TreeFellerConfig.DEBUG) {
-                    player.sendMessage(Component.text("TreeFeller Cascade: Felled tree " + cascadedTrees, NamedTextColor.GREEN));
+                    sendDebug(player, Component.text("TreeFeller Cascade: Felled tree " + cascadedTrees, NamedTextColor.GREEN));
                 }
             }
         }
         if (TreeFellerConfig.DEBUG && cascadedTrees > 0) {
-            player.sendMessage(Component.text("TreeFeller Cascade: Total " + cascadedTrees + " trees felled", NamedTextColor.GREEN));
+            sendDebug(player, Component.text("TreeFeller Cascade: Total " + cascadedTrees + " trees felled", NamedTextColor.GREEN));
         }
     }
 

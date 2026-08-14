@@ -7,6 +7,7 @@ import com.nyarutoru.nekoplugin.core.settings.SettingDescriptor;
 import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
 import com.nyarutoru.nekoplugin.utils.BlockPos;
 import com.nyarutoru.nekoplugin.utils.ItemUtils;
+import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -143,6 +144,65 @@ public class SandExcavationListener extends AbstractVeinMiner {
 
         Material originalToolType = tool.getType();
         boolean hasSilkTouch = tool.containsEnchantment(Enchantment.SILK_TOUCH);
+
+        if (SchedulerUtils.isFolia()) {
+            for (BlockPos pos : blocksToBreak) {
+                if (pos.equals(origin))
+                    continue;
+
+                ItemStack currentTool;
+                try {
+                    currentTool = player.getInventory().getItemInMainHand();
+                } catch (Throwable ex) {
+                    break;
+                }
+                if (currentTool == null || currentTool.getType() != originalToolType)
+                    break;
+
+                try {
+                    if (!ItemUtils.consumeDurabilityOrDeactivate(player, currentTool, 1, getToolName())) {
+                        break;
+                    }
+                } catch (Throwable ex) {
+                    break;
+                }
+
+                BlockPos targetPos = pos;
+                ItemStack dropTool = currentTool.clone();
+                boolean silk = hasSilkTouch;
+                SchedulerUtils.runAtLocation(targetPos.toLocation(world), () -> {
+                    Block block;
+                    try {
+                        block = targetPos.getBlock(world);
+                    } catch (Throwable ex) {
+                        return;
+                    }
+                    if (block == null) return;
+                    Material blockType;
+                    try {
+                        blockType = block.getType();
+                    } catch (Throwable ex) {
+                        return;
+                    }
+                    if (blockType == Material.AIR || !getTargetMaterials().contains(blockType)) return;
+                    try {
+                        if (blockType == Material.CLAY && !silk) {
+                            for (int i = 0; i < 4; i++) {
+                                world.dropItemNaturally(targetPos.toLocation(world), new ItemStack(Material.CLAY_BALL));
+                            }
+                        } else {
+                            for (ItemStack drop : block.getDrops(dropTool)) {
+                                world.dropItemNaturally(targetPos.toLocation(world), drop);
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                    try {
+                        block.setType(Material.AIR);
+                    } catch (Throwable ignored) {}
+                });
+            }
+            return;
+        }
 
         for (BlockPos pos : blocksToBreak) {
             if (pos.equals(origin))
