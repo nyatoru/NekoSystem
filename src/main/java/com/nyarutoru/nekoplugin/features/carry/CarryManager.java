@@ -125,7 +125,7 @@ final class CarryManager {
             Location dest = location.clone().add(0.5, 0.0, 0.5);
             dest.setYaw(player.getLocation().getYaw());
             dest.setPitch(0f);
-            entity.teleport(dest);
+            entity.teleportAsync(dest);
         }
 
         player.sendActionBar(ComponentUtils.success("Put down carried object"));
