@@ -59,7 +59,7 @@ public class RecipePreviewGUI {
         gui.setBackButton(BACK_BUTTON_SLOT, event -> {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
-            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> {
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(p, () -> {
                 if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState);
                 else recipeBookGUI.openRecipeBook(p);
             });
@@ -111,7 +111,7 @@ public class RecipePreviewGUI {
         gui.setBackButton(BACK_BUTTON_SLOT, event -> {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
-            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(p, () -> {
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(p, () -> {
                 if (prevState != null) recipeBookGUI.openRecipeBook(p, prevState);
                 else recipeBookGUI.openRecipeBook(p);
             });

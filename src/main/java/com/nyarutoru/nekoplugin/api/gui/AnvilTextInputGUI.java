@@ -41,7 +41,7 @@ public final class AnvilTextInputGUI {
         String text = view.getRenameText();
         player.closeInventory();
         if (text != null && player.isOp()) submit.accept(text);
-        SchedulerUtils.runAtEntity(player, () -> {
+        SchedulerUtils.runAtPlayer(player, () -> {
             if (!player.isOp()) {
                 player.closeInventory();
                 return;
@@ -52,7 +52,7 @@ public final class AnvilTextInputGUI {
 
     void closed(Player player, AnvilView view) {
         if (!completed.compareAndSet(false, true)) return;
-        SchedulerUtils.runAtEntity(player, () -> {
+        SchedulerUtils.runAtPlayer(player, () -> {
             if (!player.isOp()) {
                 player.closeInventory();
                 return;

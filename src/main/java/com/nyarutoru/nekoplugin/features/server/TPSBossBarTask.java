@@ -131,7 +131,7 @@ public class TPSBossBarTask {
 
     private void schedulePlayer(Player player, long expectedGeneration, Runnable action, boolean cleanup) {
         SchedulerUtils.TaskHandle[] holder = new SchedulerUtils.TaskHandle[1];
-        holder[0] = SchedulerUtils.runAtEntityTask(player, () -> {
+        holder[0] = SchedulerUtils.runAtPlayerTask(player, () -> {
             ownedTasks.remove(holder[0]);
             if (generation.get() == expectedGeneration && (enabled || cleanup)) {
                 action.run();

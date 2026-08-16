@@ -155,7 +155,7 @@ public class PlayerFeatureListener implements Listener {
             Component originalDisplay = originalDisplayNames.remove(uuid);
             Component originalListName = originalPlayerListNames.remove(uuid);
             SchedulerUtils.TaskHandle[] holder = new SchedulerUtils.TaskHandle[1];
-            holder[0] = SchedulerUtils.runAtEntityTask(player, () -> {
+            holder[0] = SchedulerUtils.runAtPlayerTask(player, () -> {
                 cleanupTasks.remove(holder[0]);
                 if (!running && generation.get() == cleanupGeneration) {
                     if (originalDisplay != null) player.displayName(originalDisplay);
@@ -391,7 +391,7 @@ public class PlayerFeatureListener implements Listener {
     }
 
     private void schedulePlayer(Player player, long expectedGeneration, Runnable action) {
-        own(SchedulerUtils.runAtEntityTask(player, () -> {
+        own(SchedulerUtils.runAtPlayerTask(player, () -> {
             if (isCurrent(expectedGeneration)) action.run();
         }));
     }
@@ -402,7 +402,7 @@ public class PlayerFeatureListener implements Listener {
         long expectedGeneration = generation.get();
         Set<SchedulerUtils.TaskHandle> tasks = delayedTasks.computeIfAbsent(uuid, ignored -> ConcurrentHashMap.newKeySet());
         SchedulerUtils.TaskHandle[] holder = new SchedulerUtils.TaskHandle[1];
-        holder[0] = own(SchedulerUtils.runAtEntityLaterTask(player, () -> {
+        holder[0] = own(SchedulerUtils.runAtPlayerLaterTask(player, () -> {
             tasks.remove(holder[0]);
             delayedTasks.computeIfPresent(uuid, (ignored, remaining) -> remaining.isEmpty() ? null : remaining);
             if (isCurrent(expectedGeneration) && autoReplenish && player.isOnline()) action.run();

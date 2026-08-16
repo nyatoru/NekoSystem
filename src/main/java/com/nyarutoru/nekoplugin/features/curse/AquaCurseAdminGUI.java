@@ -152,7 +152,7 @@ public final class AquaCurseAdminGUI extends PreviewGUI {
                 String input = text == null ? "" : text.trim();
                 if (input.isEmpty() || input.length() > 16) {
                     p.sendMessage(Component.text("Invalid name.", NamedTextColor.RED));
-                    SchedulerUtils.runAtEntity(p, () -> { if (p.isOp()) new AquaCurseAdminGUI(feature, manager, state, store, registry, page).open(p); });
+                    SchedulerUtils.runAtPlayer(p, () -> { if (p.isOp()) new AquaCurseAdminGUI(feature, manager, state, store, registry, page).open(p); });
                     return;
                 }
                 Player exact = Bukkit.getPlayerExact(input);
@@ -165,7 +165,7 @@ public final class AquaCurseAdminGUI extends PreviewGUI {
                     OfflinePlayer off = Bukkit.getOfflinePlayer(input);
                     if (!off.hasPlayedBefore() && !off.isOnline()) {
                         p.sendMessage(Component.text("Player '" + input + "' has never joined — ask them to join once, or curse an online player.", NamedTextColor.RED));
-                        SchedulerUtils.runAtEntity(p, () -> { if (p.isOp()) new AquaCurseAdminGUI(feature, manager, state, store, registry, page).open(p); });
+                        SchedulerUtils.runAtPlayer(p, () -> { if (p.isOp()) new AquaCurseAdminGUI(feature, manager, state, store, registry, page).open(p); });
                         return;
                     }
                     targetId = off.getUniqueId();
@@ -174,7 +174,7 @@ public final class AquaCurseAdminGUI extends PreviewGUI {
                 boolean next = !feature.isCursed(targetId);
                 feature.setCursed(targetId, next);
                 p.sendMessage(Component.text((next ? "Cursed " : "Uncursed ") + targetName, NamedTextColor.GREEN));
-                SchedulerUtils.runAtEntity(p, () -> { if (p.isOp()) new AquaCurseAdminGUI(feature, manager, state, store, registry, page).open(p); });
+                SchedulerUtils.runAtPlayer(p, () -> { if (p.isOp()) new AquaCurseAdminGUI(feature, manager, state, store, registry, page).open(p); });
             }, () -> {
                 if (p.isOp()) new AquaCurseAdminGUI(feature, manager, state, store, registry, page).open(p);
             }).open(p);
@@ -186,7 +186,7 @@ public final class AquaCurseAdminGUI extends PreviewGUI {
         // back
         setBackButton(49, e -> {
             Player p = (Player) e.getWhoClicked();
-            if (p.isOp()) SchedulerUtils.runAtEntity(p, () -> {
+            if (p.isOp()) SchedulerUtils.runAtPlayer(p, () -> {
                 if (!p.isOp()) { p.closeInventory(); return; }
                 new FeatureListGUI(manager, state, store, registry).open(p);
             });
@@ -197,7 +197,7 @@ public final class AquaCurseAdminGUI extends PreviewGUI {
 
     private void openPage(Player player, int target) {
         if (!player.isOp()) return;
-        SchedulerUtils.runAtEntity(player, () -> {
+        SchedulerUtils.runAtPlayer(player, () -> {
             if (!player.isOp()) { player.closeInventory(); return; }
             new AquaCurseAdminGUI(feature, manager, state, store, registry, target).open(player);
         });

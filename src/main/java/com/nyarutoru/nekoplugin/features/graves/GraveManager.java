@@ -147,10 +147,10 @@ public final class GraveManager {
                     grave.cancelRemoval();
                 }
                 grave.rollbackClaim(claim);
-                SchedulerUtils.runAtEntity(player, () -> completion.accept(false));
+                SchedulerUtils.runAtPlayer(player, () -> completion.accept(false));
                 return;
             }
-            SchedulerUtils.runAtEntity(player, () -> deliverClaim(
+            SchedulerUtils.runAtPlayer(player, () -> deliverClaim(
                 grave, claim, claimedExperience, finalClaim, player, completion));
         });
         return true;
@@ -166,7 +166,7 @@ public final class GraveManager {
                 grave.cancelRemoval();
             }
             grave.restoreItem(claim.index(), overflow.values().iterator().next());
-            save(grave, ignored -> SchedulerUtils.runAtEntity(player, () -> completion.accept(false)));
+            save(grave, ignored -> SchedulerUtils.runAtPlayer(player, () -> completion.accept(false)));
             return;
         }
         if (finalClaim) {
@@ -185,10 +185,10 @@ public final class GraveManager {
         save(grave, saved -> {
             if (!saved) {
                 grave.rollbackAll(claim);
-                SchedulerUtils.runAtEntity(player, () -> completion.accept(false));
+                SchedulerUtils.runAtPlayer(player, () -> completion.accept(false));
                 return;
             }
-            SchedulerUtils.runAtEntity(player, () -> deliverAll(grave, claim, player, completion));
+            SchedulerUtils.runAtPlayer(player, () -> deliverAll(grave, claim, player, completion));
         });
         return true;
     }
@@ -213,7 +213,7 @@ public final class GraveManager {
 
     private void rollbackAll(Grave grave, Grave.AllClaim claim, Player player, Consumer<Boolean> completion) {
         grave.rollbackAll(claim);
-        save(grave, ignored -> SchedulerUtils.runAtEntity(player, () -> completion.accept(false)));
+        save(grave, ignored -> SchedulerUtils.runAtPlayer(player, () -> completion.accept(false)));
     }
 
     private static boolean canFit(Player player, List<ItemStack> items) {
@@ -242,7 +242,7 @@ public final class GraveManager {
                 if (!disposed) return;
                 persistence.submit(() -> repository.delete(grave.getId())).thenAccept(deleted -> {
                     if (deleted) finalizeRemoval(grave);
-                    if (player != null) SchedulerUtils.runAtEntity(player, () -> completion.accept(deleted));
+                    if (player != null) SchedulerUtils.runAtPlayer(player, () -> completion.accept(deleted));
                 });
             });
         });

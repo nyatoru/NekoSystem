@@ -55,7 +55,7 @@ public final class FeatureSettingsGUI extends PreviewGUI {
         if (settings.isEmpty()) setDisplayItem(22, createItem(Material.GRAY_DYE, "No settings registered"));
         setBackButton(49, event -> {
             Player player = (Player) event.getWhoClicked();
-            if (player.isOp()) SchedulerUtils.runAtEntity(player, () -> {
+            if (player.isOp()) SchedulerUtils.runAtPlayer(player, () -> {
                 if (!player.isOp()) {
                     player.closeInventory();
                     return;
@@ -69,7 +69,7 @@ public final class FeatureSettingsGUI extends PreviewGUI {
     }
 
     private void openPage(Player player, int targetPage) {
-        if (player.isOp()) SchedulerUtils.runAtEntity(player, () -> {
+        if (player.isOp()) SchedulerUtils.runAtPlayer(player, () -> {
             if (!player.isOp()) {
                 player.closeInventory();
                 return;
@@ -119,7 +119,7 @@ public final class FeatureSettingsGUI extends PreviewGUI {
                 state.setSettingValue(feature.getId(), descriptor.key(), formatted);
                 if (!player.isOp()) return;
                 store.requestSave();
-                SchedulerUtils.runAtEntity(player, () -> {
+                SchedulerUtils.runAtPlayer(player, () -> {
                     if (!player.isOp()) {
                         player.closeInventory();
                         return;
@@ -127,7 +127,7 @@ public final class FeatureSettingsGUI extends PreviewGUI {
                     refresh();
                 });
             } catch (RuntimeException exception) {
-                SchedulerUtils.runAtEntity(player, () -> {
+                SchedulerUtils.runAtPlayer(player, () -> {
                     if (player.isOp()) {
                         player.sendMessage(Component.text("Could not apply setting: " + exception.getMessage(), NamedTextColor.RED));
                     } else {

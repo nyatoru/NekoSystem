@@ -102,7 +102,7 @@ public class ActiveToolAPI {
         lastShiftTime.put(key, now);
         int required = shiftsRequired;
         if (SchedulerUtils.isFolia()) {
-            SchedulerUtils.runAtEntity(player, () -> {
+            SchedulerUtils.runAtPlayer(player, () -> {
                 try { if (player.isOnline()) player.sendActionBar(ComponentUtils.progressBar(Math.min(count, required), required, '█', '░')); } catch (Throwable ignored) {}
             });
         } else {
@@ -118,7 +118,7 @@ public class ActiveToolAPI {
 
     private void startShiftTimeout(Player player, String key) {
         SchedulerUtils.cancelTask(shiftTimeoutTasks.remove(key));
-        SchedulerUtils.TaskHandle timeout = SchedulerUtils.runAtEntityLaterTask(player, () -> {
+        SchedulerUtils.TaskHandle timeout = SchedulerUtils.runAtPlayerLaterTask(player, () -> {
             shiftTimeoutTasks.remove(key);
             if (shiftCount.containsKey(key)) {
                 resetShiftCount(key);
@@ -161,7 +161,7 @@ public class ActiveToolAPI {
         scheduleActionBarRefresh(player, uuid, toolName, actionBarTask, 0L, actionBarRefreshTicks);
 
         if (SchedulerUtils.isFolia()) {
-            SchedulerUtils.runAtEntity(player, () -> {
+            SchedulerUtils.runAtPlayer(player, () -> {
                 try {
                     if (!player.isOnline()) return;
                     player.sendActionBar(ComponentUtils.activeStatus(toolName));
@@ -173,7 +173,7 @@ public class ActiveToolAPI {
             player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1.0f, 2.0f);
         }
         if (onActivate != null) {
-            if (SchedulerUtils.isFolia()) SchedulerUtils.runAtEntity(player, onActivate);
+            if (SchedulerUtils.isFolia()) SchedulerUtils.runAtPlayer(player, onActivate);
             else onActivate.run();
         }
     }
@@ -185,7 +185,7 @@ public class ActiveToolAPI {
                     || !player.isOnline() || !isActive(player, toolName)) {
                 return;
             }
-            actionBarTask.handle = SchedulerUtils.runAtEntityLaterTask(player, () -> {
+            actionBarTask.handle = SchedulerUtils.runAtPlayerLaterTask(player, () -> {
                 if (actionBarTasks.get(uuid) != actionBarTask || !player.isOnline() || !isActive(player, toolName)) {
                     return;
                 }
@@ -211,7 +211,7 @@ public class ActiveToolAPI {
         cleanupTool(uuid, state.toolName);
         String tName = state.toolName;
         if (SchedulerUtils.isFolia()) {
-            SchedulerUtils.runAtEntity(player, () -> {
+            SchedulerUtils.runAtPlayer(player, () -> {
                 try {
                     if (!player.isOnline()) return;
                     player.sendActionBar(ComponentUtils.disabledStatus(tName, reason));

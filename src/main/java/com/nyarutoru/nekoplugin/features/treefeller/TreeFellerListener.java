@@ -150,7 +150,7 @@ public class TreeFellerListener implements Listener {
 
     private void sendDebug(Player player, Component message) {
         if (SchedulerUtils.isFolia()) {
-            SchedulerUtils.runAtEntity(player, () -> {
+            SchedulerUtils.runAtPlayer(player, () -> {
                 try { if (player.isOnline()) player.sendMessage(message); } catch (Throwable ignored) {}
             });
         } else {

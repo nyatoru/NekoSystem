@@ -87,7 +87,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
             outTicks.remove(id);
             Player online = Bukkit.getPlayer(id);
             if (online != null) {
-                SchedulerUtils.runAtEntity(online, () -> {
+                SchedulerUtils.runAtPlayer(online, () -> {
                     if (online.isOnline()) {
                         online.setRemainingAir(online.getMaximumAir());
                         clearCurseEffects(online);
@@ -137,7 +137,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         for (Player player : Bukkit.getOnlinePlayers()) {
             UUID id = player.getUniqueId();
             if (!cursed.contains(id)) continue;
-            SchedulerUtils.runAtEntity(player, () -> handlePlayer(player));
+            SchedulerUtils.runAtPlayer(player, () -> handlePlayer(player));
         }
     }
 
@@ -210,7 +210,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         Player player = event.getPlayer();
         if (!cursed.contains(player.getUniqueId())) return;
         outTicks.remove(player.getUniqueId());
-        SchedulerUtils.runAtEntity(player, () -> {
+        SchedulerUtils.runAtPlayer(player, () -> {
             if (cursed.contains(player.getUniqueId())) {
                 player.setRemainingAir(player.getMaximumAir());
                 // effects will be applied on next tick based on water check
@@ -231,7 +231,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
         if (!cursed.contains(player.getUniqueId())) return;
         if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
         // Instant correction when starting to mine: ensure Haste/AquaAffinity present before break speed is calculated
-        SchedulerUtils.runAtEntity(player, () -> {
+        SchedulerUtils.runAtPlayer(player, () -> {
             if (!cursed.contains(player.getUniqueId())) return;
             if (player.getGameMode() == GameMode.CREATIVE || player.getGameMode() == GameMode.SPECTATOR) return;
             if (isInWater(player)) {

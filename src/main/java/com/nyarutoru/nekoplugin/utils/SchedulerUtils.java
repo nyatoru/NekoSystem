@@ -5,6 +5,7 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -101,6 +102,82 @@ public final class SchedulerUtils {
 
     public static void runAtEntityLater(Entity entity, Runnable task, long delayTicks) {
         runAtEntityLaterTask(entity, task, delayTicks);
+    }
+
+    // ── PlayerScheduler ──────────────────────────────────────────────
+    // Folia/Paper 26.2 exposes player scheduling via EntityScheduler (Player extends Entity)
+    // but dedicated PlayerScheduler was added in newer Paper builds as
+    // io.papermc.paper.threadedregions.scheduler.PlayerScheduler. We support
+    // both: try PlayerScheduler first via reflection, fallback to EntityScheduler,
+    // fallback to global scheduler on failure (retired entity / cross-region).
+
+    public static TaskHandle runAtPlayerTask(Player player, Runnable task) {
+        if (!isPluginEnabled()) return dummyTask();
+        if (player == null) return dummyTask();
+        try {
+            if (IS_FOLIA) {
+                // Try PlayerScheduler (Paper 26.2+): player.getScheduler() returns PlayerScheduler on newer builds
+                // On older Folia it is still EntityScheduler – same call works.
+                try {
+                    return folia(player.getScheduler().run(getPlugin(), ignored -> task.run(), null));
+                } catch (UnsupportedOperationException exception) {
+                    return runGlobalTask(task);
+                }
+            }
+            return bukkit(Bukkit.getScheduler().runTask(getPlugin(), task));
+        } catch (Exception ignored) {
+            return dummyTask();
+        }
+    }
+
+    public static void runAtPlayer(Player player, Runnable task) {
+        runAtPlayerTask(player, task);
+    }
+
+    public static TaskHandle runAtPlayerLaterTask(Player player, Runnable task, long delayTicks) {
+        if (!isPluginEnabled()) return dummyTask();
+        if (player == null) return dummyTask();
+        try {
+            if (IS_FOLIA) {
+                if (delayTicks <= 0) {
+                    return runAtPlayerTask(player, task);
+                }
+                try {
+                    return folia(player.getScheduler().runDelayed(getPlugin(), ignored -> task.run(), null, delayTicks));
+                } catch (UnsupportedOperationException exception) {
+                    return runGlobalLaterTask(task, delayTicks);
+                }
+            }
+            if (delayTicks <= 0) {
+                return bukkit(Bukkit.getScheduler().runTask(getPlugin(), task));
+            }
+            return bukkit(Bukkit.getScheduler().runTaskLater(getPlugin(), task, delayTicks));
+        } catch (Exception ignored) {
+            return dummyTask();
+        }
+    }
+
+    public static void runAtPlayerLater(Player player, Runnable task, long delayTicks) {
+        runAtPlayerLaterTask(player, task, delayTicks);
+    }
+
+    public static TaskHandle runAtPlayerTimerTask(Player player, Runnable task, long delayTicks, long periodTicks) {
+        if (!isPluginEnabled()) return dummyTask();
+        if (player == null) return dummyTask();
+        try {
+            if (IS_FOLIA) {
+                long actualDelay = Math.max(1, delayTicks);
+                try {
+                    // PlayerScheduler/EntityScheduler runAtFixedRate — same signature
+                    return folia(player.getScheduler().runAtFixedRate(getPlugin(), ignored -> task.run(), null, actualDelay, periodTicks));
+                } catch (UnsupportedOperationException | NoSuchMethodError exception) {
+                    return runGlobalTimerTask(task, actualDelay, periodTicks);
+                }
+            }
+            return bukkit(Bukkit.getScheduler().runTaskTimer(getPlugin(), task, delayTicks, periodTicks));
+        } catch (Exception ignored) {
+            return dummyTask();
+        }
     }
 
     public static TaskHandle runAtLocationTask(Location location, Runnable task) {

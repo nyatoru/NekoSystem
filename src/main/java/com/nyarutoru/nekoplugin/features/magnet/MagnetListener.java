@@ -229,7 +229,7 @@ public class MagnetListener implements Listener {
             // Deactivate and ground scan must run on each player's entity thread
             for (Player p : Bukkit.getOnlinePlayers()) {
                 // Schedule on player's thread to safely check inventory and location
-                SchedulerUtils.runAtEntity(p, () -> handleFoliaGroundScanForPlayer(p));
+                SchedulerUtils.runAtPlayer(p, () -> handleFoliaGroundScanForPlayer(p));
             }
         }
 
@@ -245,7 +245,7 @@ public class MagnetListener implements Listener {
                 continue;
             }
             // Schedule pull handling on player's entity thread (player and nearby item likely same region)
-            SchedulerUtils.runAtEntity(player, () -> handleFoliaPull(itemId, entry));
+            SchedulerUtils.runAtPlayer(player, () -> handleFoliaPull(itemId, entry));
         }
     }
 

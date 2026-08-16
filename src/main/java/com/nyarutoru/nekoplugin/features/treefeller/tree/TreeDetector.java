@@ -119,7 +119,7 @@ public final class TreeDetector {
             BlockPos cur = q.poll();
             for (BlockPos off : ALL_OFFSETS) {
                 BlockPos nb = cur.add(off.x(), off.y(), off.z());
-                if (!visited.contains(nb) && baseLogs.contains(nb) || logs.contains(nb)) {
+                if (!visited.contains(nb) && (baseLogs.contains(nb) || logs.contains(nb))) {
                     // only traverse if within individual detection range from origin horizontally
                     // prevents merging two trees whose bases are > INDIVIDUAL_DETECTION_RANGE apart
                     int dx = nb.x() - origin.x();

@@ -490,7 +490,7 @@ public class HammerListener implements Listener {
 
     private void scheduleOwned(Player player, long expectedGeneration, Runnable action, boolean cleanup) {
         SchedulerUtils.TaskHandle[] holder = new SchedulerUtils.TaskHandle[1];
-        holder[0] = SchedulerUtils.runAtEntityTask(player, () -> {
+        holder[0] = SchedulerUtils.runAtPlayerTask(player, () -> {
             ownedTasks.remove(holder[0]);
             if ((cleanup && !running && generation.get() == expectedGeneration)
                     || (!cleanup && running && generation.get() == expectedGeneration)) {

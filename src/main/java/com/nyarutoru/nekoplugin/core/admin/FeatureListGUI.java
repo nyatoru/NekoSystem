@@ -49,7 +49,7 @@ public final class FeatureListGUI extends PreviewGUI {
                 Player player = (Player) event.getWhoClicked();
                 if (!player.isOp()) { player.closeInventory(); return; }
                 if (event.getClick() == ClickType.RIGHT) {
-                    SchedulerUtils.runAtEntity(player, () -> {
+                    SchedulerUtils.runAtPlayer(player, () -> {
                         if (!player.isOp()) {
                             player.closeInventory();
                             return;
@@ -66,7 +66,7 @@ public final class FeatureListGUI extends PreviewGUI {
                 SchedulerUtils.runGlobalTask(() -> {
                     if (!player.isOp()) return;
                     FeatureManager.TransitionResult result = manager.setEnabled(feature.getId(), desired);
-                    SchedulerUtils.runAtEntity(player, () -> {
+                    SchedulerUtils.runAtPlayer(player, () -> {
                         if (!player.isOp()) {
                             player.closeInventory();
                             return;

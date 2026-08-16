@@ -141,7 +141,7 @@ public class CustomCraftingListener implements Listener {
         if (event.getClickedInventory() != inv) {
             if (slot >= 54) {
                 if (event.isShiftClick() && running) {
-                    com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> {
+                    com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(player, () -> {
                         if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv);
                     });
                 }
@@ -150,7 +150,7 @@ public class CustomCraftingListener implements Listener {
         }
         if (slot >= 54) {
             if (event.isShiftClick() && running) {
-                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> {
+                com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(player, () -> {
                     if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv);
                 });
             }
@@ -160,7 +160,7 @@ public class CustomCraftingListener implements Listener {
         boolean isCraftingSlot = false;
         for (int craftSlot : CRAFTING_SLOTS) if (slot == craftSlot) { isCraftingSlot = true; break; }
         if (isCraftingSlot) {
-            if (running) com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> {
+            if (running) com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(player, () -> {
                 if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv);
             });
             return;
@@ -236,13 +236,13 @@ public class CustomCraftingListener implements Listener {
         if (slot == CRAFTABLE_BOOK_SLOT) {
             event.setCancelled(true);
             player.closeInventory();
-            if (running) com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> recipeBookGUI.openRecipeBook(player, true, true));
+            if (running) com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(player, () -> recipeBookGUI.openRecipeBook(player, true, true));
             return;
         }
         if (slot == RECIPE_BOOK_SLOT) {
             event.setCancelled(true);
             player.closeInventory();
-            if (running) com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> recipeBookGUI.openRecipeBook(player, false, false));
+            if (running) com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(player, () -> recipeBookGUI.openRecipeBook(player, false, false));
             return;
         }
 
@@ -339,7 +339,7 @@ public class CustomCraftingListener implements Listener {
 
     private void scheduleUpdate(Player player, Inventory inv) {
         if (!running) return;
-        com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> { if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv); });
+        com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(player, () -> { if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inv); });
     }
 
     private void giveOrDrop(Player player, ItemStack item) {
@@ -399,7 +399,7 @@ public class CustomCraftingListener implements Listener {
         if (affectsDecoration) { event.setCancelled(true); return; }
         if (affectsCrafting && running) {
             Inventory inventory = event.getInventory();
-            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtEntity(player, () -> { if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inventory); });
+            com.nyarutoru.nekoplugin.utils.SchedulerUtils.runAtPlayer(player, () -> { if (running && openCraftingGUIs.contains(player.getUniqueId())) updateCraftingResult(inventory); });
         }
     }
 
