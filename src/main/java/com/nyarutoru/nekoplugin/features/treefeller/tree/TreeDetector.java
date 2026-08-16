@@ -102,42 +102,37 @@ public final class TreeDetector {
         if (!TreeFellerConfig.INDIVIDUAL_TREE_DETECTION || logs.size() <= 4) {
             return logs;
         }
-        // Find ground level (lowest Y of logs)
         int bottomY = logs.stream().mapToInt(BlockPos::y).min().orElse(origin.y());
+        Set<BlockPos> logSet = new HashSet<>(logs);
         Set<BlockPos> baseLogs = new HashSet<>();
         for (BlockPos p : logs) {
             if (p.y() <= bottomY + 1) baseLogs.add(p);
         }
-        if (baseLogs.size() <= 4) return logs; // typical 1x1 or 2x2, keep all
+        if (baseLogs.size() <= 4) return logs;
+        if (!logSet.contains(origin)) return logs;
 
-        // BFS from origin only through trunk adjacency, collect individual component
         Set<BlockPos> visited = new HashSet<>();
         Queue<BlockPos> q = new ArrayDeque<>();
         q.add(origin);
         visited.add(origin);
+        int rangeSq = TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE * TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE;
         while (!q.isEmpty()) {
             BlockPos cur = q.poll();
             for (BlockPos off : ALL_OFFSETS) {
                 BlockPos nb = cur.add(off.x(), off.y(), off.z());
-                if (!visited.contains(nb) && (baseLogs.contains(nb) || logs.contains(nb))) {
-                    // only traverse if within individual detection range from origin horizontally
-                    // prevents merging two trees whose bases are > INDIVIDUAL_DETECTION_RANGE apart
-                    int dx = nb.x() - origin.x();
-                    int dz = nb.z() - origin.z();
-                    if (dx * dx + dz * dz > TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE * TreeFellerConfig.INDIVIDUAL_DETECTION_RANGE) {
-                        // allow vertical trunk but not far horizontal pillars (parallel trees)
-                        if (Math.abs(nb.y() - origin.y()) < 2 && (Math.abs(dx) > 2 || Math.abs(dz) > 2)) {
-                            continue;
-                        }
-                    }
-                    if (logs.contains(nb)) {
-                        visited.add(nb);
-                        q.add(nb);
+                if (visited.contains(nb)) continue;
+                if (!logSet.contains(nb)) continue;
+                int dx = nb.x() - origin.x();
+                int dz = nb.z() - origin.z();
+                if (dx * dx + dz * dz > rangeSq) {
+                    if (Math.abs(nb.y() - origin.y()) < 2 && (Math.abs(dx) > 2 || Math.abs(dz) > 2)) {
+                        continue;
                     }
                 }
+                visited.add(nb);
+                q.add(nb);
             }
         }
-        // If visited is smaller than all logs, it means we isolated individual tree
         if (visited.size() < logs.size() && visited.size() >= 3) {
             return new ArrayList<>(visited);
         }
