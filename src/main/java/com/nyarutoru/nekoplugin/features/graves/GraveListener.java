@@ -1,6 +1,7 @@
 package com.nyarutoru.nekoplugin.features.graves;
 
 import com.destroystokyo.paper.event.block.BlockDestroyEvent;
+import com.nyarutoru.nekoplugin.utils.PlayerExpUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
@@ -44,7 +45,7 @@ public final class GraveListener implements Listener {
         if (event.getKeepInventory() || event.getDrops().isEmpty()) return;
         Player player = event.getEntity();
         List<ItemStack> drops = event.getDrops().stream().filter(item -> item != null && !item.isEmpty()).map(ItemStack::clone).toList();
-        int experience = event.getKeepLevel() ? 0 : Math.max(0, player.calculateTotalExperiencePoints());
+        int experience = event.getKeepLevel() ? 0 : PlayerExpUtils.getCurrentExp(player);
         Grave grave = manager.create(player, player.getLocation(), drops, experience);
         if (grave == null) {
             player.sendMessage(Component.text("A grave could not be created; your items will drop normally.", NamedTextColor.RED));

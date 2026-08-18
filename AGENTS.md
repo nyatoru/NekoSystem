@@ -26,15 +26,15 @@ Prefer `./gradlew` over `build.sh` (needs system `gradle`). `build` already depe
 - `src/main/java/com/nyarutoru/nekoplugin/NekoPlugin.java` — lifecycle (see below)
 - `core/` — `Feature`, `AbstractFeature`, `FeatureManager`, `DatabaseManager`, `admin/` (`AdminState`, `AdminConfigStore`→`admin.yml`, `NekoCommand`), `settings/` (`SettingRegistry`, `SettingDescriptor`)
 - `api/` — `gui/` (`BaseGUI`, `GUIManager`, `AnvilTextInputGUI`), `recipe/` (`CustomRecipe`, `RecipeAPI`), `tool/` (`AbstractVeinMiner`, `ActiveToolAPI`)
-- `features/` — `carry`, `curse` (AquaCurse→`aqua-curse.yml`, not `AdminState`), `drawer`, `graves`, `hammer`, `magnet`, `oreexcavation`, `player`, `server`, `tool` (SandExcavation), `treefeller`, `villageroptimize`, `woodcutting` (13 total)
-- `utils/` — `SchedulerUtils`, `ComponentUtils`, `ItemUtils`, `BlockPos`, `LocationUtils`, `ServerPerformanceUtils`
+- `features/` — `carry`, `curse` (AquaCurse→`aqua-curse.yml`, not `AdminState`), `drawer`, `graves`, `hammer`, `magnet`, `mending` (Mending Repair), `oreexcavation`, `player`, `server`, `tool` (SandExcavation), `treefeller`, `villageroptimize`, `woodcutting` (14 total)
+- `utils/` — `SchedulerUtils`, `ComponentUtils`, `ItemUtils`, `PlayerExpUtils` (current-on-hand XP read/write), `BlockPos`, `LocationUtils`, `ServerPerformanceUtils`
 - `src/main/resources/paper-plugin.yml` — metadata + permissions (`nekoplugin.grave.use`/`.admin`) only; `/neko` registered in code
 - `src/main/resources/assets/nekoplugin/` + `pack.mcmeta` — Java resource pack; `geyser/nekoplugin.json` — committed copy of Geyser mappings (generated, don't hand-edit)
 - `src/test/java` mirrors `src/main/java`
 
 ## Architecture
 
-**Lifecycle `NekoPlugin.java:37-114`:** `onEnable` = `AdminConfigStore.load()` → `DatabaseManager.initialize()` → `FeatureManager.initialize()` → `GUIManager.initialize()` → `registerFeature` ×13 → `registerSettings` each (AquaCurse skips — uses its own YAML) → `registerCommand("neko",…)` → `FeatureManager.enableDesired(adminState::desiredEnabled)` → `ActiveToolListener`. `onDisable` reverse: `FeatureManager.shutdown()` → `ActiveToolAPI.shutdown()` → `RecipeAPI.clear()` → `AdminConfigStore.flush()` → `DatabaseManager.shutdown()`.
+**Lifecycle `NekoPlugin.java:37-114`:** `onEnable` = `AdminConfigStore.load()` → `DatabaseManager.initialize()` → `FeatureManager.initialize()` → `GUIManager.initialize()` → `registerFeature` ×14 → `registerSettings` each (AquaCurse skips — uses its own YAML) → `registerCommand("neko",…)` → `FeatureManager.enableDesired(adminState::desiredEnabled)` → `ActiveToolListener`. `onDisable` reverse: `FeatureManager.shutdown()` → `ActiveToolAPI.shutdown()` → `RecipeAPI.clear()` → `AdminConfigStore.flush()` → `DatabaseManager.shutdown()`.
 
 **Feature system:** extend `core/AbstractFeature` (`id`, `name`, `registerListener` auto-unregisters, `ownTask` tracks `SchedulerUtils.TaskHandle`, override `cleanup()` not `onDisable`). `FeatureManager` is singleton `LinkedHashMap`, `synchronized`, `TransitionResult(CHANGED|ALREADY_IN_STATE|NOT_FOUND|FAILED)`, `enableDesired(Predicate)` / `enableAll` / `disableAll` reverse-order. Adding a feature: extend `AbstractFeature`, implement `registerSettings` if needed, register instance in `NekoPlugin.onEnable` before `enableDesired`.
 
