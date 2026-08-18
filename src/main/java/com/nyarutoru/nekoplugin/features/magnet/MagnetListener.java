@@ -33,6 +33,8 @@ public class MagnetListener implements Listener {
 
     public static final String TOOL_NAME = "Magnet";
     public static final NamespacedKey MAGNET_KEY = new NamespacedKey("nekoplugin", "magnet");
+    // Custom model data: pack override on vanilla compass shows the magnet; vanilla compass fallback without the pack
+    public static final int MAGNET_CMD = 2001;
     private static final Set<Material> MAGNET_TYPES = EnumSet.of(Material.COMPASS, Material.RECOVERY_COMPASS);
 
     private volatile int range = 10;
@@ -432,6 +434,8 @@ public class MagnetListener implements Listener {
             if (b != null && b == 1) return true;
             NamespacedKey model = meta.getItemModel();
             if (model != null && "nekoplugin".equals(model.getNamespace()) && "magnet".equals(model.getKey())) return true;
+            Integer cmd = meta.getCustomModelData();
+            if (cmd != null && cmd == MAGNET_CMD) return true;
         }
         return MAGNET_TYPES.contains(item.getType());
     }
@@ -460,7 +464,7 @@ public class MagnetListener implements Listener {
                             .decoration(TextDecoration.ITALIC, false)
             ));
             meta.getPersistentDataContainer().set(MAGNET_KEY, PersistentDataType.BYTE, (byte) 1);
-            meta.setItemModel(new NamespacedKey("nekoplugin", "magnet"));
+            meta.setCustomModelData(MAGNET_CMD);
             item.setItemMeta(meta);
         }
         return item;
