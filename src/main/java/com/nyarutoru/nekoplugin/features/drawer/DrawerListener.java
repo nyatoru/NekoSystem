@@ -79,8 +79,6 @@ public class DrawerListener implements Listener {
             return;
         if (event.getHand() != EquipmentSlot.HAND)
             return;
-        if (event.getPlayer().isSneaking())
-            return;
 
         Block block = event.getClickedBlock();
         Location location = block.getLocation();
