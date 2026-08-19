@@ -34,7 +34,8 @@ public final class MendingRepairListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
-        if (event.getHand() != EquipmentSlot.HAND) return;
+        EquipmentSlot hand = event.getHand();
+        if (hand != EquipmentSlot.HAND && hand != EquipmentSlot.OFF_HAND) return;
         Action action = event.getAction();
         if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) return;
         Block block = event.getClickedBlock();
@@ -42,19 +43,20 @@ public final class MendingRepairListener implements Listener {
 
         Player player = event.getPlayer();
         if (!player.isSneaking()) return;
-        ItemStack item = player.getInventory().getItemInMainHand();
-        if (!isRepairable(item)) {
-            item = player.getInventory().getItemInOffHand();
-            if (!isRepairable(item)) return;
-        }
+        ItemStack main = player.getInventory().getItemInMainHand();
+        ItemStack off = player.getInventory().getItemInOffHand();
+        // Sneak + right-click while holding any Mending item is a repair gesture —
+        // deny the item use so vanilla can't equip/swap armor (main-hand or off-hand).
+        if (!hasMending(main) && !hasMending(off)) return;
+        event.setUseItemInHand(Event.Result.DENY);
+
+        ItemStack item = isRepairable(main) ? main : isRepairable(off) ? off : null;
+        if (item == null) return;
 
         int availableXp = PlayerExpUtils.getCurrentExp(player);
         int damage = ItemUtils.getDurability(item);
         RepairCost cost = RepairCost.compute(damage, availableXp, repairRate);
         if (cost.xpCost() <= 0) return;
-
-        // Right-click on armor would otherwise trigger vanilla equip/swap logic.
-        event.setUseItemInHand(Event.Result.DENY);
 
         ItemMeta meta = item.getItemMeta();
         if (meta instanceof Damageable damageable) {
@@ -66,6 +68,10 @@ public final class MendingRepairListener implements Listener {
                 .color(NamedTextColor.GREEN)
                 .append(Component.text("(" + cost.xpCost() + " XP)")
                         .color(NamedTextColor.GRAY)));
+    }
+
+    private static boolean hasMending(ItemStack item) {
+        return item != null && item.getType() != Material.AIR && item.containsEnchantment(Enchantment.MENDING);
     }
 
     private static boolean isRepairable(ItemStack item) {
