@@ -18,17 +18,24 @@ public final class AnvilTextInputGUI {
     private final String initialValue;
     private final Consumer<String> submit;
     private final Runnable returnAction;
+    private final boolean requireOp;
     private final AtomicBoolean completed = new AtomicBoolean();
 
     public AnvilTextInputGUI(Component title, String initialValue, Consumer<String> submit, Runnable returnAction) {
+        this(title, initialValue, submit, returnAction, true);
+    }
+
+    /** @param requireOp false to let regular players use the input (player-facing features). */
+    public AnvilTextInputGUI(Component title, String initialValue, Consumer<String> submit, Runnable returnAction, boolean requireOp) {
         this.title = Objects.requireNonNull(title, "title");
         this.initialValue = Objects.requireNonNull(initialValue, "initialValue");
         this.submit = Objects.requireNonNull(submit, "submit");
         this.returnAction = Objects.requireNonNull(returnAction, "returnAction");
+        this.requireOp = requireOp;
     }
 
     public void open(Player player) {
-        if (!player.isOp()) return;
+        if (requireOp && !player.isOp()) return;
         AnvilView view = MenuType.ANVIL.create(player, title);
         view.setItem(0, ItemUtils.createDisplayItem(Material.PAPER, initialValue));
         view.setRepairCost(0);
@@ -37,12 +44,12 @@ public final class AnvilTextInputGUI {
     }
 
     void click(Player player, AnvilView view, int rawSlot) {
-        if (rawSlot != 2 || !player.isOp() || !completed.compareAndSet(false, true)) return;
+        if (rawSlot != 2 || (requireOp && !player.isOp()) || !completed.compareAndSet(false, true)) return;
         String text = view.getRenameText();
         player.closeInventory();
-        if (text != null && player.isOp()) submit.accept(text);
+        if (text != null && (!requireOp || player.isOp())) submit.accept(text);
         SchedulerUtils.runAtPlayer(player, () -> {
-            if (!player.isOp()) {
+            if (requireOp && !player.isOp()) {
                 player.closeInventory();
                 return;
             }
@@ -53,7 +60,7 @@ public final class AnvilTextInputGUI {
     void closed(Player player, AnvilView view) {
         if (!completed.compareAndSet(false, true)) return;
         SchedulerUtils.runAtPlayer(player, () -> {
-            if (!player.isOp()) {
+            if (requireOp && !player.isOp()) {
                 player.closeInventory();
                 return;
             }

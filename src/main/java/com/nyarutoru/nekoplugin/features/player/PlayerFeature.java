@@ -31,8 +31,11 @@ public class PlayerFeature extends AbstractFeature {
     private static final List<Material> DEFAULT_ALLOWED_CROPS = PlayerFeatureListener.DEFAULT_ALLOWED_CROPS;
     private static final boolean DEFAULT_HOE_REQUIRED = true;
     private static final boolean DEFAULT_REPLANT_CROPS = true;
+    private static final int DEFAULT_PUMPKIN_COST_LEVELS = 10;
+    private static final int DEFAULT_PUMPKIN_SHIFT_COUNT = 10;
 
     private PlayerFeatureListener listener;
+    private PlayerHeadListener headListener;
     private boolean afkEnabled = DEFAULT_AFK_ENABLED;
     private int afkTimeoutSeconds = DEFAULT_AFK_TIMEOUT_SECONDS;
     private boolean activityDetection = DEFAULT_ACTIVITY_DETECTION;
@@ -47,6 +50,8 @@ public class PlayerFeature extends AbstractFeature {
     private List<Material> allowedCrops = DEFAULT_ALLOWED_CROPS;
     private boolean hoeRequired = DEFAULT_HOE_REQUIRED;
     private boolean replantCrops = DEFAULT_REPLANT_CROPS;
+    private int pumpkinCostLevels = DEFAULT_PUMPKIN_COST_LEVELS;
+    private int pumpkinShiftCount = DEFAULT_PUMPKIN_SHIFT_COUNT;
 
     public PlayerFeature() {
         super("player", "Player Utilities");
@@ -96,6 +101,12 @@ public class PlayerFeature extends AbstractFeature {
         SettingDescriptor<Boolean> replant = SettingDescriptor.bool(
                 "replant-crops", "Replant harvested crops", DEFAULT_REPLANT_CROPS,
                 ApplySemantics.IMMEDIATE, this::setReplantCrops);
+        SettingDescriptor<Integer> pumpkinCost = SettingDescriptor.integer(
+                "pumpkin-cost-levels", "Levels consumed per player head", DEFAULT_PUMPKIN_COST_LEVELS,
+                1, 100, ApplySemantics.IMMEDIATE, this::setPumpkinCostLevels);
+        SettingDescriptor<Integer> pumpkinShift = SettingDescriptor.integer(
+                "pumpkin-shift-count", "Sneak presses required for player head", DEFAULT_PUMPKIN_SHIFT_COUNT,
+                2, 100, ApplySemantics.IMMEDIATE, this::setPumpkinShiftCount);
 
         register(registry, state, afk);
         register(registry, state, timeout);
@@ -111,6 +122,8 @@ public class PlayerFeature extends AbstractFeature {
         register(registry, state, crops);
         register(registry, state, hoe);
         register(registry, state, replant);
+        register(registry, state, pumpkinCost);
+        register(registry, state, pumpkinShift);
     }
 
     @Override
@@ -120,6 +133,10 @@ public class PlayerFeature extends AbstractFeature {
                 afkBroadcasts, afkPopup, monsterProtection, autoReplenish, foodFallback, cropHarvest,
                 allowedCrops, hoeRequired, replantCrops);
         registerListener(listener, plugin);
+        headListener = new PlayerHeadListener();
+        headListener.setCostLevels(pumpkinCostLevels);
+        headListener.setShiftCount(pumpkinShiftCount);
+        registerListener(headListener, plugin);
         super.onEnable(plugin);
         listener.start();
     }
@@ -128,6 +145,10 @@ public class PlayerFeature extends AbstractFeature {
     protected void cleanup() {
         if (listener != null) {
             listener.stop();
+        }
+        if (headListener != null) {
+            headListener.resetSneaks();
+            headListener = null;
         }
     }
 
@@ -214,5 +235,15 @@ public class PlayerFeature extends AbstractFeature {
     private void setReplantCrops(boolean value) {
         replantCrops = value;
         if (listener != null) listener.setReplantCrops(value);
+    }
+
+    private void setPumpkinCostLevels(int value) {
+        pumpkinCostLevels = value;
+        if (headListener != null) headListener.setCostLevels(value);
+    }
+
+    private void setPumpkinShiftCount(int value) {
+        pumpkinShiftCount = value;
+        if (headListener != null) headListener.setShiftCount(value);
     }
 }
