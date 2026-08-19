@@ -15,11 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Updates a BossBar with TPS, MSPT, and CPU usage for OP players.
+ * Updates a BossBar with MSPT and CPU usage for OP players.
  * This class is scheduled via SchedulerUtils for Folia compatibility.
  * <p>
- * On Folia: Both TPS and MSPT are region-specific per player.
- * On Paper/Spigot: Uses standard Bukkit.getTPS() and Bukkit.getAverageTickTime().
+ * On Folia: MSPT is region-specific per player.
+ * On Paper/Spigot: Uses standard Bukkit.getAverageTickTime().
  */
 public class TPSBossBarTask {
 
@@ -63,14 +63,11 @@ public class TPSBossBarTask {
                     player.hideBossBar(bossBar);
                     return;
                 }
-                // Get TPS and MSPT for this player's current region (Folia-aware)
-                double tps = ServerPerformanceUtils.getTPS(player);
-                double mspt = ServerPerformanceUtils.getMSPT(player);
+                // Runs on the player's region thread, so this is the real measured MSPT
+                double mspt = ServerPerformanceUtils.getRegionMSPT(player.getLocation());
 
                 // Format stats
-                Component title = Component.text("TPS: ")
-                        .append(Component.text(String.format("%.1f", tps), getTpsColor(tps)))
-                        .append(Component.text(" | MSPT: "))
+                Component title = Component.text("MSPT: ")
                         .append(Component.text(String.format("%.1f", mspt), getMsptColor(mspt)))
                         .append(Component.text("ms | CPU: "))
                         .append(Component.text(String.format("%.1f%%", cpuPercent), getCpuColor(cpuPercent)));
@@ -138,14 +135,6 @@ public class TPSBossBarTask {
             }
         });
         ownedTasks.add(holder[0]);
-    }
-
-    private NamedTextColor getTpsColor(double tps) {
-        if (tps >= tpsGoodThreshold)
-            return NamedTextColor.GREEN;
-        if (tps >= tpsWarningThreshold)
-            return NamedTextColor.YELLOW;
-        return NamedTextColor.RED;
     }
 
     private NamedTextColor getMsptColor(double mspt) {
