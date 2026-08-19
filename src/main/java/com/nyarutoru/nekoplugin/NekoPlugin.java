@@ -25,7 +25,6 @@ import com.nyarutoru.nekoplugin.features.mending.MendingRepairFeature;
 import com.nyarutoru.nekoplugin.features.villageroptimize.VillagerOptimizeFeature;
 import com.nyarutoru.nekoplugin.features.woodcutting.WoodcuttingFeature;
 import com.nyarutoru.nekoplugin.features.furnace.FurnaceFeature;
-import com.nyarutoru.nekoplugin.features.elytraflight.ElytraFlightFeature;
 import com.nyarutoru.nekoplugin.features.shutup.ShutUpFeature;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -68,7 +67,6 @@ public class NekoPlugin extends JavaPlugin {
         MagnetFeature magnetFeature = new MagnetFeature();
         MendingRepairFeature mendingRepairFeature = new MendingRepairFeature();
         FurnaceFeature furnaceFeature = new FurnaceFeature();
-        ElytraFlightFeature elytraFlightFeature = new ElytraFlightFeature();
         ShutUpFeature shutUpFeature = new ShutUpFeature();
 
         FeatureManager.getInstance().registerFeature(carryFeature);
@@ -86,7 +84,6 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(magnetFeature);
         FeatureManager.getInstance().registerFeature(mendingRepairFeature);
         FeatureManager.getInstance().registerFeature(furnaceFeature);
-        FeatureManager.getInstance().registerFeature(elytraFlightFeature);
         FeatureManager.getInstance().registerFeature(shutUpFeature);
 
         carryFeature.registerSettings(settingRegistry, adminState);
@@ -103,7 +100,6 @@ public class NekoPlugin extends JavaPlugin {
         magnetFeature.registerSettings(settingRegistry, adminState);
         mendingRepairFeature.registerSettings(settingRegistry, adminState);
         furnaceFeature.registerSettings(settingRegistry, adminState);
-        elytraFlightFeature.registerSettings(settingRegistry, adminState);
 
         // Register the single core command and honor persisted startup selection.
         registerCommand("neko", "Opens the Neko operator feature manager",
