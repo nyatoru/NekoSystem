@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "nekoplugin:item/shutup/enderman",
+    "bottom": "nekoplugin:item/shutup/enderman",
+    "side": "nekoplugin:item/shutup/enderman",
+    "front": "nekoplugin:item/shutup/enderman"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "nekoplugin:item/shutup/guardian",
+    "bottom": "nekoplugin:item/shutup/guardian",
+    "side": "nekoplugin:item/shutup/guardian",
+    "front": "nekoplugin:item/shutup/guardian"
+  }
+}

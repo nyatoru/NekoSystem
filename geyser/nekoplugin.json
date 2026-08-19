@@ -173,6 +173,27 @@
             "bedrock_identifier": "nekoplugin:super_furnace_10",
             "display_name": "Upgrade Furnace Tier 10",
             "bedrock_options": { "icon": "nekoplugin:super_furnace_10", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 5001,
+            "bedrock_identifier": "nekoplugin:shutup_enderman",
+            "display_name": "Shut Up Enderman",
+            "bedrock_options": { "icon": "nekoplugin:shutup_enderman", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 5002,
+            "bedrock_identifier": "nekoplugin:shutup_guardian",
+            "display_name": "Shut Up Guardian",
+            "bedrock_options": { "icon": "nekoplugin:shutup_guardian", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 5003,
+            "bedrock_identifier": "nekoplugin:shutup_iron_golem",
+            "display_name": "Shut Up Iron Golem",
+            "bedrock_options": { "icon": "nekoplugin:shutup_iron_golem", "creative_category": "items" }
           }
         ],
         "minecraft:barrel": [

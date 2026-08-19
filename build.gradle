@@ -151,7 +151,10 @@ tasks.register('prepareBedrockStaging') {
     "nekoplugin:super_furnace_7": { "textures": "textures/items/sf7_front" },
     "nekoplugin:super_furnace_8": { "textures": "textures/items/sf8_front" },
     "nekoplugin:super_furnace_9": { "textures": "textures/items/sf9_front" },
-    "nekoplugin:super_furnace_10": { "textures": "textures/items/sf10_front" }
+    "nekoplugin:super_furnace_10": { "textures": "textures/items/sf10_front" },
+    "nekoplugin:shutup_enderman": { "textures": "textures/items/enderman" },
+    "nekoplugin:shutup_guardian": { "textures": "textures/items/guardian" },
+    "nekoplugin:shutup_iron_golem": { "textures": "textures/items/iron_golem" }
   }
 }"""
         def textsDir = new File(dir, "texts")
@@ -185,6 +188,9 @@ item.nekoplugin:super_furnace_7=Upgrade Furnace Tier 7
 item.nekoplugin:super_furnace_8=Upgrade Furnace Tier 8
 item.nekoplugin:super_furnace_9=Upgrade Furnace Tier 9
 item.nekoplugin:super_furnace_10=Upgrade Furnace Tier 10
+item.nekoplugin:shutup_enderman=Shut Up Enderman
+item.nekoplugin:shutup_guardian=Shut Up Guardian
+item.nekoplugin:shutup_iron_golem=Shut Up Iron Golem
 
 ## pack description
 pack.description=NekoPlugin Hammers & Magnet — GeyserMC Bedrock Pack
@@ -222,6 +228,10 @@ tasks.register('buildBedrockPack', Zip) {
     from("src/main/resources/assets/nekoplugin/textures/item/super_furnace") {
         into "textures/items"
         include "sf*_front.png"
+    }
+    from("src/main/resources/assets/nekoplugin/textures/item/shutup") {
+        into "textures/items"
+        include "*.png"
     }
     // also include duplicate for recovery
     doLast {
@@ -410,6 +420,27 @@ tasks.register('buildGeyserMappings') {
             "bedrock_identifier": "nekoplugin:super_furnace_10",
             "display_name": "Upgrade Furnace Tier 10",
             "bedrock_options": { "icon": "nekoplugin:super_furnace_10", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 5001,
+            "bedrock_identifier": "nekoplugin:shutup_enderman",
+            "display_name": "Shut Up Enderman",
+            "bedrock_options": { "icon": "nekoplugin:shutup_enderman", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 5002,
+            "bedrock_identifier": "nekoplugin:shutup_guardian",
+            "display_name": "Shut Up Guardian",
+            "bedrock_options": { "icon": "nekoplugin:shutup_guardian", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 5003,
+            "bedrock_identifier": "nekoplugin:shutup_iron_golem",
+            "display_name": "Shut Up Iron Golem",
+            "bedrock_options": { "icon": "nekoplugin:shutup_iron_golem", "creative_category": "items" }
           }
         ],
         "minecraft:barrel": [

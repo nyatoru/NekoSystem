@@ -72,6 +72,27 @@
           "type": "minecraft:model",
           "model": "nekoplugin:item/super_furnace/sf_10"
         }
+      },
+      {
+        "when": 5001,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/shutup/enderman"
+        }
+      },
+      {
+        "when": 5002,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/shutup/guardian"
+        }
+      },
+      {
+        "when": 5003,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/shutup/iron_golem"
+        }
       }
     ],
     "fallback": {

@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "nekoplugin:item/shutup/iron_golem",
+    "bottom": "nekoplugin:item/shutup/iron_golem",
+    "side": "nekoplugin:item/shutup/iron_golem",
+    "front": "nekoplugin:item/shutup/iron_golem"
+  }
+}
