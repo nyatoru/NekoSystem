@@ -4,6 +4,7 @@ import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -402,15 +403,23 @@ public class PlayerFeatureListener implements Listener {
 
     public void setReplantCrops(boolean value) { replantCrops = value; }
 
+    private static final double AFK_POPUP_HEIGHT = 2.4;
+
     private void spawnAfkPopup(Player player) {
         UUID uuid = player.getUniqueId();
         if (afkPopups.containsKey(uuid)) return;
-        Location location = player.getEyeLocation().add(0, 2.6, 0);
+        Location location = player.getLocation().add(0, AFK_POPUP_HEIGHT, 0);
         TextDisplay display = player.getWorld().spawn(location, TextDisplay.class, d -> {
             d.setBillboard(Display.Billboard.CENTER);
             d.setAlignment(TextDisplay.TextAlignment.CENTER);
             d.setShadowed(true);
             d.setSeeThrough(false);
+            d.setDefaultBackground(true);
+            d.setLineWidth(200);
+            d.setViewRange(32.0F);
+            d.setGravity(false);
+            d.setInvulnerable(true);
+            d.setPersistent(true);
         });
         afkPopups.put(uuid, display);
         SchedulerUtils.TaskHandle task = SchedulerUtils.runAtEntityTimerTask(display, () -> {
@@ -418,12 +427,26 @@ public class PlayerFeatureListener implements Listener {
                 removePopup(player);
                 return;
             }
-            display.teleport(player.getEyeLocation().add(0, 2.6, 0));
+            display.teleport(player.getLocation().add(0, AFK_POPUP_HEIGHT, 0));
             long elapsed = System.currentTimeMillis() - lastActivity.getOrDefault(uuid, System.currentTimeMillis());
-            display.text(Component.text(afkPrefix + formatElapsed(elapsed)).color(NamedTextColor.GRAY));
+            display.text(afkPopupText(player, afkPrefix, elapsed));
         }, 0, 20);
         afkPopupTasks.put(uuid, task);
         own(task);
+    }
+
+    /** Popup text: gray prefix + bold gold name, then clock + bold yellow elapsed. */
+    static Component afkPopupText(Player player, String prefix, long elapsed) {
+        return Component.text(prefix).color(NamedTextColor.GRAY)
+                .append(Component.text(player.getName())
+                        .color(NamedTextColor.GOLD)
+                        .decoration(TextDecoration.BOLD, true))
+                .append(Component.newline())
+                .append(Component.text("⏳ ").color(NamedTextColor.YELLOW))
+                .append(Component.text("AFK for ").color(NamedTextColor.GRAY))
+                .append(Component.text(formatElapsed(elapsed))
+                        .color(NamedTextColor.YELLOW)
+                        .decoration(TextDecoration.BOLD, true));
     }
 
     private void removePopup(Player player) {
