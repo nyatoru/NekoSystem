@@ -33,9 +33,11 @@ public class PlayerFeature extends AbstractFeature {
     private static final boolean DEFAULT_REPLANT_CROPS = true;
     private static final int DEFAULT_PUMPKIN_COST_LEVELS = 10;
     private static final int DEFAULT_PUMPKIN_SHIFT_COUNT = 10;
+    private static final int DEFAULT_COORD_SHIFT_COUNT = 10;
 
     private PlayerFeatureListener listener;
     private PlayerHeadListener headListener;
+    private NetherCoordListener coordListener;
     private boolean afkEnabled = DEFAULT_AFK_ENABLED;
     private int afkTimeoutSeconds = DEFAULT_AFK_TIMEOUT_SECONDS;
     private boolean activityDetection = DEFAULT_ACTIVITY_DETECTION;
@@ -52,6 +54,7 @@ public class PlayerFeature extends AbstractFeature {
     private boolean replantCrops = DEFAULT_REPLANT_CROPS;
     private int pumpkinCostLevels = DEFAULT_PUMPKIN_COST_LEVELS;
     private int pumpkinShiftCount = DEFAULT_PUMPKIN_SHIFT_COUNT;
+    private int coordShiftCount = DEFAULT_COORD_SHIFT_COUNT;
 
     public PlayerFeature() {
         super("player", "Player Utilities");
@@ -107,6 +110,9 @@ public class PlayerFeature extends AbstractFeature {
         SettingDescriptor<Integer> pumpkinShift = SettingDescriptor.integer(
                 "pumpkin-shift-count", "Sneak presses required for player head", DEFAULT_PUMPKIN_SHIFT_COUNT,
                 2, 100, ApplySemantics.IMMEDIATE, this::setPumpkinShiftCount);
+        SettingDescriptor<Integer> coordShift = SettingDescriptor.integer(
+                "coord-shift-count", "Sneak presses required for coordinate calculation", DEFAULT_COORD_SHIFT_COUNT,
+                2, 100, ApplySemantics.IMMEDIATE, this::setCoordShiftCount);
 
         register(registry, state, afk);
         register(registry, state, timeout);
@@ -124,6 +130,7 @@ public class PlayerFeature extends AbstractFeature {
         register(registry, state, replant);
         register(registry, state, pumpkinCost);
         register(registry, state, pumpkinShift);
+        register(registry, state, coordShift);
     }
 
     @Override
@@ -137,6 +144,9 @@ public class PlayerFeature extends AbstractFeature {
         headListener.setCostLevels(pumpkinCostLevels);
         headListener.setShiftCount(pumpkinShiftCount);
         registerListener(headListener, plugin);
+        coordListener = new NetherCoordListener();
+        coordListener.setShiftCount(coordShiftCount);
+        registerListener(coordListener, plugin);
         super.onEnable(plugin);
         listener.start();
     }
@@ -149,6 +159,10 @@ public class PlayerFeature extends AbstractFeature {
         if (headListener != null) {
             headListener.resetSneaks();
             headListener = null;
+        }
+        if (coordListener != null) {
+            coordListener.resetSneaks();
+            coordListener = null;
         }
     }
 
@@ -245,5 +259,10 @@ public class PlayerFeature extends AbstractFeature {
     private void setPumpkinShiftCount(int value) {
         pumpkinShiftCount = value;
         if (headListener != null) headListener.setShiftCount(value);
+    }
+
+    private void setCoordShiftCount(int value) {
+        coordShiftCount = value;
+        if (coordListener != null) coordListener.setShiftCount(value);
     }
 }
