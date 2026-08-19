@@ -68,6 +68,9 @@ public class DrawerListener implements Listener {
                 DrawerManager.getInstance().markDirty();
                 DrawerGUI.updateBarrelInventory(drawer);
             }
+        } else if (DrawerManager.getInstance().getDrawer(location) != null) {
+            // Record survived (e.g. explosion): re-sync hopper-detection item
+            DrawerGUI.updateBarrelInventory(DrawerManager.getInstance().getDrawer(location));
         }
     }
 
@@ -359,7 +362,13 @@ public class DrawerListener implements Listener {
                 // Close all GUIs viewing this drawer
                 DrawerGUI.closeAllViewers(drawer);
 
-                // Drop the drawer item with contents
+                // Clear the barrel's real inventory so vanilla doesn't drop
+                // the hopper-detection representative item on block destroy
+                if (block.getState() instanceof org.bukkit.block.Barrel barrel) {
+                    barrel.getInventory().clear();
+                }
+
+                // Drop the drawer item with contents (DB record is removed - data rides in the item)
                 Location dropLoc = block.getLocation().add(0.5, 0.5, 0.5);
                 ItemStack drawerItem;
                 if (!drawer.isEmpty()) {
@@ -372,7 +381,6 @@ public class DrawerListener implements Listener {
                 }
                 block.getWorld().dropItemNaturally(dropLoc, drawerItem);
 
-                // Remove drawer data
                 DrawerManager.getInstance().removeDrawer(block.getLocation());
             }
         }
