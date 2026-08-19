@@ -24,6 +24,7 @@ import com.nyarutoru.nekoplugin.features.magnet.MagnetFeature;
 import com.nyarutoru.nekoplugin.features.mending.MendingRepairFeature;
 import com.nyarutoru.nekoplugin.features.villageroptimize.VillagerOptimizeFeature;
 import com.nyarutoru.nekoplugin.features.woodcutting.WoodcuttingFeature;
+import com.nyarutoru.nekoplugin.features.furnace.FurnaceFeature;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class NekoPlugin extends JavaPlugin {
@@ -64,6 +65,7 @@ public class NekoPlugin extends JavaPlugin {
         AquaCurseFeature aquaCurseFeature = new AquaCurseFeature();
         MagnetFeature magnetFeature = new MagnetFeature();
         MendingRepairFeature mendingRepairFeature = new MendingRepairFeature();
+        FurnaceFeature furnaceFeature = new FurnaceFeature();
 
         FeatureManager.getInstance().registerFeature(carryFeature);
         FeatureManager.getInstance().registerFeature(drawerFeature);
@@ -79,6 +81,7 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(aquaCurseFeature);
         FeatureManager.getInstance().registerFeature(magnetFeature);
         FeatureManager.getInstance().registerFeature(mendingRepairFeature);
+        FeatureManager.getInstance().registerFeature(furnaceFeature);
 
         carryFeature.registerSettings(settingRegistry, adminState);
         drawerFeature.registerSettings(settingRegistry, adminState);

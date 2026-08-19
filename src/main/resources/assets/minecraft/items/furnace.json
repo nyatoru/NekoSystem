@@ -1,0 +1,82 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "custom_model_data",
+    "cases": [
+      {
+        "when": 3001,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_1"
+        }
+      },
+      {
+        "when": 3002,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_2"
+        }
+      },
+      {
+        "when": 3003,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_3"
+        }
+      },
+      {
+        "when": 3004,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_4"
+        }
+      },
+      {
+        "when": 3005,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_5"
+        }
+      },
+      {
+        "when": 3006,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_6"
+        }
+      },
+      {
+        "when": 3007,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_7"
+        }
+      },
+      {
+        "when": 3008,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_8"
+        }
+      },
+      {
+        "when": 3009,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_9"
+        }
+      },
+      {
+        "when": 3010,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/super_furnace/sf_10"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:block/furnace"
+    }
+  }
+}

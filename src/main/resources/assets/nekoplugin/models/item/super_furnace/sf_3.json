@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable_with_bottom",
+  "textures": {
+    "top": "nekoplugin:item/super_furnace/sf3_top",
+    "bottom": "nekoplugin:item/super_furnace/sf3_bottom",
+    "side": "nekoplugin:item/super_furnace/sf3_side",
+    "front": "nekoplugin:item/super_furnace/sf3_front"
+  }
+}
