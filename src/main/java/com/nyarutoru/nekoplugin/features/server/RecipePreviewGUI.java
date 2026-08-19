@@ -6,6 +6,7 @@ import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -29,7 +30,9 @@ public class RecipePreviewGUI {
     private static final int ARROW_SLOT = 23;
     private static final int INFO_SLOT = 4;
     private static final int BACK_BUTTON_SLOT = 49;
-    private static final int CRAFT_BUTTON_SLOT = 53;
+    private static final int CRAFT_1_SLOT = 17;
+    private static final int CRAFT_32_SLOT = 26;
+    private static final int CRAFT_64_SLOT = 35;
     private static final Component PREVIEW_TITLE = Component.text("✦ Recipe Preview ✦")
             .color(NamedTextColor.GREEN)
             .decoration(TextDecoration.BOLD, true);
@@ -67,13 +70,25 @@ public class RecipePreviewGUI {
             });
         });
         if (canCraft) {
-            gui.addClickableSlot(CRAFT_BUTTON_SLOT, createCraftButton(true), event -> {
+            gui.addClickableSlot(CRAFT_1_SLOT, createCraftButton(1, true), event -> {
                 Player p = (Player) event.getWhoClicked();
-                craftShortcut(p, recipe);
+                craftShortcut(p, recipe, 1);
+                openPreview(p, recipe, prevState);
+            });
+            gui.addClickableSlot(CRAFT_32_SLOT, createCraftButton(32, true), event -> {
+                Player p = (Player) event.getWhoClicked();
+                craftShortcut(p, recipe, 32);
+                openPreview(p, recipe, prevState);
+            });
+            gui.addClickableSlot(CRAFT_64_SLOT, createCraftButton(64, true), event -> {
+                Player p = (Player) event.getWhoClicked();
+                craftShortcut(p, recipe, 64);
                 openPreview(p, recipe, prevState);
             });
         } else {
-            gui.setDisplayItem(CRAFT_BUTTON_SLOT, createCraftButton(false));
+            gui.setDisplayItem(CRAFT_1_SLOT, createCraftButton(1, false));
+            gui.setDisplayItem(CRAFT_32_SLOT, createCraftButton(32, false));
+            gui.setDisplayItem(CRAFT_64_SLOT, createCraftButton(64, false));
         }
         gui.open(player);
     }
@@ -128,6 +143,27 @@ public class RecipePreviewGUI {
                 else recipeBookGUI.openRecipeBook(p);
             });
         });
+        if (canCraft) {
+            gui.addClickableSlot(CRAFT_1_SLOT, createCraftButton(1, true), event -> {
+                Player p = (Player) event.getWhoClicked();
+                craftShortcutVanilla(p, recipe, 1);
+                openVanillaPreview(p, recipe, prevState);
+            });
+            gui.addClickableSlot(CRAFT_32_SLOT, createCraftButton(32, true), event -> {
+                Player p = (Player) event.getWhoClicked();
+                craftShortcutVanilla(p, recipe, 32);
+                openVanillaPreview(p, recipe, prevState);
+            });
+            gui.addClickableSlot(CRAFT_64_SLOT, createCraftButton(64, true), event -> {
+                Player p = (Player) event.getWhoClicked();
+                craftShortcutVanilla(p, recipe, 64);
+                openVanillaPreview(p, recipe, prevState);
+            });
+        } else {
+            gui.setDisplayItem(CRAFT_1_SLOT, createCraftButton(1, false));
+            gui.setDisplayItem(CRAFT_32_SLOT, createCraftButton(32, false));
+            gui.setDisplayItem(CRAFT_64_SLOT, createCraftButton(64, false));
+        }
         gui.open(player);
     }
 
@@ -232,16 +268,17 @@ public class RecipePreviewGUI {
         return Component.text("✖ Missing materials").color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false);
     }
 
-    private ItemStack createCraftButton(boolean canCraft) {
+    private ItemStack createCraftButton(int count, boolean canCraft) {
         ItemStack item = new ItemStack(canCraft ? Material.EMERALD_BLOCK : Material.BARRIER);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             if (canCraft) {
-                meta.displayName(Component.text("✔ Craft Now").color(NamedTextColor.GREEN).decoration(TextDecoration.BOLD, true).decoration(TextDecoration.ITALIC, false));
+                meta.displayName(Component.text("✔ Craft " + count).color(NamedTextColor.GREEN).decoration(TextDecoration.BOLD, true).decoration(TextDecoration.ITALIC, false));
                 meta.lore(List.of(
                         Component.text("Crafts directly from your inventory").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                        Component.text("Up to " + count + " (or as many as you have)").color(NamedTextColor.DARK_GRAY).decoration(TextDecoration.ITALIC, false),
                         Component.empty(),
-                        Component.text("Click to craft one").color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false)));
+                        Component.text("Click to craft").color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false)));
             } else {
                 meta.displayName(Component.text("✖ Cannot Craft").color(NamedTextColor.RED).decoration(TextDecoration.BOLD, true).decoration(TextDecoration.ITALIC, false));
                 meta.lore(List.of(Component.text("Gather the materials above").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
@@ -251,7 +288,13 @@ public class RecipePreviewGUI {
         return item;
     }
 
-    private void craftShortcut(Player player, CustomRecipe recipe) {
+    private void craftShortcut(Player player, CustomRecipe recipe, int maxCount) {
+        for (int n = 0; n < maxCount; n++) {
+            if (!craftShortcutOnce(player, recipe)) break;
+        }
+    }
+
+    private boolean craftShortcutOnce(Player player, CustomRecipe recipe) {
         ItemStack[] contents = player.getInventory().getContents();
         int[] rem = new int[contents.length];
         for (int i = 0; i < contents.length; i++) {
@@ -271,7 +314,7 @@ public class RecipePreviewGUI {
                 if (rem[j] <= 0) continue;
                 if (ing.matches(contents[j])) { idx = j; break; }
             }
-            if (idx == -1) return;
+            if (idx == -1) return false;
             int gridSlot = shaped ? i : shapelessSlot++;
             grid[gridSlot] = contents[idx].clone();
             grid[gridSlot].setAmount(1);
@@ -279,7 +322,7 @@ public class RecipePreviewGUI {
             consume[idx]++;
         }
         ItemStack result = recipe.getResult(grid);
-        if (result == null || result.getType() == Material.AIR) return;
+        if (result == null || result.getType() == Material.AIR) return false;
         for (int j = 0; j < contents.length; j++) {
             if (consume[j] == 0) continue;
             ItemStack s = contents[j];
@@ -287,6 +330,81 @@ public class RecipePreviewGUI {
             else player.getInventory().setItem(j, null);
         }
         giveOrDrop(player, result);
+        return true;
+    }
+
+    private void craftShortcutVanilla(Player player, Recipe recipe, int maxCount) {
+        for (int n = 0; n < maxCount; n++) {
+            if (!craftShortcutVanillaOnce(player, recipe)) break;
+        }
+    }
+
+    private boolean craftShortcutVanillaOnce(Player player, Recipe recipe) {
+        ItemStack[] contents = player.getInventory().getContents();
+        int[] rem = new int[contents.length];
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack s = contents[i];
+            rem[i] = (s != null && s.getType() != Material.AIR) ? s.getAmount() : 0;
+        }
+        ItemStack[] grid = new ItemStack[9];
+        int[] consume = new int[contents.length];
+        boolean filled = false;
+        if (recipe instanceof ShapedRecipe sr) {
+            String[] shape = sr.getShape();
+            Map<Character, RecipeChoice> map = sr.getChoiceMap();
+            for (int r = 0; r < shape.length && r < 3; r++) {
+                String row = shape[r];
+                for (int c = 0; c < row.length() && c < 3; c++) {
+                    char ch = row.charAt(c);
+                    if (ch == ' ') continue;
+                    RecipeChoice choice = map.get(ch);
+                    if (choice == null) continue;
+                    filled = true;
+                    int gridSlot = r * 3 + c;
+                    int idx = findInventoryMatch(contents, rem, choice);
+                    if (idx == -1) return false;
+                    grid[gridSlot] = contents[idx].clone();
+                    grid[gridSlot].setAmount(1);
+                    rem[idx]--;
+                    consume[idx]++;
+                }
+            }
+        } else if (recipe instanceof ShapelessRecipe sr) {
+            int gridSlot = 0;
+            for (RecipeChoice choice : sr.getChoiceList()) {
+                if (choice == null) continue;
+                filled = true;
+                int idx = findInventoryMatch(contents, rem, choice);
+                if (idx == -1) return false;
+                grid[gridSlot++] = contents[idx].clone();
+                grid[gridSlot - 1].setAmount(1);
+                rem[idx]--;
+                consume[idx]++;
+            }
+        }
+        if (!filled) return false;
+        ItemStack result = Bukkit.craftItem(grid, Bukkit.getWorlds().get(0));
+        if (result == null || result.getType() == Material.AIR) return false;
+        for (int j = 0; j < contents.length; j++) {
+            if (consume[j] == 0) continue;
+            ItemStack s = contents[j];
+            if (s.getAmount() > consume[j]) s.setAmount(s.getAmount() - consume[j]);
+            else player.getInventory().setItem(j, null);
+        }
+        giveOrDrop(player, result);
+        return true;
+    }
+
+    private int findInventoryMatch(ItemStack[] contents, int[] rem, RecipeChoice choice) {
+        for (int j = 0; j < contents.length; j++) {
+            if (rem[j] <= 0) continue;
+            ItemStack s = contents[j];
+            if (s == null) continue;
+            try {
+                if (choice.test(s)) return j;
+            } catch (Exception ignored) {}
+        }
+        return -1;
     }
 
     private void giveOrDrop(Player player, ItemStack item) {

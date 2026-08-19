@@ -169,12 +169,23 @@ public class CustomCraftingListener implements Listener {
         if (slot == RESULT_SLOT) {
             ItemStack result = inv.getItem(RESULT_SLOT);
             if (result != null && result.getType() != Material.AIR && result.getType() != Material.BARRIER) {
+                // Re-validate the grid still produces this result before letting the player take it.
+                // The displayed result updates asynchronously, so a fast client (Geyser batches packets)
+                // could otherwise grab a stale result after swapping the grid to cheaper items.
+                ItemStack current = findMatchingRecipe(inv);
+                if (current == null || !current.isSimilar(result)) {
+                    updateCraftingResult(inv);
+                    event.setCancelled(true);
+                    return;
+                }
                 if (event.isShiftClick()) craftAll(player, inv, result);
                 else {
                     ItemStack cursor = player.getItemOnCursor();
                     ItemStack resultClone = result.clone();
                     if (cursor == null || cursor.getType() == Material.AIR) {
-                        player.setItemOnCursor(resultClone);
+                        // Give directly into inventory: Bedrock/Geyser has no cursor and can drop the
+                        // carried item on close, so cursor-take would lose the crafted item.
+                        giveOrDrop(player, resultClone);
                         inv.setItem(RESULT_SLOT, createResultPlaceholder());
                         consumeCraftingMaterials(inv);
                         scheduleUpdate(player, inv);
@@ -255,7 +266,7 @@ public class CustomCraftingListener implements Listener {
         inv.setItem(RESULT_SLOT, createResultPlaceholder());
         for (int i = 0; i < maxCrafts; i++) {
             if (!canAddToInventory(player, result)) break;
-            player.getInventory().addItem(result.clone());
+            giveOrDrop(player, result.clone());
             consumeCraftingMaterials(inv);
             ItemStack newResult = findMatchingRecipe(inv);
             if (newResult == null || newResult.getType() == Material.AIR) break;
