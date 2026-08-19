@@ -78,11 +78,7 @@ public final class ShutUpItems {
 
     private void register(ShutUpType type) {
         ItemStack result = createItem(type);
-        Material ring = switch (type) {
-            case ENDERMAN -> Material.PURPUR_BLOCK;
-            case GUARDIAN -> Material.PRISMARINE;
-            case IRON_GOLEM -> Material.IRON_BLOCK;
-        };
+        Material ring = Material.WHITE_WOOL;
         Material center = switch (type) {
             case ENDERMAN -> Material.ENDER_PEARL;
             case GUARDIAN -> Material.PRISMARINE_CRYSTALS;
