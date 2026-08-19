@@ -194,6 +194,7 @@ public class PlayerFeatureListener implements Listener {
         Component originalListName = originalPlayerListNames.remove(uuid);
         if (originalDisplay != null) player.displayName(originalDisplay);
         if (originalListName != null) player.playerListName(originalListName);
+        player.setSleepingIgnored(false);
         player.getPersistentDataContainer().remove(afkKey);
     }
 
@@ -243,6 +244,7 @@ public class PlayerFeatureListener implements Listener {
                 afkStatus.remove(uuid);
                 return;
             }
+            player.setSleepingIgnored(true);
             // Store original display name and player list name with null safety
             Component currentDisplayName = player.displayName();
             Component currentPlayerListName = player.playerListName();
@@ -271,6 +273,7 @@ public class PlayerFeatureListener implements Listener {
         } else {
             restoreDisplayName(player);
             removePopup(player);
+            player.setSleepingIgnored(false);
 
             // Remove metadata
             player.getPersistentDataContainer().remove(afkKey);
@@ -407,6 +410,7 @@ public class PlayerFeatureListener implements Listener {
             d.setBillboard(Display.Billboard.CENTER);
             d.setAlignment(TextDisplay.TextAlignment.CENTER);
             d.setShadowed(true);
+            d.setSeeThrough(false);
         });
         afkPopups.put(uuid, display);
         SchedulerUtils.TaskHandle task = SchedulerUtils.runAtEntityTimerTask(display, () -> {
