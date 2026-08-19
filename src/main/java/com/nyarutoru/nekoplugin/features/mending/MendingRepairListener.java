@@ -41,6 +41,7 @@ public final class MendingRepairListener implements Listener {
         if (action == Action.RIGHT_CLICK_BLOCK && block != null && event.useInteractedBlock() == Event.Result.ALLOW) return;
 
         Player player = event.getPlayer();
+        if (!player.isSneaking()) return;
         ItemStack item = player.getInventory().getItemInMainHand();
         if (!isRepairable(item)) {
             item = player.getInventory().getItemInOffHand();
@@ -51,6 +52,9 @@ public final class MendingRepairListener implements Listener {
         int damage = ItemUtils.getDurability(item);
         RepairCost cost = RepairCost.compute(damage, availableXp, repairRate);
         if (cost.xpCost() <= 0) return;
+
+        // Right-click on armor would otherwise trigger vanilla equip/swap logic.
+        event.setUseItemInHand(Event.Result.DENY);
 
         ItemMeta meta = item.getItemMeta();
         if (meta instanceof Damageable damageable) {
