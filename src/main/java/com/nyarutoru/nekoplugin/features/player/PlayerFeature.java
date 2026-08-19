@@ -23,6 +23,7 @@ public class PlayerFeature extends AbstractFeature {
     private static final boolean DEFAULT_AFK_DISPLAY = true;
     private static final String DEFAULT_AFK_PREFIX = "[AFK] ";
     private static final boolean DEFAULT_AFK_BROADCASTS = true;
+    private static final boolean DEFAULT_AFK_POPUP = true;
     private static final boolean DEFAULT_MONSTER_PROTECTION = true;
     private static final boolean DEFAULT_AUTO_REPLENISH = true;
     private static final boolean DEFAULT_FOOD_FALLBACK = true;
@@ -38,6 +39,7 @@ public class PlayerFeature extends AbstractFeature {
     private boolean afkDisplay = DEFAULT_AFK_DISPLAY;
     private String afkPrefix = DEFAULT_AFK_PREFIX;
     private boolean afkBroadcasts = DEFAULT_AFK_BROADCASTS;
+    private boolean afkPopup = DEFAULT_AFK_POPUP;
     private boolean monsterProtection = DEFAULT_MONSTER_PROTECTION;
     private boolean autoReplenish = DEFAULT_AUTO_REPLENISH;
     private boolean foodFallback = DEFAULT_FOOD_FALLBACK;
@@ -70,6 +72,9 @@ public class PlayerFeature extends AbstractFeature {
         SettingDescriptor<Boolean> broadcasts = SettingDescriptor.bool(
                 "afk-broadcasts", "AFK broadcast messages", DEFAULT_AFK_BROADCASTS,
                 ApplySemantics.IMMEDIATE, this::setAfkBroadcasts);
+        SettingDescriptor<Boolean> popup = SettingDescriptor.bool(
+                "afk-popup", "AFK text display popup", DEFAULT_AFK_POPUP,
+                ApplySemantics.IMMEDIATE, this::setAfkPopup);
         SettingDescriptor<Boolean> protection = SettingDescriptor.bool(
                 "monster-protection", "AFK monster protection", DEFAULT_MONSTER_PROTECTION,
                 ApplySemantics.IMMEDIATE, this::setMonsterProtection);
@@ -98,6 +103,7 @@ public class PlayerFeature extends AbstractFeature {
         register(registry, state, display);
         register(registry, state, prefix);
         register(registry, state, broadcasts);
+        register(registry, state, popup);
         register(registry, state, protection);
         register(registry, state, replenish);
         register(registry, state, food);
@@ -111,7 +117,7 @@ public class PlayerFeature extends AbstractFeature {
     public void onEnable(NekoPlugin plugin) {
         if (listener == null) listener = new PlayerFeatureListener(plugin, this::ownTask);
         listener.configure(afkEnabled, afkTimeoutSeconds, activityDetection, afkDisplay, afkPrefix,
-                afkBroadcasts, monsterProtection, autoReplenish, foodFallback, cropHarvest,
+                afkBroadcasts, afkPopup, monsterProtection, autoReplenish, foodFallback, cropHarvest,
                 allowedCrops, hoeRequired, replantCrops);
         registerListener(listener, plugin);
         super.onEnable(plugin);
@@ -164,6 +170,11 @@ public class PlayerFeature extends AbstractFeature {
     private void setAfkBroadcasts(boolean value) {
         afkBroadcasts = value;
         if (listener != null) listener.setAfkBroadcasts(value);
+    }
+
+    private void setAfkPopup(boolean value) {
+        afkPopup = value;
+        if (listener != null) listener.setAfkPopup(value);
     }
 
     private void setMonsterProtection(boolean value) {

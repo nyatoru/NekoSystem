@@ -68,6 +68,24 @@ tasks.register('buildResourcePack', Zip) {
         include 'pack.mcmeta'
         include 'assets/**'
     }
+    // Gradle Zip writes directory entries for non-empty dirs; the client rejects them
+    // with "Non pack entries found", so strip all dir entries post-hoc.
+    doLast {
+        def src = archiveFile.get().asFile
+        def out = new File(src.parentFile, src.name + '.nodirs')
+        def zin = new java.util.zip.ZipFile(src)
+        def zout = new java.util.zip.ZipOutputStream(new BufferedOutputStream(new FileOutputStream(out)))
+        zin.entries().each { entry ->
+            if (entry.isDirectory()) return
+            zout.putNextEntry(new java.util.zip.ZipEntry(entry.name))
+            zin.getInputStream(entry).withCloseable { zout << it }
+            zout.closeEntry()
+        }
+        zout.close()
+        zin.close()
+        src.delete()
+        out.renameTo(src)
+    }
 }
 build.dependsOn buildResourcePack
 

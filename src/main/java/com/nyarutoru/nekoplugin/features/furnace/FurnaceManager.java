@@ -24,9 +24,17 @@ public class FurnaceManager {
 
     private final ConcurrentHashMap<Location, Integer> furnaces = new ConcurrentHashMap<>();
     private SchedulerUtils.TaskHandle task;
+    private volatile double speedScale = 1.0;
 
     public static FurnaceManager getInstance() {
         return INSTANCE;
+    }
+
+    public void setSpeedScale(double value) {
+        if (!Double.isFinite(value) || value < 0.0 || value > 10.0) {
+            throw new IllegalArgumentException("Speed scale must be between 0 and 10");
+        }
+        speedScale = value;
     }
 
     public void start() {
@@ -72,7 +80,7 @@ public class FurnaceManager {
             return;
         }
 
-        int extra = PERIOD_TICKS * (tier.getSpeedMultiplier() - 1);
+        int extra = (int) Math.round(PERIOD_TICKS * (tier.getSpeedMultiplier() - 1) * speedScale);
         if (extra <= 0 || furnace.getBurnTime() <= 0)
             return;
 

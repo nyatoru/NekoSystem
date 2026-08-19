@@ -27,4 +27,10 @@ class RepairCostTest {
         assertEquals(new RepairCost(0, 0), RepairCost.compute(10, 0));
         assertEquals(new RepairCost(0, 0), RepairCost.compute(0, 0));
     }
+
+    @Test
+    void customRepairRateChangesEconomics() {
+        assertEquals(new RepairCost(3, 12), RepairCost.compute(10, 100, 4));
+        assertEquals(new RepairCost(3, 3), RepairCost.compute(10, 3, 1));
+    }
 }

@@ -29,6 +29,7 @@ public class RecipePreviewGUI {
     private static final int ARROW_SLOT = 23;
     private static final int INFO_SLOT = 4;
     private static final int BACK_BUTTON_SLOT = 49;
+    private static final int CRAFT_BUTTON_SLOT = 53;
     private static final Component PREVIEW_TITLE = Component.text("✦ Recipe Preview ✦")
             .color(NamedTextColor.GREEN)
             .decoration(TextDecoration.BOLD, true);
@@ -48,6 +49,7 @@ public class RecipePreviewGUI {
     public void openPreview(Player player, CustomRecipe recipe, RecipeBookGUI.GUIState prevState) {
         PreviewGUI gui = new PreviewGUI(54, PREVIEW_TITLE);
         gui.fillWithBlackGlass();
+        boolean canCraft = recipeBookGUI.canCraftCustom(player, recipe);
         CustomRecipe.Ingredient[] ingredients = recipe.getIngredients();
         for (int i = 0; i < CRAFTING_SLOTS.length; i++) {
             ItemStack ingredient = ingredientToItemStack(ingredients[i]);
@@ -55,7 +57,7 @@ public class RecipePreviewGUI {
         }
         gui.setDisplayItem(ARROW_SLOT, createArrowItem());
         gui.setDisplayItem(RESULT_SLOT, recipe.getResult().clone());
-        gui.setDisplayItem(INFO_SLOT, createRecipeInfoItem(recipe));
+        gui.setDisplayItem(INFO_SLOT, createRecipeInfoItem(recipe, canCraft));
         gui.setBackButton(BACK_BUTTON_SLOT, event -> {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
@@ -64,12 +66,22 @@ public class RecipePreviewGUI {
                 else recipeBookGUI.openRecipeBook(p);
             });
         });
+        if (canCraft) {
+            gui.addClickableSlot(CRAFT_BUTTON_SLOT, createCraftButton(true), event -> {
+                Player p = (Player) event.getWhoClicked();
+                craftShortcut(p, recipe);
+                openPreview(p, recipe, prevState);
+            });
+        } else {
+            gui.setDisplayItem(CRAFT_BUTTON_SLOT, createCraftButton(false));
+        }
         gui.open(player);
     }
 
     public void openVanillaPreview(Player player, Recipe recipe, RecipeBookGUI.GUIState prevState) {
         PreviewGUI gui = new PreviewGUI(54, PREVIEW_TITLE);
         gui.fillWithBlackGlass();
+        boolean canCraft = recipeBookGUI.canCraftVanilla(player, recipe);
 
         // Fill grid based on vanilla recipe type
         // First clear crafting slots to gray pane, then fill with ingredients
@@ -107,7 +119,7 @@ public class RecipePreviewGUI {
         } catch (Exception ignored) {
             gui.setDisplayItem(RESULT_SLOT, new ItemStack(Material.BARRIER));
         }
-        gui.setDisplayItem(INFO_SLOT, createVanillaInfoItem(recipe));
+        gui.setDisplayItem(INFO_SLOT, createVanillaInfoItem(recipe, canCraft));
         gui.setBackButton(BACK_BUTTON_SLOT, event -> {
             Player p = (Player) event.getWhoClicked();
             p.closeInventory();
@@ -177,22 +189,24 @@ public class RecipePreviewGUI {
         return item;
     }
 
-    private ItemStack createRecipeInfoItem(CustomRecipe recipe) {
+    private ItemStack createRecipeInfoItem(CustomRecipe recipe, boolean canCraft) {
         ItemStack item = new ItemStack(Material.CRAFTING_TABLE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(Component.text("Recipe: " + recipe.getId()).color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
-            List<Component> lore = List.of(
+            List<Component> lore = new java.util.ArrayList<>(List.of(
                     Component.empty(),
                     Component.text("Category: " + recipe.getCategory()).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
-                    Component.text("Type: " + recipe.getShape().name()).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                    Component.text("Type: " + recipe.getShape().name()).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.empty()));
+            lore.add(createCraftableStatus(canCraft));
             meta.lore(lore);
             item.setItemMeta(meta);
         }
         return item;
     }
 
-    private ItemStack createVanillaInfoItem(Recipe recipe) {
+    private ItemStack createVanillaInfoItem(Recipe recipe, boolean canCraft) {
         ItemStack item = new ItemStack(Material.CRAFTING_TABLE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
@@ -201,13 +215,82 @@ public class RecipePreviewGUI {
             else if (recipe instanceof ShapelessRecipe sr) key = sr.getKey().toString();
             String type = recipe.getClass().getSimpleName();
             meta.displayName(Component.text("Recipe: " + key).color(NamedTextColor.GOLD).decoration(TextDecoration.ITALIC, false));
-            List<Component> lore = List.of(
+            List<Component> lore = new java.util.ArrayList<>(List.of(
                     Component.empty(),
                     Component.text("Category: vanilla").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
-                    Component.text("Type: " + type).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
+                    Component.text("Type: " + type).color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                    Component.empty()));
+            lore.add(createCraftableStatus(canCraft));
             meta.lore(lore);
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private Component createCraftableStatus(boolean canCraft) {
+        if (canCraft) return Component.text("✔ Craftable — materials in inventory").color(NamedTextColor.GREEN).decoration(TextDecoration.ITALIC, false);
+        return Component.text("✖ Missing materials").color(NamedTextColor.RED).decoration(TextDecoration.ITALIC, false);
+    }
+
+    private ItemStack createCraftButton(boolean canCraft) {
+        ItemStack item = new ItemStack(canCraft ? Material.EMERALD_BLOCK : Material.BARRIER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            if (canCraft) {
+                meta.displayName(Component.text("✔ Craft Now").color(NamedTextColor.GREEN).decoration(TextDecoration.BOLD, true).decoration(TextDecoration.ITALIC, false));
+                meta.lore(List.of(
+                        Component.text("Crafts directly from your inventory").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false),
+                        Component.empty(),
+                        Component.text("Click to craft one").color(NamedTextColor.YELLOW).decoration(TextDecoration.ITALIC, false)));
+            } else {
+                meta.displayName(Component.text("✖ Cannot Craft").color(NamedTextColor.RED).decoration(TextDecoration.BOLD, true).decoration(TextDecoration.ITALIC, false));
+                meta.lore(List.of(Component.text("Gather the materials above").color(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false)));
+            }
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private void craftShortcut(Player player, CustomRecipe recipe) {
+        ItemStack[] contents = player.getInventory().getContents();
+        int[] rem = new int[contents.length];
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack s = contents[i];
+            rem[i] = (s != null && s.getType() != Material.AIR) ? s.getAmount() : 0;
+        }
+        CustomRecipe.Ingredient[] ingredients = recipe.getIngredients();
+        ItemStack[] grid = new ItemStack[9];
+        int[] consume = new int[contents.length];
+        boolean shaped = recipe.getShape() == CustomRecipe.RecipeShape.SHAPED;
+        int shapelessSlot = 0;
+        for (int i = 0; i < 9; i++) {
+            CustomRecipe.Ingredient ing = ingredients[i];
+            if (ing.isEmpty()) continue;
+            int idx = -1;
+            for (int j = 0; j < contents.length; j++) {
+                if (rem[j] <= 0) continue;
+                if (ing.matches(contents[j])) { idx = j; break; }
+            }
+            if (idx == -1) return;
+            int gridSlot = shaped ? i : shapelessSlot++;
+            grid[gridSlot] = contents[idx].clone();
+            grid[gridSlot].setAmount(1);
+            rem[idx]--;
+            consume[idx]++;
+        }
+        ItemStack result = recipe.getResult(grid);
+        if (result == null || result.getType() == Material.AIR) return;
+        for (int j = 0; j < contents.length; j++) {
+            if (consume[j] == 0) continue;
+            ItemStack s = contents[j];
+            if (s.getAmount() > consume[j]) s.setAmount(s.getAmount() - consume[j]);
+            else player.getInventory().setItem(j, null);
+        }
+        giveOrDrop(player, result);
+    }
+
+    private void giveOrDrop(Player player, ItemStack item) {
+        java.util.HashMap<Integer, ItemStack> leftover = player.getInventory().addItem(item);
+        for (ItemStack l : leftover.values()) player.getWorld().dropItemNaturally(player.getLocation(), l);
     }
 }

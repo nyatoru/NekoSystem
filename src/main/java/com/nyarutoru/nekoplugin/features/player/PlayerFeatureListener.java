@@ -11,7 +11,9 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Ageable;
+import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -76,6 +78,7 @@ public class PlayerFeatureListener implements Listener {
     private volatile boolean afkDisplay = true;
     private volatile String afkPrefix = "[AFK] ";
     private volatile boolean afkBroadcasts = true;
+    private volatile boolean afkPopup = true;
     private volatile boolean monsterProtection = true;
     private volatile boolean autoReplenish = true;
     private volatile boolean foodFallback = true;
@@ -93,6 +96,9 @@ public class PlayerFeatureListener implements Listener {
     private final Map<UUID, Component> originalPlayerListNames = new ConcurrentHashMap<>();
     // Store last known location for head rotation tracking
     private final Map<UUID, Location> lastKnownLocation = new ConcurrentHashMap<>();
+    // TextDisplay popup showing elapsed AFK time above the player
+    private final Map<UUID, TextDisplay> afkPopups = new ConcurrentHashMap<>();
+    private final Map<UUID, SchedulerUtils.TaskHandle> afkPopupTasks = new ConcurrentHashMap<>();
     private NamespacedKey afkKey;
 
     public PlayerFeatureListener(NekoPlugin plugin, Consumer<SchedulerUtils.TaskHandle> taskOwner) {
@@ -103,7 +109,7 @@ public class PlayerFeatureListener implements Listener {
 
     public void configure(boolean afkEnabled, int afkTimeoutSeconds, boolean activityDetection,
                            boolean afkDisplay, String afkPrefix, boolean afkBroadcasts,
-                           boolean monsterProtection, boolean autoReplenish, boolean foodFallback,
+                           boolean afkPopup, boolean monsterProtection, boolean autoReplenish, boolean foodFallback,
                            boolean cropHarvest, List<Material> allowedCrops, boolean hoeRequired,
                            boolean replantCrops) {
         this.afkEnabled = afkEnabled;
@@ -112,6 +118,7 @@ public class PlayerFeatureListener implements Listener {
         this.afkDisplay = afkDisplay;
         this.afkPrefix = afkPrefix;
         this.afkBroadcasts = afkBroadcasts;
+        this.afkPopup = afkPopup;
         this.monsterProtection = monsterProtection;
         this.autoReplenish = autoReplenish;
         this.foodFallback = foodFallback;
@@ -154,6 +161,7 @@ public class PlayerFeatureListener implements Listener {
             UUID uuid = player.getUniqueId();
             Component originalDisplay = originalDisplayNames.remove(uuid);
             Component originalListName = originalPlayerListNames.remove(uuid);
+            removePopup(player);
             SchedulerUtils.TaskHandle[] holder = new SchedulerUtils.TaskHandle[1];
             holder[0] = SchedulerUtils.runAtPlayerTask(player, () -> {
                 cleanupTasks.remove(holder[0]);
@@ -257,9 +265,12 @@ public class PlayerFeatureListener implements Listener {
                 player.getPersistentDataContainer().set(afkKey, PersistentDataType.BYTE, (byte) 1);
             }
 
+            if (afkPopup) spawnAfkPopup(player);
+
             if (afkBroadcasts) Bukkit.broadcast(Component.text(player.getName() + " is now AFK").color(NamedTextColor.GRAY));
         } else {
             restoreDisplayName(player);
+            removePopup(player);
 
             // Remove metadata
             player.getPersistentDataContainer().remove(afkKey);
@@ -296,6 +307,7 @@ public class PlayerFeatureListener implements Listener {
             for (Player player : Bukkit.getOnlinePlayers()) {
                 schedulePlayer(player, expectedGeneration, () -> {
                     restoreAfkState(player);
+                    removePopup(player);
                     player.getPersistentDataContainer().remove(afkKey);
                     afkStatus.remove(player.getUniqueId());
                 });
@@ -353,6 +365,20 @@ public class PlayerFeatureListener implements Listener {
 
     public void setAfkBroadcasts(boolean value) { afkBroadcasts = value; }
 
+    public void setAfkPopup(boolean value) {
+        afkPopup = value;
+        long expectedGeneration = generation.get();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            schedulePlayer(player, expectedGeneration, () -> {
+                if (value) {
+                    if (afkStatus.getOrDefault(player.getUniqueId(), false)) spawnAfkPopup(player);
+                } else {
+                    removePopup(player);
+                }
+            });
+        }
+    }
+
     public void setMonsterProtection(boolean value) { monsterProtection = value; }
 
     public void setAutoReplenish(boolean value) {
@@ -372,6 +398,49 @@ public class PlayerFeatureListener implements Listener {
     public void setHoeRequired(boolean value) { hoeRequired = value; }
 
     public void setReplantCrops(boolean value) { replantCrops = value; }
+
+    private void spawnAfkPopup(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (afkPopups.containsKey(uuid)) return;
+        Location location = player.getEyeLocation().add(0, 2.6, 0);
+        TextDisplay display = player.getWorld().spawn(location, TextDisplay.class, d -> {
+            d.setBillboard(Display.Billboard.CENTER);
+            d.setAlignment(TextDisplay.TextAlignment.CENTER);
+            d.setShadowed(true);
+        });
+        afkPopups.put(uuid, display);
+        SchedulerUtils.TaskHandle task = SchedulerUtils.runAtEntityTimerTask(display, () -> {
+            if (!running || !player.isOnline() || !afkStatus.getOrDefault(uuid, false) || afkPopups.get(uuid) != display) {
+                removePopup(player);
+                return;
+            }
+            display.teleport(player.getEyeLocation().add(0, 2.6, 0));
+            long elapsed = System.currentTimeMillis() - lastActivity.getOrDefault(uuid, System.currentTimeMillis());
+            display.text(Component.text(afkPrefix + formatElapsed(elapsed)).color(NamedTextColor.GRAY));
+        }, 0, 20);
+        afkPopupTasks.put(uuid, task);
+        own(task);
+    }
+
+    private void removePopup(Player player) {
+        UUID uuid = player.getUniqueId();
+        SchedulerUtils.TaskHandle task = afkPopupTasks.remove(uuid);
+        if (task != null) cancelTask(task);
+        TextDisplay display = afkPopups.remove(uuid);
+        if (display != null && display.isValid()) {
+            SchedulerUtils.runAtEntity(display, display::remove);
+        }
+    }
+
+    static String formatElapsed(long millis) {
+        long totalSeconds = Math.max(0, millis) / 1000;
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        if (hours > 0) return hours + "h " + minutes + "m";
+        if (minutes > 0) return minutes + "m " + seconds + "s";
+        return seconds + "s";
+    }
 
     private void rescheduleAfkTimer() {
         if (!running) return;
@@ -539,6 +608,7 @@ public class PlayerFeatureListener implements Listener {
         Set<SchedulerUtils.TaskHandle> tasks = delayedTasks.remove(uuid);
         if (tasks != null) for (SchedulerUtils.TaskHandle task : tasks) cancelTask(task);
         restoreAfkState(player);
+        removePopup(player);
         lastActivity.remove(uuid);
         afkStatus.remove(uuid);
         lastKnownLocation.remove(uuid);

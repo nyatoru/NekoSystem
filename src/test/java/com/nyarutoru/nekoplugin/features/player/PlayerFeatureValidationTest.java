@@ -43,6 +43,15 @@ class PlayerFeatureValidationTest {
     }
 
     @Test
+    void testFormatElapsed() {
+        assertEquals("0s", PlayerFeatureListener.formatElapsed(0));
+        assertEquals("45s", PlayerFeatureListener.formatElapsed(45_000));
+        assertEquals("5m 12s", PlayerFeatureListener.formatElapsed(5 * 60_000 + 12_000));
+        assertEquals("1h 5m", PlayerFeatureListener.formatElapsed(60 * 60_000 + 5 * 60_000));
+        assertEquals("0s", PlayerFeatureListener.formatElapsed(-1000));
+    }
+
+    @Test
     void testFeatureLifecycle() {
         PlayerFeature feature = new PlayerFeature();
         

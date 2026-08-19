@@ -24,6 +24,13 @@ import org.bukkit.inventory.meta.ItemMeta;
  */
 public final class MendingRepairListener implements Listener {
 
+    private volatile int repairRate = 2;
+
+    public void setRepairRate(int rate) {
+        if (rate < 1 || rate > 64) throw new IllegalArgumentException("Repair rate must be between 1 and 64");
+        repairRate = rate;
+    }
+
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -41,7 +48,7 @@ public final class MendingRepairListener implements Listener {
 
         int availableXp = PlayerExpUtils.getCurrentExp(player);
         int damage = ItemUtils.getDurability(item);
-        RepairCost cost = RepairCost.compute(damage, availableXp);
+        RepairCost cost = RepairCost.compute(damage, availableXp, repairRate);
         if (cost.xpCost() <= 0) return;
 
         ItemMeta meta = item.getItemMeta();

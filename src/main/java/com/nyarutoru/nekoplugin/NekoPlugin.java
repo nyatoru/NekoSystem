@@ -95,6 +95,8 @@ public class NekoPlugin extends JavaPlugin {
         treeFellerFeature.registerSettings(settingRegistry, adminState);
         villagerOptimizeFeature.registerSettings(settingRegistry, adminState);
         magnetFeature.registerSettings(settingRegistry, adminState);
+        mendingRepairFeature.registerSettings(settingRegistry, adminState);
+        furnaceFeature.registerSettings(settingRegistry, adminState);
 
         // Register the single core command and honor persisted startup selection.
         registerCommand("neko", "Opens the Neko operator feature manager",

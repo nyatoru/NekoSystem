@@ -104,6 +104,24 @@ public final class SchedulerUtils {
         runAtEntityLaterTask(entity, task, delayTicks);
     }
 
+    public static TaskHandle runAtEntityTimerTask(Entity entity, Runnable task, long delayTicks, long periodTicks) {
+        if (!isPluginEnabled()) return dummyTask();
+        if (entity == null) return dummyTask();
+        try {
+            if (IS_FOLIA) {
+                long actualDelay = Math.max(1, delayTicks);
+                try {
+                    return folia(entity.getScheduler().runAtFixedRate(getPlugin(), ignored -> task.run(), null, actualDelay, periodTicks));
+                } catch (UnsupportedOperationException | NoSuchMethodError exception) {
+                    return runGlobalTimerTask(task, actualDelay, periodTicks);
+                }
+            }
+            return bukkit(Bukkit.getScheduler().runTaskTimer(getPlugin(), task, delayTicks, periodTicks));
+        } catch (Exception ignored) {
+            return dummyTask();
+        }
+    }
+
     // ── PlayerScheduler ──────────────────────────────────────────────
     // Folia/Paper 26.2 exposes player scheduling via EntityScheduler (Player extends Entity)
     // but dedicated PlayerScheduler was added in newer Paper builds as

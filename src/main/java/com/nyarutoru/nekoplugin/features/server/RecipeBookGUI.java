@@ -115,7 +115,7 @@ public class RecipeBookGUI implements Listener {
 
     // ========== Craftable checks ==========
 
-    private boolean canCraftCustom(Player player, CustomRecipe recipe) {
+    boolean canCraftCustom(Player player, CustomRecipe recipe) {
         CustomRecipe.Ingredient[] ingredients = recipe.getIngredients();
         boolean has = false;
         for (CustomRecipe.Ingredient ing : ingredients) if (!ing.isEmpty()) { has = true; break; }
@@ -140,7 +140,7 @@ public class RecipeBookGUI implements Listener {
         return true;
     }
 
-    private boolean canCraftVanilla(Player player, Recipe recipe) {
+    boolean canCraftVanilla(Player player, Recipe recipe) {
         List<RecipeChoice> required = new ArrayList<>();
         if (recipe instanceof ShapedRecipe sr) {
             String[] shape = sr.getShape();
