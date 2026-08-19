@@ -149,6 +149,11 @@ public class ServerPerformanceUtils {
 
     /**
      * Gets region MSPT using reflection for Folia compatibility.
+     * <p>
+     * The old Folia API returned a {@code double[]} (5s, 15s, 1m, 5m, 15m) for a location;
+     * current Folia (26.2) removed the region MSPT method entirely, so there is no per-region
+     * MSPT to read. In that case the MSPT is derived from the region TPS ({@code 1000 / tps}),
+     * which is the only valid region-scaled MSPT approximation Folia exposes.
      *
      * @param location The location to get MSPT for
      * @return MSPT value or default if not available
@@ -157,14 +162,15 @@ public class ServerPerformanceUtils {
         if (getRegionMSPTMethod != null) {
             try {
                 Object result = getRegionMSPTMethod.invoke(Bukkit.getServer(), location);
-                if (result instanceof Number) {
-                    return ((Number) result).doubleValue();
+                if (result instanceof double[] array && array.length > 0) {
+                    return array[0];
                 }
             } catch (Exception e) {
                 // Fall through to default
             }
         }
-        return 50.0;
+        double tps = getTPS(location);
+        return tps > 0.0 ? 1000.0 / tps : 50.0;
     }
 
     /**

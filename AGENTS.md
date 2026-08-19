@@ -45,6 +45,7 @@ Prefer `./gradlew` over `build.sh` (needs system `gradle`). `build` already depe
 ## Gotchas
 
 - **Scheduling/Folia:** never mutate world/block/entity/inventory/player off main/region thread. Use `SchedulerUtils` (`runAtEntity`/`runAtLocation`/`runGlobal`/`runAsync` + `*Later`/`*Timer` → `TaskHandle`) not `BukkitScheduler`. Folia detection via `RegionizedServer` class; shutdown returns dummy cancelled handle.
+- **Folia region MSPT:** no `getRegionMSPT` API — old Folia returned `double[]` (not `Number`), 26.2 removed it. `ServerPerformanceUtils.getMSPT(Location)` handles `double[]` and otherwise derives region MSPT from region TPS (`1000/tps`); `getRegionTPS` returns `double[]` ordered (5s, 15s, 1m, 5m, 15m), index 0 used.
 - **DB:** use `DatabaseManager.getConnection(featureName)` / `createTable`, not raw connections. AquaCurse bypasses DB (flat `aqua-curse.yml`).
 - **Config:** `paper-plugin.yml` is metadata-only; TreeFeller etc. hardcode config in Java — inspect impl before assuming YAML/reload.
 - **Paper API:** version is `build.gradle` + `paper-plugin.yml` (`26.2`) — **always use `26.2` docs** `https://jd.papermc.io/paper/26.2/` for any API/doc search (never `1.21.4` or other versions); verify unfamiliar APIs via that + WebSearch; prefer Adventure `Component`/`MiniMessage` over legacy codes. `QWEN.md`/`PLANS.md` are stale/historical — trust executable sources.
