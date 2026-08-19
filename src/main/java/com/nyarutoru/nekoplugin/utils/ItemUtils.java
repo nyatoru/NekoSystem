@@ -70,6 +70,13 @@ public class ItemUtils {
     }
 
     /**
+     * Checks if the item is shears.
+     */
+    public static boolean isShears(ItemStack item) {
+        return item != null && item.getType() == Material.SHEARS;
+    }
+
+    /**
      * Checks if the item is any type of tool.
      */
     public static boolean isTool(ItemStack item) {

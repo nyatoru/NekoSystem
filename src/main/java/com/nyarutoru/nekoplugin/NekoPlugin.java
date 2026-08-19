@@ -17,7 +17,7 @@ import com.nyarutoru.nekoplugin.features.hammer.HammerFeature;
 import com.nyarutoru.nekoplugin.features.oreexcavation.OreExcavationFeature;
 import com.nyarutoru.nekoplugin.features.player.PlayerFeature;
 import com.nyarutoru.nekoplugin.features.server.ServerFeature;
-import com.nyarutoru.nekoplugin.features.tool.SandExcavationFeature;
+import com.nyarutoru.nekoplugin.features.tool.ToolFeature;
 import com.nyarutoru.nekoplugin.features.treefeller.TreeFellerFeature;
 import com.nyarutoru.nekoplugin.features.curse.AquaCurseFeature;
 import com.nyarutoru.nekoplugin.features.magnet.MagnetFeature;
@@ -56,7 +56,7 @@ public class NekoPlugin extends JavaPlugin {
         DrawerFeature drawerFeature = new DrawerFeature();
         GravesFeature gravesFeature = new GravesFeature();
         OreExcavationFeature oreExcavationFeature = new OreExcavationFeature();
-        SandExcavationFeature sandExcavationFeature = new SandExcavationFeature();
+        ToolFeature toolFeature = new ToolFeature();
         HammerFeature hammerFeature = new HammerFeature();
         PlayerFeature playerFeature = new PlayerFeature();
         ServerFeature serverFeature = new ServerFeature();
@@ -73,7 +73,7 @@ public class NekoPlugin extends JavaPlugin {
         FeatureManager.getInstance().registerFeature(drawerFeature);
         FeatureManager.getInstance().registerFeature(gravesFeature);
         FeatureManager.getInstance().registerFeature(oreExcavationFeature);
-        FeatureManager.getInstance().registerFeature(sandExcavationFeature);
+        FeatureManager.getInstance().registerFeature(toolFeature);
         FeatureManager.getInstance().registerFeature(hammerFeature);
         FeatureManager.getInstance().registerFeature(playerFeature);
         FeatureManager.getInstance().registerFeature(serverFeature);
@@ -90,7 +90,7 @@ public class NekoPlugin extends JavaPlugin {
         drawerFeature.registerSettings(settingRegistry, adminState);
         gravesFeature.registerSettings(settingRegistry, adminState);
         oreExcavationFeature.registerSettings(settingRegistry, adminState);
-        sandExcavationFeature.registerSettings(settingRegistry, adminState);
+        toolFeature.registerSettings(settingRegistry, adminState);
         hammerFeature.registerSettings(settingRegistry, adminState);
         playerFeature.registerSettings(settingRegistry, adminState);
         serverFeature.registerSettings(settingRegistry, adminState);

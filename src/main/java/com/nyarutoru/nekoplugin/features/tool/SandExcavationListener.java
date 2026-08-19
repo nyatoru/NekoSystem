@@ -61,17 +61,17 @@ public class SandExcavationListener extends AbstractVeinMiner {
 
     private final Predicate<Player> toolPredicate = this::isHoldingShovel;
 
-    public void registerSettings(SettingRegistry registry, AdminState state) {
+    public void registerSettings(SettingRegistry registry, AdminState state, String featureId) {
         SettingDescriptor<Integer> max = SettingDescriptor.integer(
                 "max-blocks", "Maximum blocks", DEFAULT_MAX_BLOCKS, 1, 1000,
                 ApplySemantics.IMMEDIATE, this::setMaxBlocks);
         SettingDescriptor<List<Material>> materials = SettingDescriptor.materials(
                 "allowed-materials", "Allowed excavation materials", List.copyOf(EXCAVATABLE),
                 ApplySemantics.IMMEDIATE, this::setTargetMaterials);
-        registry.register("sand_excavation", max);
-        registry.register("sand_excavation", materials);
-        applyStored(state, max);
-        applyStored(state, materials);
+        registry.register(featureId, max);
+        registry.register(featureId, materials);
+        applyStored(state, featureId, max);
+        applyStored(state, featureId, materials);
     }
 
     public int getConfiguredMaxBlocks() { return maxBlocks; }
@@ -85,8 +85,8 @@ public class SandExcavationListener extends AbstractVeinMiner {
 
     private volatile Set<Material> targetMaterials = Set.copyOf(EXCAVATABLE);
 
-    private <T> void applyStored(AdminState state, SettingDescriptor<T> descriptor) {
-        String stored = state.settingValue("sand_excavation", descriptor.key());
+    private <T> void applyStored(AdminState state, String featureId, SettingDescriptor<T> descriptor) {
+        String stored = state.settingValue(featureId, descriptor.key());
         try {
             descriptor.apply(stored == null ? descriptor.defaultValue() : descriptor.parse(stored));
         } catch (IllegalArgumentException ignored) {

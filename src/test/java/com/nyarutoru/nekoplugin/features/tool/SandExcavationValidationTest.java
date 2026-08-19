@@ -13,9 +13,9 @@ class SandExcavationValidationTest {
 
     @Test
     void testFeatureConstants() {
-        SandExcavationFeature feature = new SandExcavationFeature();
-        assertEquals("sand_excavation", feature.getId());
-        assertEquals("Sand Excavation", feature.getName());
+        ToolFeature feature = new ToolFeature();
+        assertEquals("tool", feature.getId());
+        assertEquals("Tool", feature.getName());
     }
 
     @Test
@@ -60,7 +60,7 @@ class SandExcavationValidationTest {
 
     @Test
     void testFeatureClassExists() {
-        assertNotNull(SandExcavationFeature.class);
+        assertNotNull(ToolFeature.class);
     }
 
     @Test
@@ -83,10 +83,10 @@ class SandExcavationValidationTest {
 
     @Test
     void testFeatureImplementation() {
-        SandExcavationFeature feature = new SandExcavationFeature();
+        ToolFeature feature = new ToolFeature();
         
-        assertEquals("sand_excavation", feature.getId());
-        assertEquals("Sand Excavation", feature.getName());
+        assertEquals("tool", feature.getId());
+        assertEquals("Tool", feature.getName());
         assertFalse(feature.isEnabled()); // Should be false before enable
     }
 
