@@ -11,6 +11,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerToggleSneakEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.util.Vector;
 
 import java.util.Map;
 import java.util.UUID;
@@ -29,6 +30,11 @@ public final class ElytraFlightListener implements Listener {
     private int pearlSeconds = 6;
     private int durabilityMultiplier = 3;
     private int shiftCount = 10;
+
+    // Fueled flight speed buffer: horizontal acceleration per tick while the
+    // player is gliding, capped so it ramps up smoothly instead of rocketing off.
+    private static final double SPEED_BOOST = 0.1;
+    private static final double MAX_HORIZONTAL_SPEED = 1.5;
 
     public void setPearlSeconds(int pearlSeconds) {
         this.pearlSeconds = pearlSeconds;
@@ -108,6 +114,24 @@ public final class ElytraFlightListener implements Listener {
             flightSeconds.put(player.getUniqueId(), 0);
         }
         drainElytra(player);
+        boostSpeed(player);
+    }
+
+    /** Accelerates the player horizontally toward their look direction, capped. */
+    private void boostSpeed(Player player) {
+        Vector look = player.getLocation().getDirection();
+        look.setY(0);
+        if (look.lengthSquared() < 0.01) return;
+        look.normalize();
+
+        Vector vel = player.getVelocity();
+        double current = Math.hypot(vel.getX(), vel.getZ());
+        if (current >= MAX_HORIZONTAL_SPEED) return;
+
+        double target = Math.min(current + SPEED_BOOST, MAX_HORIZONTAL_SPEED);
+        vel.setX(look.getX() * target);
+        vel.setZ(look.getZ() * target);
+        player.setVelocity(vel);
     }
 
     private boolean consumePearl(Player player) {
