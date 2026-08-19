@@ -42,7 +42,7 @@ public class ShearsHarvestListener extends AbstractVeinMiner {
 
     public void registerSettings(SettingRegistry registry, AdminState state, String featureId) {
         SettingDescriptor<Integer> max = SettingDescriptor.integer(
-                "max-blocks", "Maximum blocks", DEFAULT_MAX_BLOCKS, 1, 1000,
+                "shears-max-blocks", "Maximum blocks", DEFAULT_MAX_BLOCKS, 1, 1000,
                 ApplySemantics.IMMEDIATE, this::setMaxBlocks);
         registry.register(featureId, max);
         applyStored(state, featureId, max);
