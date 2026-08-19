@@ -33,6 +33,7 @@ public class DrawerRecipes {
         ItemMeta meta = item.getItemMeta();
 
         if (meta != null) {
+            meta.setCustomModelData(4000 + tier.getLevel());
             meta.displayName(Component.text("Drawer ")
                     .color(NamedTextColor.GOLD)
                     .decoration(TextDecoration.ITALIC, false)

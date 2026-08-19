@@ -102,6 +102,150 @@
               "creative_category": "items"
             }
           }
+        ],
+        "minecraft:furnace": [
+          {
+            "type": "legacy",
+            "custom_model_data": 3001,
+            "bedrock_identifier": "nekoplugin:super_furnace_1",
+            "display_name": "Upgrade Furnace Tier 1",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_1", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3002,
+            "bedrock_identifier": "nekoplugin:super_furnace_2",
+            "display_name": "Upgrade Furnace Tier 2",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_2", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3003,
+            "bedrock_identifier": "nekoplugin:super_furnace_3",
+            "display_name": "Upgrade Furnace Tier 3",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_3", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3004,
+            "bedrock_identifier": "nekoplugin:super_furnace_4",
+            "display_name": "Upgrade Furnace Tier 4",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_4", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3005,
+            "bedrock_identifier": "nekoplugin:super_furnace_5",
+            "display_name": "Upgrade Furnace Tier 5",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_5", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3006,
+            "bedrock_identifier": "nekoplugin:super_furnace_6",
+            "display_name": "Upgrade Furnace Tier 6",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_6", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3007,
+            "bedrock_identifier": "nekoplugin:super_furnace_7",
+            "display_name": "Upgrade Furnace Tier 7",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_7", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3008,
+            "bedrock_identifier": "nekoplugin:super_furnace_8",
+            "display_name": "Upgrade Furnace Tier 8",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_8", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3009,
+            "bedrock_identifier": "nekoplugin:super_furnace_9",
+            "display_name": "Upgrade Furnace Tier 9",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_9", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 3010,
+            "bedrock_identifier": "nekoplugin:super_furnace_10",
+            "display_name": "Upgrade Furnace Tier 10",
+            "bedrock_options": { "icon": "nekoplugin:super_furnace_10", "creative_category": "items" }
+          }
+        ],
+        "minecraft:barrel": [
+          {
+            "type": "legacy",
+            "custom_model_data": 4001,
+            "bedrock_identifier": "nekoplugin:drawer1",
+            "display_name": "Drawer Tier 1",
+            "bedrock_options": { "icon": "nekoplugin:drawer1", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4002,
+            "bedrock_identifier": "nekoplugin:drawer2",
+            "display_name": "Drawer Tier 2",
+            "bedrock_options": { "icon": "nekoplugin:drawer2", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4003,
+            "bedrock_identifier": "nekoplugin:drawer3",
+            "display_name": "Drawer Tier 3",
+            "bedrock_options": { "icon": "nekoplugin:drawer3", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4004,
+            "bedrock_identifier": "nekoplugin:drawer4",
+            "display_name": "Drawer Tier 4",
+            "bedrock_options": { "icon": "nekoplugin:drawer4", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4005,
+            "bedrock_identifier": "nekoplugin:drawer5",
+            "display_name": "Drawer Tier 5",
+            "bedrock_options": { "icon": "nekoplugin:drawer5", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4006,
+            "bedrock_identifier": "nekoplugin:drawer6",
+            "display_name": "Drawer Tier 6",
+            "bedrock_options": { "icon": "nekoplugin:drawer6", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4007,
+            "bedrock_identifier": "nekoplugin:drawer7",
+            "display_name": "Drawer Tier 7",
+            "bedrock_options": { "icon": "nekoplugin:drawer7", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4008,
+            "bedrock_identifier": "nekoplugin:drawer8",
+            "display_name": "Drawer Tier 8",
+            "bedrock_options": { "icon": "nekoplugin:drawer8", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4009,
+            "bedrock_identifier": "nekoplugin:drawer9",
+            "display_name": "Drawer Tier 9",
+            "bedrock_options": { "icon": "nekoplugin:drawer9", "creative_category": "items" }
+          },
+          {
+            "type": "legacy",
+            "custom_model_data": 4010,
+            "bedrock_identifier": "nekoplugin:drawer10",
+            "display_name": "Drawer Unlimited",
+            "bedrock_options": { "icon": "nekoplugin:drawer10", "creative_category": "items" }
+          }
         ]
       }
     }

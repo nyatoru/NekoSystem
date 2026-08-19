@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "nekoplugin:item/drawers/drawers_top",
+    "bottom": "nekoplugin:item/drawers/drawers_bottom",
+    "side": "nekoplugin:item/drawers/drawer8_side"
+  }
+}

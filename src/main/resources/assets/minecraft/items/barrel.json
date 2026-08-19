@@ -1,0 +1,82 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "custom_model_data",
+    "cases": [
+      {
+        "when": 4001,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer1"
+        }
+      },
+      {
+        "when": 4002,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer2"
+        }
+      },
+      {
+        "when": 4003,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer3"
+        }
+      },
+      {
+        "when": 4004,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer4"
+        }
+      },
+      {
+        "when": 4005,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer5"
+        }
+      },
+      {
+        "when": 4006,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer6"
+        }
+      },
+      {
+        "when": 4007,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer7"
+        }
+      },
+      {
+        "when": 4008,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer8"
+        }
+      },
+      {
+        "when": 4009,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer9"
+        }
+      },
+      {
+        "when": 4010,
+        "model": {
+          "type": "minecraft:model",
+          "model": "nekoplugin:item/drawers/drawer10"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:model",
+      "model": "minecraft:block/barrel"
+    }
+  }
+}
