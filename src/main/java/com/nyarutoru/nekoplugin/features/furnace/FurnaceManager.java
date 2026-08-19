@@ -99,7 +99,7 @@ public class FurnaceManager {
         Iterator<Recipe> iterator = Bukkit.recipeIterator();
         while (iterator.hasNext()) {
             Recipe recipe = iterator.next();
-            if (recipe instanceof FurnaceRecipe furnaceRecipe && furnaceRecipe.getInput().isSimilar(item)) {
+            if (recipe instanceof FurnaceRecipe furnaceRecipe && furnaceRecipe.getInputChoice().test(item)) {
                 return true;
             }
         }

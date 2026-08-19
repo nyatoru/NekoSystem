@@ -9,6 +9,7 @@ import org.bukkit.block.Block;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
@@ -37,7 +38,7 @@ public final class MendingRepairListener implements Listener {
         Action action = event.getAction();
         if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) return;
         Block block = event.getClickedBlock();
-        if (action == Action.RIGHT_CLICK_BLOCK && block != null && block.getType().isInteractable()) return;
+        if (action == Action.RIGHT_CLICK_BLOCK && block != null && event.useInteractedBlock() == Event.Result.ALLOW) return;
 
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();

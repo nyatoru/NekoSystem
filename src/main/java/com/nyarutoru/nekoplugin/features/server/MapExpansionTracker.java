@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
  * 
  * Thread-safe implementation using ConcurrentHashMap for Folia/Paper compatibility.
  */
-public class MapExpansionTracker {
+public final class MapExpansionTracker {
 
     private final NekoPlugin plugin;
     

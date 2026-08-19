@@ -10,6 +10,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.components.CustomModelDataComponent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -77,6 +78,27 @@ public class ItemUtils {
         Material type = item.getType();
         return PICKAXES.contains(type) || AXES.contains(type) ||
                 SHOVELS.contains(type) || HOES.contains(type) || SWORDS.contains(type);
+    }
+
+    /**
+     * Sets the legacy integer custom model data via the modern custom_model_data
+     * component (equivalent to the deprecated ItemMeta#setCustomModelData).
+     */
+    public static void setCustomModelData(ItemMeta meta, int data) {
+        CustomModelDataComponent component = meta.getCustomModelDataComponent();
+        component.setFloats(List.of((float) data));
+        meta.setCustomModelDataComponent(component);
+    }
+
+    /**
+     * Gets the legacy integer custom model data (equivalent to the deprecated
+     * ItemMeta#getCustomModelData), or null if unset.
+     */
+    public static Integer getCustomModelData(ItemMeta meta) {
+        if (!meta.hasCustomModelDataComponent())
+            return null;
+        List<Float> floats = meta.getCustomModelDataComponent().getFloats();
+        return floats.isEmpty() ? null : (int) (float) floats.get(0);
     }
 
     /**

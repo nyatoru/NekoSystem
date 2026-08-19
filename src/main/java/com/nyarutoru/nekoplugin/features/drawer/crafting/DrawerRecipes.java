@@ -3,6 +3,7 @@ package com.nyarutoru.nekoplugin.features.drawer.crafting;
 import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
 import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
 import com.nyarutoru.nekoplugin.features.drawer.data.DrawerTier;
+import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -33,7 +34,7 @@ public class DrawerRecipes {
         ItemMeta meta = item.getItemMeta();
 
         if (meta != null) {
-            meta.setCustomModelData(4000 + tier.getLevel());
+            ItemUtils.setCustomModelData(meta, 4000 + tier.getLevel());
             meta.displayName(Component.text("Drawer ")
                     .color(NamedTextColor.GOLD)
                     .decoration(TextDecoration.ITALIC, false)

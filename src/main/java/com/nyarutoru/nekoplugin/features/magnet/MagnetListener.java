@@ -5,6 +5,7 @@ import com.nyarutoru.nekoplugin.core.admin.AdminState;
 import com.nyarutoru.nekoplugin.core.settings.ApplySemantics;
 import com.nyarutoru.nekoplugin.core.settings.SettingDescriptor;
 import com.nyarutoru.nekoplugin.core.settings.SettingRegistry;
+import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import com.nyarutoru.nekoplugin.utils.SchedulerUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -434,7 +435,7 @@ public class MagnetListener implements Listener {
             if (b != null && b == 1) return true;
             NamespacedKey model = meta.getItemModel();
             if (model != null && "nekoplugin".equals(model.getNamespace()) && "magnet".equals(model.getKey())) return true;
-            Integer cmd = meta.getCustomModelData();
+            Integer cmd = ItemUtils.getCustomModelData(meta);
             if (cmd != null && cmd == MAGNET_CMD) return true;
         }
         return MAGNET_TYPES.contains(item.getType());
@@ -464,7 +465,7 @@ public class MagnetListener implements Listener {
                             .decoration(TextDecoration.ITALIC, false)
             ));
             meta.getPersistentDataContainer().set(MAGNET_KEY, PersistentDataType.BYTE, (byte) 1);
-            meta.setCustomModelData(MAGNET_CMD);
+            ItemUtils.setCustomModelData(meta, MAGNET_CMD);
             item.setItemMeta(meta);
         }
         return item;

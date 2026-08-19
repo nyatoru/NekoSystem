@@ -2,6 +2,7 @@ package com.nyarutoru.nekoplugin.features.furnace;
 
 import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
 import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
+import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -30,7 +31,7 @@ public class FurnaceRecipes {
         ItemMeta meta = item.getItemMeta();
 
         if (meta != null) {
-            meta.setCustomModelData(3000 + tier.getLevel());
+            ItemUtils.setCustomModelData(meta, 3000 + tier.getLevel());
             meta.displayName(Component.text("Upgrade Furnace ")
                     .color(NamedTextColor.GOLD)
                     .decoration(TextDecoration.ITALIC, false)

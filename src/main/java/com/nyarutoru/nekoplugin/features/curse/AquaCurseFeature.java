@@ -331,6 +331,7 @@ public final class AquaCurseFeature extends AbstractFeature implements Listener 
             // Build modifier: try modern (NamespacedKey, amount, operation) then legacy (UUID, name, amount, operation)
             Class<?> modifierClass = Class.forName("org.bukkit.attribute.AttributeModifier");
             Class<?> operationClass = Class.forName("org.bukkit.attribute.AttributeModifier$Operation");
+            @SuppressWarnings("unchecked")
             Object operation = Enum.valueOf((Class<Enum>) operationClass, "ADD_NUMBER");
             // some mappings use ADD_SCALAR; prefer ADD_NUMBER
             Object modifier = null;

@@ -3,6 +3,7 @@ package com.nyarutoru.nekoplugin.features.hammer;
 import com.nyarutoru.nekoplugin.NekoPlugin;
 import com.nyarutoru.nekoplugin.api.recipe.CustomRecipe;
 import com.nyarutoru.nekoplugin.api.recipe.RecipeAPI;
+import com.nyarutoru.nekoplugin.utils.ItemUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -83,7 +84,7 @@ public class HammerRecipes {
             meta.getPersistentDataContainer().set(HAMMER_KEY, PersistentDataType.BYTE, (byte) 1);
             meta.getPersistentDataContainer().set(HAMMER_TIER_KEY, PersistentDataType.STRING, tierName);
             // Custom texture via pack override; vanilla pickaxe fallback without the pack
-            meta.setCustomModelData(customModelData(tierName));
+            ItemUtils.setCustomModelData(meta, customModelData(tierName));
 
             hammer.setItemMeta(meta);
         }
@@ -98,9 +99,9 @@ public class HammerRecipes {
         if (tier == null) return item;
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            Integer cmd = meta.getCustomModelData();
+            Integer cmd = ItemUtils.getCustomModelData(meta);
             if (cmd == null || cmd != customModelData(tier)) {
-                meta.setCustomModelData(customModelData(tier));
+                ItemUtils.setCustomModelData(meta, customModelData(tier));
                 meta.setItemModel(NamespacedKey.minecraft(TIERS.get(tier).baseTool().name().toLowerCase()));
                 item.setItemMeta(meta);
             }
@@ -120,7 +121,7 @@ public class HammerRecipes {
             String tier = model.getKey().substring(7);
             return TIERS.containsKey(tier);
         }
-        Integer cmd = meta.getCustomModelData();
+        Integer cmd = ItemUtils.getCustomModelData(meta);
         return cmd != null && TIER_CMD.containsValue(cmd);
     }
 
@@ -136,7 +137,7 @@ public class HammerRecipes {
             String t = model.getKey().substring(7);
             if (TIERS.containsKey(t)) return t;
         }
-        Integer cmd = meta.getCustomModelData();
+        Integer cmd = ItemUtils.getCustomModelData(meta);
         if (cmd != null) return tierForCustomModelData(cmd);
         return null;
     }
