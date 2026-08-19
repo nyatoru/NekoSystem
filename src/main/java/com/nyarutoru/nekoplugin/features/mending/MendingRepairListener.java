@@ -32,14 +32,17 @@ public final class MendingRepairListener implements Listener {
         repairRate = rate;
     }
 
-    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    // ignoreCancelled must be false: RIGHT_CLICK_AIR events always fire cancelled
+    // (useInteractedBlock defaults to DENY when no block is clicked), so a true value
+    // would skip every air click and let vanilla swap the armor instead of repairing.
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = false)
     public void onInteract(PlayerInteractEvent event) {
         EquipmentSlot hand = event.getHand();
         if (hand != EquipmentSlot.HAND && hand != EquipmentSlot.OFF_HAND) return;
         Action action = event.getAction();
         if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) return;
         Block block = event.getClickedBlock();
-        if (action == Action.RIGHT_CLICK_BLOCK && block != null && event.useInteractedBlock() == Event.Result.ALLOW) return;
+        if (action == Action.RIGHT_CLICK_BLOCK && block != null && block.getType().isInteractable()) return;
 
         Player player = event.getPlayer();
         if (!player.isSneaking()) return;
